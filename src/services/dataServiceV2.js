@@ -1,5 +1,7 @@
-import { supabase, useMockData } from './supabase';
+import { supabase } from '../lib/supabaseClient';
 import { marketDataService } from './marketDataService';
+
+const useMockData = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
 // Mock data for development
 const mockOrders = [

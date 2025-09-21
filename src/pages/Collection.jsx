@@ -5,12 +5,27 @@ import { supabase } from '../lib/supabaseClient';
 import { getBatchMarketData, getMarketValueInCents, marketDataService } from '../services/marketDataService';
 import ItemMatchingManager from '../components/ItemMatchingManager.jsx';
 
-// Data fetching functions
+// Data fetching functions (v2 schema)
 async function getOrders() {
   const { data, error } = await supabase
     .from("orders")
-    .select("id, order_date, item, buy_price_cents, sale_price_cents, status")
-    .order("order_date", { ascending: false });
+    .select(`
+      id, 
+      buy_date, 
+      buy_price_cents, 
+      sell_price_cents, 
+      order_type,
+      buy_quantity,
+      sell_quantity,
+      items!inner(
+        id,
+        name,
+        set_name,
+        item_type,
+        market_value_cents
+      )
+    `)
+    .order("buy_date", { ascending: false });
   if (error) throw error;
   return data || [];
 }
@@ -78,8 +93,8 @@ const Collection = () => {
       
       // Get unique items from orders that are currently in inventory (not sold)
       const inventoryItems = orders
-        .filter(order => order.status === 'ordered' || !order.sale_price_cents)
-        .map(order => order.item)
+        .filter(order => order.order_type === 'buy' && !order.sell_price_cents)
+        .map(order => order.items.name)
         .filter(Boolean);
       
       const uniqueItems = [...new Set(inventoryItems)];
@@ -440,20 +455,26 @@ const Collection = () => {
     // Group orders by item name
     const itemGroups = {};
     orders.forEach(order => {
-      if (!order.item) return;
+      if (!order.items || !order.items.name) return;
       
-      if (!itemGroups[order.item]) {
-        itemGroups[order.item] = {
-          name: order.item,
+      const itemName = order.items.name;
+      if (!itemGroups[itemName]) {
+        itemGroups[itemName] = {
+          name: itemName,
+          set_name: order.items.set_name,
+          item_type: order.items.item_type,
+          market_value_cents: order.items.market_value_cents,
           quantity: 0,
           totalPaid: 0,
           orders: []
         };
       }
       
-      itemGroups[order.item].quantity += 1;
-      itemGroups[order.item].totalPaid += order.buy_price_cents || 0;
-      itemGroups[order.item].orders.push(order);
+      if (order.order_type === 'buy') {
+        itemGroups[itemName].quantity += order.buy_quantity || 1;
+        itemGroups[itemName].totalPaid += (order.buy_price_cents || 0) * (order.buy_quantity || 1);
+      }
+      itemGroups[itemName].orders.push(order);
     });
 
     // Convert to collection items format
@@ -903,10 +924,11 @@ const Collection = () => {
             </div>
           </div>
 
-        {/* Item Matching Manager */}
-        <div className="mb-6">
-          <ItemMatchingManager />
-        </div>
+
+      {/* Item Matching Manager */}
+      <div className="mb-6">
+        <ItemMatchingManager />
+      </div>
 
         {/* Search Bar */}
         <div className="relative mb-3">

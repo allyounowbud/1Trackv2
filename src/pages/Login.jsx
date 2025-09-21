@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../services/supabase';
+import { supabase } from '../lib/supabaseClient';
 
 const Login = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -13,7 +13,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithDiscord } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -46,20 +46,7 @@ const Login = () => {
       setError('');
       setLoading(true);
       
-      // Use the current origin for redirect (localhost:5175 for development)
-      const redirectTo = `${window.location.origin}/`;
-      console.log('Discord OAuth redirect URL:', redirectTo);
-      
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "discord",
-        options: { 
-          redirectTo,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          }
-        }
-      });
+      const { error } = await signInWithDiscord();
       if (error) throw error;
       // Redirect happens automatically by Supabase
     } catch (err) {

@@ -9,19 +9,26 @@ class BackgroundPriceService {
     this.lastRun = null;
   }
 
-  // Get all unique product names from orders
+  // Get all unique product names from orders (v2 schema)
   async getAllProductNames() {
     try {
       const { data: orders, error } = await supabase
         .from('orders')
-        .select('item')
-        .not('item', 'is', null)
-        .eq('status', 'ordered');
+        .select(`
+          item_id,
+          items!inner(
+            name,
+            set_name,
+            item_type
+          )
+        `)
+        .not('item_id', 'is', null)
+        .eq('order_type', 'buy'); // Only get buy orders for market price updates
 
       if (error) throw error;
 
-      // Get unique product names
-      const uniqueNames = [...new Set(orders.map(order => order.item))];
+      // Get unique product names from the joined items table
+      const uniqueNames = [...new Set(orders.map(order => order.items.name))];
       console.log(`📦 Found ${uniqueNames.length} unique products to update`);
       
       return uniqueNames;

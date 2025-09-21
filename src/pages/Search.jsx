@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { marketDataService } from '../services/marketDataService';
 import ProductPreviewModal from '../components/ProductPreviewModal';
+import AddToCollectionModal from '../components/AddToCollectionModal';
 
 const Search = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -12,6 +13,8 @@ const Search = () => {
   const [totalResults, setTotalResults] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [productToAdd, setProductToAdd] = useState(null);
   const [trendingProducts, setTrendingProducts] = useState([]);
   const [isLoadingTrending, setIsLoadingTrending] = useState(false);
   const [sortBy, setSortBy] = useState('relevance');
@@ -346,11 +349,21 @@ const Search = () => {
   };
 
   const handleAddToCollection = (product) => {
-    // TODO: Implement actual add to collection functionality
-    console.log('Adding to collection:', product);
-    // For now, just show a success message
-    alert(`Added ${product.quantity}x ${product.name} to collection!`);
-    handleClosePreview();
+    setProductToAdd(product);
+    setIsAddModalOpen(true);
+    setIsPreviewOpen(false); // Close preview modal
+  };
+
+  const handleAddSuccess = (result) => {
+    console.log('Successfully added to collection:', result);
+    // You could show a toast notification here
+    setIsAddModalOpen(false);
+    setProductToAdd(null);
+  };
+
+  const handleCloseAddModal = () => {
+    setIsAddModalOpen(false);
+    setProductToAdd(null);
   };
 
   return (
@@ -770,6 +783,14 @@ const Search = () => {
         isOpen={isPreviewOpen}
         onClose={handleClosePreview}
         onAddToCollection={handleAddToCollection}
+      />
+
+      {/* Add to Collection Modal */}
+      <AddToCollectionModal
+        product={productToAdd}
+        isOpen={isAddModalOpen}
+        onClose={handleCloseAddModal}
+        onSuccess={handleAddSuccess}
       />
     </div>
   );
