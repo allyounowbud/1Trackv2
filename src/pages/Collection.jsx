@@ -22,7 +22,8 @@ async function getOrders() {
         name,
         set_name,
         item_type,
-        market_value_cents
+        market_value_cents,
+        image_url
       )
     `)
     .order("buy_date", { ascending: false });
@@ -464,6 +465,7 @@ const Collection = () => {
           set_name: order.items.set_name,
           item_type: order.items.item_type,
           market_value_cents: order.items.market_value_cents,
+          image_url: order.items.image_url,
           quantity: 0,
           totalPaid: 0,
           orders: []
@@ -479,8 +481,10 @@ const Collection = () => {
 
     // Convert to collection items format
     const collectionItems = Object.values(itemGroups).map((group, index) => {
+      // Use market value from database if available, otherwise fall back to marketData
+      const dbMarketValue = group.market_value_cents;
       const marketInfo = marketData[group.name];
-      const currentValue = marketInfo ? getMarketValueInCents(marketInfo) : group.totalPaid;
+      const currentValue = dbMarketValue || (marketInfo ? getMarketValueInCents(marketInfo) : group.totalPaid);
       const profit = currentValue - group.totalPaid;
       const profitPercent = group.totalPaid > 0 ? (profit / group.totalPaid) * 100 : 0;
       
@@ -497,14 +501,14 @@ const Collection = () => {
       return {
         id: index + 1,
         name: group.name,
-        set: marketInfo?.set || "Unknown Set",
+        set: group.set_name || marketInfo?.set || "Unknown Set",
         status: status,
         value: currentValue / 100, // Convert cents to dollars
         paid: group.totalPaid / 100, // Convert cents to dollars
         quantity: group.quantity,
         profit: profit / 100, // Convert cents to dollars
         profitPercent: profitPercent,
-        image: marketInfo?.imageUrl || null
+        image: group.image_url || marketInfo?.imageUrl || null
       };
     });
 
