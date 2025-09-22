@@ -46,6 +46,253 @@ class MarketDataService {
     console.log('🗑️ Cache cleared');
   }
 
+  // =============================================
+  // EXPANSION/EPISODE MANAGEMENT
+  // =============================================
+
+  /**
+   * Get all expansions (episodes) for Pokemon
+   */
+  async getAllExpansions() {
+    const cacheKey = 'all_expansions';
+    
+    // Check cache first
+    const cached = this.getCache(cacheKey);
+    if (cached) {
+      console.log('📦 Using cached expansions data');
+      return cached;
+    }
+
+    if (!this.rapidApiKey) {
+      throw new Error('RapidAPI key not available for expansions');
+    }
+
+    try {
+      console.log('🔍 Fetching all expansions from Card Market API...');
+      
+      const response = await fetch(`${this.cardMarketBaseUrl}/pokemon/episodes?rapidapi-key=${this.rapidApiKey}`, {
+        method: 'GET',
+        headers: {
+          'X-RapidAPI-Key': this.rapidApiKey,
+          'X-RapidAPI-Host': 'cardmarket-api-tcg.p.rapidapi.com'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Fetched ${data.length} expansions`);
+
+      // Cache the results
+      this.setCache(cacheKey, data);
+      return data;
+
+    } catch (error) {
+      console.error('❌ Error fetching expansions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search for expansions by name
+   */
+  async searchExpansions(searchTerm) {
+    const cacheKey = `search_expansions_${searchTerm.toLowerCase()}`;
+    
+    // Check cache first
+    const cached = this.getCache(cacheKey);
+    if (cached) {
+      console.log('📦 Using cached expansion search data');
+      return cached;
+    }
+
+    if (!this.rapidApiKey) {
+      throw new Error('RapidAPI key not available for expansion search');
+    }
+
+    try {
+      console.log(`🔍 Searching expansions for: "${searchTerm}"`);
+      
+      const encodedSearch = encodeURIComponent(searchTerm);
+      const response = await fetch(`${this.cardMarketBaseUrl}/pokemon/episodes/search?search=${encodedSearch}&rapidapi-key=${this.rapidApiKey}`, {
+        method: 'GET',
+        headers: {
+          'X-RapidAPI-Key': this.rapidApiKey,
+          'X-RapidAPI-Host': 'cardmarket-api-tcg.p.rapidapi.com'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Found ${data.length} matching expansions`);
+
+      // Cache the results
+      this.setCache(cacheKey, data);
+      return data;
+
+    } catch (error) {
+      console.error('❌ Error searching expansions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all cards from a specific expansion
+   */
+  async getExpansionCards(expansionId, sortBy = 'price_highest') {
+    const cacheKey = `expansion_cards_${expansionId}_${sortBy}`;
+    
+    // Check cache first
+    const cached = this.getCache(cacheKey);
+    if (cached) {
+      console.log('📦 Using cached expansion cards data');
+      return cached;
+    }
+
+    if (!this.rapidApiKey) {
+      throw new Error('RapidAPI key not available for expansion cards');
+    }
+
+    try {
+      console.log(`🔍 Fetching cards for expansion ID: ${expansionId} (sorted by: ${sortBy})`);
+      
+      const response = await fetch(`${this.cardMarketBaseUrl}/pokemon/episodes/${expansionId}/cards?rapidapi-key=${this.rapidApiKey}&sort=${sortBy}`, {
+        method: 'GET',
+        headers: {
+          'X-RapidAPI-Key': this.rapidApiKey,
+          'X-RapidAPI-Host': 'cardmarket-api-tcg.p.rapidapi.com'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Fetched ${data.length} cards from expansion`);
+
+      // Format the cards
+      const formattedCards = data
+        .map(card => this.formatCardResult(card))
+        .filter(card => card !== null);
+
+      // Cache the results
+      this.setCache(cacheKey, formattedCards);
+      return formattedCards;
+
+    } catch (error) {
+      console.error('❌ Error fetching expansion cards:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all products from a specific expansion
+   */
+  async getExpansionProducts(expansionId, sortBy = 'price_highest') {
+    const cacheKey = `expansion_products_${expansionId}_${sortBy}`;
+    
+    // Check cache first
+    const cached = this.getCache(cacheKey);
+    if (cached) {
+      console.log('📦 Using cached expansion products data');
+      return cached;
+    }
+
+    if (!this.rapidApiKey) {
+      throw new Error('RapidAPI key not available for expansion products');
+    }
+
+    try {
+      console.log(`🔍 Fetching products for expansion ID: ${expansionId} (sorted by: ${sortBy})`);
+      
+      const response = await fetch(`${this.cardMarketBaseUrl}/pokemon/episodes/${expansionId}/products?rapidapi-key=${this.rapidApiKey}&sort=${sortBy}`, {
+        method: 'GET',
+        headers: {
+          'X-RapidAPI-Key': this.rapidApiKey,
+          'X-RapidAPI-Host': 'cardmarket-api-tcg.p.rapidapi.com'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Fetched ${data.length} products from expansion`);
+
+      // Format the products
+      const formattedProducts = data
+        .map(product => this.formatProductResult(product))
+        .filter(product => product !== null);
+
+      // Cache the results
+      this.setCache(cacheKey, formattedProducts);
+      return formattedProducts;
+
+    } catch (error) {
+      console.error('❌ Error fetching expansion products:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Enhanced search with sorting options
+   */
+  async searchWithSorting(searchTerm, sortBy = 'relevance', limit = 50) {
+    const cacheKey = `search_sorted_${searchTerm.toLowerCase()}_${sortBy}_${limit}`;
+    
+    // Check cache first
+    const cached = this.getCache(cacheKey);
+    if (cached) {
+      console.log('📦 Using cached sorted search data');
+      return cached;
+    }
+
+    if (!this.rapidApiKey) {
+      throw new Error('RapidAPI key not available for sorted search');
+    }
+
+    try {
+      console.log(`🔍 Searching "${searchTerm}" with sort: ${sortBy}`);
+      
+      const encodedSearch = encodeURIComponent(searchTerm);
+      const response = await fetch(`${this.cardMarketBaseUrl}/pokemon/cards?search=${encodedSearch}&rapidapi-key=${this.rapidApiKey}&sort=${sortBy}`, {
+        method: 'GET',
+        headers: {
+          'X-RapidAPI-Key': this.rapidApiKey,
+          'X-RapidAPI-Host': 'cardmarket-api-tcg.p.rapidapi.com'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Found ${data.length} results`);
+
+      // Format the results
+      const formattedResults = data
+        .slice(0, limit) // Apply limit
+        .map(card => this.formatCardResult(card))
+        .filter(card => card !== null);
+
+      // Cache the results
+      this.setCache(cacheKey, formattedResults);
+      return formattedResults;
+
+    } catch (error) {
+      console.error('❌ Error in sorted search:', error);
+      throw error;
+    }
+  }
+
   // Force refresh cached data with proper formatting
   async refreshCachedData(searchTerm) {
     const cacheKey = this.getCacheKey('cardmarket', 'search_products', { searchTerm, limit: 20 });

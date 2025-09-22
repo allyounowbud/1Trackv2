@@ -113,20 +113,74 @@ const Search = () => {
         
         if (isExpansionSearch) {
           console.log(`🎯 Detected expansion search for: "${searchQuery}"`);
-          result = await marketDataService.searchCardMarketExpansion(searchQuery, maxResults);
-        } else {
-          // Use different search functions based on type - fetch more results for pagination
-          switch (searchType) {
-            case 'cards':
-              result = await marketDataService.searchCardMarketCards(searchQuery, maxResults);
-              break;
-            case 'products':
-              result = await marketDataService.searchCardMarketProducts(searchQuery, maxResults);
-              break;
-            case 'all':
-            default:
+          
+          // Try to find the expansion first
+          try {
+            const expansions = await marketDataService.searchExpansions(searchQuery);
+            if (expansions && expansions.length > 0) {
+              const expansion = expansions[0]; // Take the first match
+              console.log(`📦 Found expansion: ${expansion.name} (ID: ${expansion.id})`);
+              
+              // Get both cards and products from this expansion
+              const sortOption = sortBy === 'highest_price' ? 'price_highest' : 
+                               sortBy === 'lowest_price' ? 'price_lowest' : 
+                               sortBy === 'alphabetical' ? 'name' : 'price_highest';
+              
+              const [cards, products] = await Promise.all([
+                marketDataService.getExpansionCards(expansion.id, sortOption),
+                marketDataService.getExpansionProducts(expansion.id, sortOption)
+              ]);
+              
+              // Combine results
+              const combinedResults = [...cards, ...products];
+              result = {
+                success: true,
+                data: {
+                  cards: combinedResults.slice(0, maxResults),
+                  totalResults: combinedResults.length,
+                  searchTerm: searchQuery
+                }
+              };
+              console.log(`✅ Found ${combinedResults.length} items from expansion`);
+            } else {
+              // Fall back to regular search if no expansion found
               result = await marketDataService.searchCardMarketAll(searchQuery, maxResults);
-              break;
+            }
+          } catch (expansionError) {
+            console.log('⚠️ Expansion search failed, falling back to regular search:', expansionError);
+            result = await marketDataService.searchCardMarketAll(searchQuery, maxResults);
+          }
+        } else {
+          // Use enhanced search with sorting for better results
+          const sortOption = sortBy === 'highest_price' ? 'price_highest' : 
+                           sortBy === 'lowest_price' ? 'price_lowest' : 
+                           sortBy === 'alphabetical' ? 'name' : 'relevance';
+          
+          try {
+            const searchResults = await marketDataService.searchWithSorting(searchQuery, sortOption, maxResults);
+            result = {
+              success: true,
+              data: {
+                cards: searchResults,
+                totalResults: searchResults.length,
+                searchTerm: searchQuery
+              }
+            };
+          } catch (searchError) {
+            console.log('⚠️ Enhanced search failed, falling back to regular search:', searchError);
+            // Fall back to regular search
+            switch (searchType) {
+              case 'cards':
+                result = await marketDataService.searchCardMarketCards(searchQuery, maxResults);
+                break;
+              case 'products':
+                result = await marketDataService.searchCardMarketProducts(searchQuery, maxResults);
+                break;
+              case 'all':
+              default:
+                result = await marketDataService.searchCardMarketAll(searchQuery, maxResults);
+                break;
+            }
           }
         }
         
