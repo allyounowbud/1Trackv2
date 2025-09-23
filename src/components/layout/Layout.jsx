@@ -1,6 +1,5 @@
 import { useLocation } from 'react-router-dom';
 import BottomNavigation from './BottomNavigation';
-import ApiUsageDisplay from '../ApiUsageDisplay';
 
 const Layout = ({ children }) => {
   const location = useLocation();
@@ -17,9 +16,6 @@ const Layout = ({ children }) => {
       
       {/* Bottom Navigation */}
       <BottomNavigation currentPath={location.pathname} />
-      
-      {/* API Usage Display */}
-      <ApiUsageDisplay />
     </div>
   );
 };

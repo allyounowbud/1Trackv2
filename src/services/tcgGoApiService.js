@@ -3,8 +3,6 @@
  * Based on Card Market API documentation
  */
 
-import apiUsageMonitor from './apiUsageMonitor.js';
-
 class TCGGoApiService {
   constructor() {
     this.rapidApiKey = import.meta.env.VITE_RAPIDAPI_KEY;
@@ -15,14 +13,9 @@ class TCGGoApiService {
   }
 
   /**
-   * Make API request with proper headers and usage monitoring
+   * Make API request with proper headers
    */
   async makeRequest(endpoint, options = {}) {
-    // Check if we should skip this API call due to usage limits
-    if (apiUsageMonitor.shouldSkipApiCall('tcg_go')) {
-      throw new Error('API call skipped due to usage limits');
-    }
-
     const url = `${this.baseUrl}${endpoint}`;
     
     const response = await fetch(url, {
@@ -39,9 +32,6 @@ class TCGGoApiService {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    // Record successful API call
-    apiUsageMonitor.recordCall('tcg_go');
-    
     return response.json();
   }
 

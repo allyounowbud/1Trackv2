@@ -1,5 +1,4 @@
 import { supabase } from '../lib/supabaseClient.js';
-import apiUsageMonitor from './apiUsageMonitor.js';
 
 // Market data service supporting both PriceCharting API and Card Market API via RapidAPI
 class MarketDataService {
@@ -40,21 +39,13 @@ class MarketDataService {
     };
   }
 
-  // Helper method to make API calls with usage monitoring
+  // Helper method to make API calls
   async makeApiCall(url, options = {}, apiType = 'cardmarket') {
-    // Check if we should skip this API call due to usage limits
-    if (apiUsageMonitor.shouldSkipApiCall(apiType)) {
-      throw new Error('API call skipped due to usage limits');
-    }
-
     const response = await fetch(url, options);
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-
-    // Record successful API call
-    apiUsageMonitor.recordCall(apiType);
     
     return response;
   }
