@@ -63,7 +63,9 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-black mobile-bg-fix py-12 px-4 sm:px-6 lg:px-8">
+      {/* Mobile browser background fix */}
+      <div className="mobile-full-bg"></div>
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">

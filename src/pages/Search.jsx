@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { marketDataService } from '../services/marketDataService';
+import tcgGoApiService from '../services/tcgGoApiService';
 import ProductPreviewModal from '../components/ProductPreviewModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
+import { getCleanItemName } from '../utils/nameUtils';
 
 const Search = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [apiStatus, setApiStatus] = useState(null);
   const [searchType, setSearchType] = useState('all'); // 'all', 'cards', 'products'
   const [totalResults, setTotalResults] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -30,7 +30,269 @@ const Search = () => {
   const filterDropdownRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const resultsPerPage = 30;
-  const maxResults = 100; // Reduced max results to prevent API spam
+  const maxResults = 500; // Increased max results to show all expansion items
+
+  // Load popular expansions using search API for better image data
+  const loadPopularExpansions = async () => {
+    setIsLoadingTrending(true);
+    try {
+      console.log('🔍 Loading popular expansions with search API...');
+      
+      // List of popular expansions to search for
+      const popularExpansionNames = [
+        'Prismatic Evolutions',
+        'Scarlet & Violet 151', 
+        'Crown Zenith',
+        'Silver Tempest',
+        'Lost Origin',
+        'Astral Radiance',
+        'Brilliant Stars',
+        'Fusion Strike',
+        'Evolving Skies',
+        'Chilling Reign'
+      ];
+
+      // Search for each popular expansion
+      const expansionPromises = popularExpansionNames.map(async (name) => {
+        try {
+          const result = await tcgGoApiService.searchExpansions(name);
+          if (result && result.length > 0) {
+            return result[0]; // Return the first (most relevant) result
+          }
+          return null;
+        } catch (error) {
+          console.warn(`Failed to search for ${name}:`, error);
+          return null;
+        }
+      });
+
+      const expansions = (await Promise.all(expansionPromises)).filter(Boolean);
+      console.log(`✅ Loaded ${expansions.length} popular expansions:`, expansions);
+      
+      
+      if (expansions.length > 0) {
+        setTrendingProducts(expansions);
+      } else {
+        // Fallback to regular API if search fails
+        console.log('🔄 Search failed, falling back to regular API...');
+        await loadAllExpansions();
+      }
+    } catch (error) {
+      console.error('❌ Error loading popular expansions:', error);
+      // Fallback to regular API
+      await loadAllExpansions();
+    } finally {
+      setIsLoadingTrending(false);
+    }
+  };
+
+  // Browse expansion cards using expansion ID
+  const browseExpansionCards = async (expansion) => {
+    console.log('🔍 Browsing expansion:', expansion);
+    console.log('🔍 Expansion ID:', expansion.id);
+    console.log('🔍 Expansion keys:', Object.keys(expansion));
+    console.log('🔍 Expansion type:', typeof expansion);
+    
+    // Manual ID mapping for known expansions
+    const expansionIdMap = {
+      'Evolving Skies': 15,
+      'Crown Zenith': 21,
+      'Prismatic Evolutions': 25,
+      'Scarlet & Violet 151': 24,
+      'Silver Tempest': 20,
+      'Lost Origin': 19,
+      'Astral Radiance': 18,
+      'Brilliant Stars': 17,
+      'Fusion Strike': 16,
+      'Chilling Reign': 14,
+      'Battle Styles': 13,
+      'Vivid Voltage': 12,
+      'Darkness Ablaze': 11,
+      'Rebel Clash': 10,
+      'Sword & Shield': 9
+    };
+
+    // Use expansion ID from object or fallback to manual mapping
+    const expansionId = expansion.id || expansionIdMap[expansion.name];
+    
+    if (!expansionId) {
+      console.error('No expansion ID available for:', expansion.name);
+      console.error('Full expansion object:', expansion);
+      console.error('Available properties:', Object.keys(expansion));
+      
+      // Try to find ID in different possible locations
+      console.log('🔍 Checking for ID in different locations:');
+      console.log('  - expansion.id:', expansion.id);
+      console.log('  - expansion.ID:', expansion.ID);
+      console.log('  - expansion.episode_id:', expansion.episode_id);
+      console.log('  - expansion.episodeId:', expansion.episodeId);
+      
+      // Fallback to regular search
+      setSearchQuery(expansion.name);
+      handleSearch(expansion.name);
+      return;
+    }
+
+    console.log(`✅ Using expansion ID: ${expansionId} for ${expansion.name}`);
+
+    setIsLoading(true);
+    setSearchQuery(expansion.name);
+    
+    try {
+      console.log(`🔍 Browsing all items (cards + products) for expansion: ${expansion.name} (ID: ${expansionId})`);
+      
+      // Use the expansion all API (cards + products)
+      const allItems = await tcgGoApiService.getExpansionAll(expansionId, 'price_highest');
+      
+      if (allItems && allItems.length > 0) {
+        console.log(`✅ Found ${allItems.length} total items (cards + products) in ${expansion.name}`);
+        setSearchResults(allItems);
+        setTotalResults(allItems.length);
+        setCurrentPage(1);
+      } else {
+        console.log(`❌ No items found for ${expansion.name}`);
+        setSearchResults([]);
+        setTotalResults(0);
+      }
+    } catch (error) {
+      console.error('❌ Error browsing expansion items:', error);
+      // Fallback to regular search
+      handleSearch(expansion.name);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load all expansions function
+  const loadAllExpansions = async () => {
+    setIsLoadingTrending(true);
+    try {
+      console.log('🔍 Loading all expansions...');
+      // Clear cache to ensure we get fresh data with updated images
+      tcgGoApiService.clearCache();
+      const expansions = await tcgGoApiService.getAllExpansions();
+      
+      console.log('📊 Expansions response:', expansions);
+      
+      // The getAllExpansions function returns the data directly, not wrapped in success/data
+      if (expansions && Array.isArray(expansions)) {
+        console.log(`✅ Loaded ${expansions.length} expansions:`, expansions);
+        
+        
+        setTrendingProducts(expansions);
+      } else {
+        console.error('❌ Failed to load expansions - invalid response:', expansions);
+        setTrendingProducts([]);
+      }
+    } catch (error) {
+      console.error('❌ Error loading expansions:', error);
+      
+      // Fallback: Show some popular expansions if API fails
+      const fallbackExpansions = [
+        { 
+          id: 25, // Prismatic Evolutions ID
+          name: 'Prismatic Evolutions', 
+          releaseDate: '2024-01-01', 
+          cardCount: 200, 
+          code: 'PE',
+          symbol: 'PE',
+          imageUrl: 'https://images.tcggo.com/tcggo/storage/23035/prismatic-evolutions-logo.png',
+          logo: 'https://images.tcggo.com/tcggo/storage/23035/prismatic-evolutions-logo.png',
+          series: 'Scarlet & Violet',
+          game: 'Pokémon'
+        },
+        { 
+          id: 24, // Scarlet & Violet 151 ID
+          name: 'Scarlet & Violet 151', 
+          releaseDate: '2023-06-01', 
+          cardCount: 165, 
+          code: 'SV151',
+          symbol: 'SV151',
+          imageUrl: 'https://images.tcggo.com/tcggo/storage/23035/sv151-logo.png',
+          logo: 'https://images.tcggo.com/tcggo/storage/23035/sv151-logo.png',
+          series: 'Scarlet & Violet',
+          game: 'Pokémon'
+        },
+        { 
+          id: 21, // Crown Zenith ID (from your API example)
+          name: 'Crown Zenith', 
+          releaseDate: '2023-01-01', 
+          cardCount: 230, 
+          code: 'CZ',
+          symbol: 'CZ',
+          imageUrl: 'https://images.tcggo.com/tcggo/storage/23035/crown-zenith-logo.png',
+          logo: 'https://images.tcggo.com/tcggo/storage/23035/crown-zenith-logo.png',
+          series: 'Sword & Shield',
+          game: 'Pokémon'
+        },
+        { 
+          id: 20, // Silver Tempest ID
+          name: 'Silver Tempest', 
+          releaseDate: '2022-11-01', 
+          cardCount: 195, 
+          code: 'ST',
+          symbol: 'ST',
+          imageUrl: 'https://images.tcggo.com/tcggo/storage/23035/silver-tempest-logo.png',
+          logo: 'https://images.tcggo.com/tcggo/storage/23035/silver-tempest-logo.png',
+          series: 'Sword & Shield',
+          game: 'Pokémon'
+        },
+        { 
+          id: 19, // Lost Origin ID
+          name: 'Lost Origin', 
+          releaseDate: '2022-09-01', 
+          cardCount: 196, 
+          code: 'LO',
+          symbol: 'LO',
+          imageUrl: 'https://images.tcggo.com/tcggo/storage/23035/lost-origin-logo.png',
+          logo: 'https://images.tcggo.com/tcggo/storage/23035/lost-origin-logo.png',
+          series: 'Sword & Shield',
+          game: 'Pokémon'
+        },
+        { 
+          id: 18, // Astral Radiance ID
+          name: 'Astral Radiance', 
+          releaseDate: '2022-05-01', 
+          cardCount: 189, 
+          code: 'AR',
+          symbol: 'AR',
+          imageUrl: 'https://images.tcggo.com/tcggo/storage/23035/astral-radiance-logo.png',
+          logo: 'https://images.tcggo.com/tcggo/storage/23035/astral-radiance-logo.png',
+          series: 'Sword & Shield',
+          game: 'Pokémon'
+        },
+        { 
+          id: 17, // Brilliant Stars ID
+          name: 'Brilliant Stars', 
+          releaseDate: '2022-02-01', 
+          cardCount: 172, 
+          code: 'BS',
+          symbol: 'BS',
+          imageUrl: 'https://images.tcggo.com/tcggo/storage/23035/brilliant-stars-logo.png',
+          logo: 'https://images.tcggo.com/tcggo/storage/23035/brilliant-stars-logo.png',
+          series: 'Sword & Shield',
+          game: 'Pokémon'
+        },
+        { 
+          id: 16, // Fusion Strike ID
+          name: 'Fusion Strike', 
+          releaseDate: '2021-11-01', 
+          cardCount: 264, 
+          code: 'FS',
+          symbol: 'FS',
+          imageUrl: 'https://images.tcggo.com/tcggo/storage/23035/fusion-strike-logo.png',
+          logo: 'https://images.tcggo.com/tcggo/storage/23035/fusion-strike-logo.png',
+          series: 'Sword & Shield',
+          game: 'Pokémon'
+        }
+      ];
+      
+      console.log('🔄 Using fallback expansions');
+      setTrendingProducts(fallbackExpansions);
+    } finally {
+      setIsLoadingTrending(false);
+    }
+  };
 
   // Handle click outside dropdowns
   useEffect(() => {
@@ -116,7 +378,7 @@ const Search = () => {
           
           // Try to find the expansion first
           try {
-            const expansions = await marketDataService.searchExpansions(searchQuery);
+            const expansions = await tcgGoApiService.searchExpansions(searchQuery);
             if (expansions && expansions.length > 0) {
               const expansion = expansions[0]; // Take the first match
               console.log(`📦 Found expansion: ${expansion.name} (ID: ${expansion.id})`);
@@ -127,28 +389,21 @@ const Search = () => {
                                sortBy === 'alphabetical' ? 'name' : 'price_highest';
               
               const [cards, products] = await Promise.all([
-                marketDataService.getExpansionCards(expansion.id, sortOption),
-                marketDataService.getExpansionProducts(expansion.id, sortOption)
+                tcgGoApiService.getExpansionCards(expansion.id, sortOption),
+                tcgGoApiService.getExpansionProducts(expansion.id, sortOption)
               ]);
               
               // Combine results
               const combinedResults = [...cards, ...products];
-              result = {
-                success: true,
-                data: {
-                  cards: combinedResults.slice(0, maxResults),
-                  totalResults: combinedResults.length,
-                  searchTerm: searchQuery
-                }
-              };
+              result = combinedResults; // Don't limit expansion results
               console.log(`✅ Found ${combinedResults.length} items from expansion`);
             } else {
               // Fall back to regular search if no expansion found
-              result = await marketDataService.searchCardMarketAll(searchQuery, maxResults);
+              result = await tcgGoApiService.searchAll(searchQuery, 'relevance');
             }
           } catch (expansionError) {
             console.log('⚠️ Expansion search failed, falling back to regular search:', expansionError);
-            result = await marketDataService.searchCardMarketAll(searchQuery, maxResults);
+            result = await tcgGoApiService.searchAll(searchQuery, 'relevance');
           }
         } else {
           // Use enhanced search with sorting for better results
@@ -157,41 +412,33 @@ const Search = () => {
                            sortBy === 'alphabetical' ? 'name' : 'relevance';
           
           try {
-            const searchResults = await marketDataService.searchWithSorting(searchQuery, sortOption, maxResults);
-            result = {
-              success: true,
-              data: {
-                cards: searchResults,
-                totalResults: searchResults.length,
-                searchTerm: searchQuery
-              }
-            };
+            const searchResults = await tcgGoApiService.searchAll(searchQuery, sortOption);
+            result = searchResults;
           } catch (searchError) {
             console.log('⚠️ Enhanced search failed, falling back to regular search:', searchError);
             // Fall back to regular search
             switch (searchType) {
               case 'cards':
-                result = await marketDataService.searchCardMarketCards(searchQuery, maxResults);
+                result = await tcgGoApiService.searchCards(searchQuery, sortOption);
                 break;
               case 'products':
-                result = await marketDataService.searchCardMarketProducts(searchQuery, maxResults);
+                result = await tcgGoApiService.searchProducts(searchQuery, sortOption);
                 break;
               case 'all':
               default:
-                result = await marketDataService.searchCardMarketAll(searchQuery, maxResults);
+                result = await tcgGoApiService.searchAll(searchQuery, 'relevance');
                 break;
             }
           }
         }
         
-        if (result && result.cards) {
+        if (result && Array.isArray(result)) {
           // Apply filtering based on filterBy
-          let filteredResults = result.cards;
+          let filteredResults = result;
           if (filterBy !== 'all') {
-            filteredResults = result.cards.filter(card => {
-              if (filterBy === 'sealed') return card.type === 'product';
-              if (filterBy === 'graded') return card.rarity === 'graded';
-              if (filterBy === 'ungraded') return card.rarity !== 'graded' && card.type !== 'product';
+            filteredResults = filteredResults.filter(card => {
+              if (filterBy === 'sealed') return card.type === 'sealed';
+              if (filterBy === 'singles') return card.type === 'singles';
               return true;
             });
           }
@@ -240,61 +487,9 @@ const Search = () => {
     };
   }, [searchQuery, searchType, filterBy, sortBy]);
 
-  // Test API connection and load trending products on component mount
+  // Load trending products on component mount
   useEffect(() => {
-    const testAPI = async () => {
-      try {
-        const status = marketDataService.getApiStatus();
-        setApiStatus(status);
-        console.log('🔧 API Status:', status);
-      } catch (error) {
-        console.error('❌ API Status Error:', error);
-      }
-    };
-    
-    const loadTrendingProducts = async () => {
-      setIsLoadingTrending(true);
-      try {
-        // Load trending products using popular search terms
-        const trendingTerms = [
-          'Charizard',
-          'Pikachu', 
-          'Prismatic Evolutions',
-          'Elite Trainer Box',
-          'Black Lotus',
-          'Blue Eyes White Dragon'
-        ];
-        
-        const allTrendingProducts = [];
-        
-        // Search for each trending term and get top results
-        for (const term of trendingTerms.slice(0, 3)) { // Limit to 3 terms to avoid API spam
-          try {
-            const result = await marketDataService.searchCardMarketAll(term, 3);
-            if (result.cards && result.cards.length > 0) {
-              allTrendingProducts.push(...result.cards.slice(0, 2)); // Take top 2 from each
-            }
-          } catch (error) {
-            console.warn(`Failed to load trending for ${term}:`, error);
-          }
-        }
-        
-        // Remove duplicates and limit to 6 products
-        const uniqueProducts = allTrendingProducts.filter((product, index, self) => 
-          index === self.findIndex(p => p.name === product.name)
-        ).slice(0, 6);
-        
-        setTrendingProducts(uniqueProducts);
-        console.log('🔥 Loaded trending products:', uniqueProducts);
-      } catch (error) {
-        console.error('❌ Error loading trending products:', error);
-      } finally {
-        setIsLoadingTrending(false);
-      }
-    };
-    
-    testAPI();
-    loadTrendingProducts();
+    loadPopularExpansions();
   }, []);
 
   // Sort results based on sortBy option
@@ -375,21 +570,30 @@ const Search = () => {
 
   const formatPrice = (value) => {
     if (!value) return 'Unavailable';
-    // Handle both dollars and cents values
-    if (value > 1000) {
-      // Likely in cents, convert to dollars
-      return `$${(value / 100).toFixed(2)}`;
-    } else {
-      // Likely already in dollars
-      return `$${value.toFixed(2)}`;
-    }
+    // API returns values in dollars, so just format as currency
+    return `$${value.toFixed(2)}`;
   };
 
   const clearCache = () => {
-    marketDataService.clearCache();
+    tcgGoApiService.clearCache();
     setSearchResults([]);
     setTotalResults(0);
     console.log('🗑️ Cache cleared, try searching again');
+  };
+
+  // Debug function to check price accuracy for a specific item
+  const debugItemPricing = async (itemId, itemType = 'card') => {
+    console.log(`🔍 Debugging pricing for ${itemType} ID: ${itemId}`);
+    try {
+      if (itemType === 'card') {
+        await tcgGoApiService.debugCardData(itemId);
+      } else {
+        // For products, we'd need to implement debugProductData
+        console.log('Product debugging not yet implemented');
+      }
+    } catch (error) {
+      console.error('Error debugging item pricing:', error);
+    }
   };
 
   const handleProductClick = (product) => {
@@ -421,7 +625,10 @@ const Search = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-gray-900 mobile-bg-fix text-white">
+      {/* Mobile browser background fix */}
+      <div className="mobile-full-bg"></div>
+
       {/* Search Interface */}
       <div className="px-3 py-2">
         <div className="p-3">
@@ -440,6 +647,7 @@ const Search = () => {
               className="w-full pl-8 pr-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
             />
           </div>
+
 
           {/* Filter Buttons */}
           <div className="flex gap-2 mb-3">
@@ -498,7 +706,7 @@ const Search = () => {
                 <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {filterBy === 'all' ? 'All Items' : filterBy === 'sealed' ? 'Sealed' : filterBy === 'graded' ? 'Graded' : 'Ungraded'}
+                {filterBy === 'all' ? 'All Items' : filterBy === 'sealed' ? 'Sealed' : filterBy === 'singles' ? 'Singles' : 'All Items'}
                 <svg className="h-3 w-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -511,8 +719,7 @@ const Search = () => {
                     {[
                       { value: 'all', label: 'All Items' },
                       { value: 'sealed', label: 'Sealed' },
-                      { value: 'graded', label: 'Graded' },
-                      { value: 'ungraded', label: 'Ungraded' }
+                      { value: 'singles', label: 'Singles' }
                     ].map((option) => (
                       <button
                         key={option.value}
@@ -577,6 +784,18 @@ const Search = () => {
                     className="relative border border-gray-700 rounded-lg overflow-hidden hover:border-gray-600 transition-all duration-200 cursor-pointer"
                     onClick={() => handleProductClick(card)}
                   >
+                    {/* Add Button - Top Right */}
+                    <button 
+                      className="absolute top-2 right-2 w-5 h-5 bg-indigo-500/20 rounded-full flex items-center justify-center hover:bg-indigo-500/30 transition-colors z-10 border border-indigo-400/30"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddToCollection({ ...card, quantity: 1 });
+                      }}
+                    >
+                      <svg className="w-2.5 h-2.5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </button>
                     {/* Card Image */}
                     <div className="aspect-[4/3] flex items-center justify-center py-2 relative">
                       {card?.imageUrl ? (
@@ -599,55 +818,44 @@ const Search = () => {
                     </div>
                     
                     {/* Card Details */}
-                    <div className="p-2 space-y-1">
-                      {/* Item Name - First Line */}
-                      <div>
-                        <h3 className="text-white leading-tight line-clamp-2 font-bold" style={{fontSize: '12px'}}>
-                          {card?.name || 'Unknown Card'}
+                    <div className="p-3 space-y-2">
+                      {/* Header Section */}
+                      <div className="space-y-1">
+                        <h3 className="text-white font-semibold leading-tight" style={{fontSize: '11px'}}>
+                          {getCleanItemName(card?.name, card?.set) || 'Unknown Card'}
                         </h3>
+                        <p className="text-gray-400" style={{fontSize: '9px'}}>
+                          {card?.set || 'Unknown Set'}
+                        </p>
                       </div>
                       
-                      {/* Set Name - Ghost Text */}
-                      <div className="text-xs text-gray-400 truncate" style={{fontSize: '12px'}}>
-                        {card?.set || 'Unknown Set'}
-                      </div>
+                        <p className="text-gray-300" style={{fontSize: '8px'}}>
+                          {card?.type === 'product' ? 'Sealed' : (card?.rarity || 'Card')}
+                        </p>
                       
-                      {/* Type Pill - Below Set Name */}
-                      <div className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/60 text-blue-100">
-                        {card?.type === 'product' ? 'Sealed' : (card?.rarity || 'Card')}
-                      </div>
-                      
-                      {/* Spacing */}
-                      <div className="h-1"></div>
-                      
-                      {/* Financial Details */}
-                      <div className="space-y-0.5">
-                        <div className="text-xs text-white" style={{fontSize: '12px'}}>
-                          {card?.marketValue ? formatPrice(card.marketValue) : 'Unavailable'} Value
+                      {/* Financial Section */}
+                      <div className="space-y-1">
+                        {/* Price */}
+                        <div className="flex items-center space-x-2">
+                            <span className="text-white font-semibold" style={{fontSize: '12px'}}>
+                              {card?.marketValue ? formatPrice(card.marketValue) : 'N/A'} Value
+                            </span>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs text-gray-400" style={{fontSize: '12px'}}>
-                            Last 7 days: {card.trend ? (
-                              <span className={card.trend.direction === 'up' ? 'text-green-400' : card.trend.direction === 'down' ? 'text-red-400' : 'text-gray-400'}>
-                                {card.trend.direction === 'up' ? '+' : card.trend.direction === 'down' ? '-' : ''}{card.trend.value}%
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">N/A</span>
-                            )}
-                          </div>
-                          
-                          {/* Add Button - Bottom Right */}
-                          <button 
-                            className="w-6 h-6 bg-white rounded flex items-center justify-center hover:bg-gray-100 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAddToCollection({ ...card, quantity: 1 });
-                            }}
-                          >
-                            <svg className="w-3 h-3 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                          </button>
+                        
+                        {/* Trend Data */}
+                        <div className="text-gray-400" style={{fontSize: '9px'}}>
+                          {(() => {
+                            
+                            if (card.trend && card.trend !== 0 && card.dollarChange !== 0) {
+                              return (
+                                <span className={card.trend > 0 ? 'text-green-400' : 'text-red-400'}>
+                                  {card.dollarChange > 0 ? '+' : ''}${Math.abs(card.dollarChange).toFixed(2)} ({card.trend > 0 ? '+' : ''}{card.trend}%)
+                                </span>
+                              );
+                            } else {
+                              return <span className="text-gray-500">$0.00 (0.00%)</span>;
+                            }
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -700,28 +908,71 @@ const Search = () => {
       {/* Help Text */}
       {!searchQuery && (
         <div className="px-4 py-8">
-          {/* Trending Products Section */}
-          {trendingProducts.length > 0 && (
+          {/* Loading State */}
+          {isLoadingTrending && (
             <div className="mb-8">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-white">🔥 Trending Now</h2>
-                <div className="text-xs text-gray-400">Popular products</div>
+                <h2 className="text-lg font-semibold text-white">Expansions</h2>
+                <div className="text-xs text-gray-400">Loading...</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pb-20">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="border border-gray-700 rounded-lg overflow-hidden">
+                    <div className="aspect-[4/3] bg-gray-800 animate-pulse"></div>
+                    <div className="p-2 space-y-2">
+                      <div className="h-3 bg-gray-700 rounded animate-pulse"></div>
+                      <div className="h-2 bg-gray-700 rounded animate-pulse w-2/3"></div>
+                      <div className="h-2 bg-gray-700 rounded animate-pulse w-1/2"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {!isLoadingTrending && trendingProducts.length === 0 && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-white">Expansions</h2>
+                <div className="text-xs text-gray-400">Failed to load</div>
+              </div>
+              <div className="text-center py-8">
+                <div className="text-gray-400 mb-2">Unable to load expansions</div>
+                <button 
+                  onClick={loadPopularExpansions}
+                  className="text-indigo-400 hover:text-indigo-300 text-sm"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Expansions Section */}
+          {!isLoadingTrending && trendingProducts.length > 0 && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-white">Expansions</h2>
+                <div className="text-xs text-gray-400">Browse by set</div>
               </div>
               
               <div className="grid grid-cols-2 gap-3 pb-20">
-                {trendingProducts.map((product, index) => {
+                {trendingProducts.map((expansion, index) => {
                   return (
                     <div 
-                      key={`trending-${index}`} 
-                      className="relative border border-gray-700 rounded-lg overflow-hidden hover:border-gray-600 transition-all duration-200 cursor-pointer"
-                      onClick={() => handleProductClick(product)}
+                      key={`expansion-${index}`} 
+                      className="relative border border-gray-700 rounded-lg overflow-hidden hover:border-indigo-500 hover:bg-indigo-900/10 transition-all duration-200 cursor-pointer"
+                      onClick={() => {
+                        browseExpansionCards(expansion);
+                      }}
                     >
-                      {/* Card Image */}
-                      <div className="aspect-[4/3] flex items-center justify-center py-2 relative">
-                        {product?.imageUrl ? (
+                      {/* Expansion Logo/Image */}
+                      <div className="aspect-[4/3] flex items-center justify-center p-4 relative">
+                        {(expansion?.imageUrl || expansion?.image || expansion?.logo) ? (
                           <img
-                            src={product.imageUrl}
-                            alt={product?.name || 'Card'}
+                            src={expansion.imageUrl || expansion.image || expansion.logo}
+                            alt={expansion?.name || 'Expansion'}
                             className="w-full h-full object-contain"
                             onError={(e) => {
                               e.target.style.display = 'none';
@@ -729,64 +980,37 @@ const Search = () => {
                             }}
                           />
                         ) : null}
-                        <div className={`w-full h-full flex items-center justify-center bg-gray-800 ${product?.imageUrl ? 'hidden' : 'flex'}`}>
+                        <div className={`w-full h-full flex items-center justify-center bg-gray-800 ${(expansion?.imageUrl || expansion?.image || expansion?.logo) ? 'hidden' : 'flex'}`}>
                           <div className="text-center">
-                            <div className="text-2xl mb-1">📦</div>
-                            <div className="text-gray-400 text-xs">No Image</div>
+                            <div className="text-3xl mb-1">📚</div>
+                            <div className="text-gray-400 text-xs">Expansion</div>
                           </div>
                         </div>
                       </div>
                       
-                      {/* Card Details */}
+                      {/* Expansion Details */}
                       <div className="p-2 space-y-1">
-                        {/* Item Name - First Line */}
+                        {/* Expansion Name */}
                         <div>
                           <h3 className="text-white leading-tight line-clamp-2 font-bold" style={{fontSize: '12px'}}>
-                            {product?.name || 'Unknown Card'}
+                            {expansion?.name || 'Unknown Expansion'}
                           </h3>
                         </div>
                         
-                        {/* Set Name - Ghost Text */}
+                        {/* Series/Release Date */}
                         <div className="text-xs text-gray-400 truncate" style={{fontSize: '12px'}}>
-                          {product?.set || 'Unknown Set'}
+                          {expansion?.series ? expansion.series : (expansion?.releaseDate ? new Date(expansion.releaseDate).getFullYear() : 'Unknown Year')}
                         </div>
                         
-                        {/* Type Pill - Below Set Name */}
-                        <div className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/60 text-blue-100">
-                          {product?.type === 'product' ? 'Sealed' : (product?.rarity || 'Card')}
-                        </div>
-                        
-                        {/* Spacing */}
-                        <div className="h-1"></div>
-                        
-                        {/* Financial Details */}
-                        <div className="space-y-0.5">
-                          <div className="text-xs text-white" style={{fontSize: '12px'}}>
-                            {product?.marketValue ? formatPrice(product.marketValue) : 'Unavailable'} Value
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs text-gray-400" style={{fontSize: '12px'}}>
-                              Last 7 days: {product.trend ? (
-                              <span className={product.trend.direction === 'up' ? 'text-green-400' : product.trend.direction === 'down' ? 'text-red-400' : 'text-gray-400'}>
-                                {product.trend.direction === 'up' ? '+' : product.trend.direction === 'down' ? '-' : ''}{product.trend.value}%
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">N/A</span>
-                            )}
-                            </div>
-                            
-                            {/* Add Button - Bottom Right */}
-                            <button 
-                              className="w-6 h-6 bg-white rounded flex items-center justify-center hover:bg-gray-100 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddToCollection({ ...product, quantity: 1 });
-                              }}
-                            >
-                              <svg className="w-3 h-3 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                              </svg>
-                            </button>
+                        {/* Set Code Pill and Card Count */}
+                        <div className="flex items-center gap-2">
+                          {expansion?.code && (
+                            <span className="px-2 py-0.5 bg-indigo-500 text-white text-xs rounded-full font-medium">
+                              {expansion.code}
+                            </span>
+                          )}
+                          <div className="text-xs text-gray-400" style={{fontSize: '12px'}}>
+                            {expansion?.cardCount ? `(${expansion.cardCount})` : 'Expansion'}
                           </div>
                         </div>
                       </div>
@@ -819,15 +1043,6 @@ const Search = () => {
             </div>
           )}
 
-          {/* Search Tips */}
-          <div className="text-center">
-            <div className="text-gray-400 mb-4">Search for trading cards</div>
-            <div className="text-sm text-gray-500 space-y-1">
-              <div>• Try card names like "Charizard" or "Pikachu"</div>
-              <div>• Search for sets like "Prismatic Evolutions"</div>
-              <div>• Look for products like "Elite Trainer Box"</div>
-            </div>
-          </div>
         </div>
       )}
 

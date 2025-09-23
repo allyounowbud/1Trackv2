@@ -7,11 +7,19 @@
   html {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
     font-weight: 200;
+    /* Ensure background extends to cover entire viewport on mobile browsers */
+    background-color: #111827;
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
   }
   
   body {
     @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white;
     font-weight: 200;
+    /* Ensure background extends to cover entire viewport on mobile browsers */
+    background-color: #111827;
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
   }
   
   /* Make all text elements use thin font by default */
@@ -36,7 +44,7 @@
 @layer components {
   /* Card Components */
   .card {
-    @apply bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm;
+    @apply bg-gray-800 rounded-2xl border border-gray-700 shadow-sm;
   }
   
   .card-hover {
@@ -70,7 +78,7 @@
   
   /* Input Components */
   .input {
-    @apply w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+    @apply w-full px-4 py-3 rounded-xl border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
   }
   
   /* Status Indicators */
@@ -122,6 +130,25 @@
   
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* Mobile browser background fixes */
+  .mobile-bg-fix {
+    background-color: #111827;
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
+    min-height: 100svh; /* Small viewport height for mobile browsers */
+  }
+  
+  /* Ensure background covers browser UI areas on mobile */
+  .mobile-full-bg {
+    background-color: #111827;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
   }
 
   /* Line clamp utilities */

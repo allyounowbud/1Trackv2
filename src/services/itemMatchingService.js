@@ -283,23 +283,23 @@ class ItemMatchingService {
         .select('item')
         .not('item', 'is', null);
       
-      const totalItems = [...new Set(orders.map(order => order.item))].length;
+      const totalItems = orders ? [...new Set(orders.map(order => order.item))].length : 0;
 
       // Get items with market data
       const { data: marketData } = await supabase
         .from('market_prices')
         .select('item_name, market_value_cents, source, last_updated');
 
-      const itemsWithMarketData = marketData.length;
-      const itemsWithCardMarketData = marketData.filter(item => item.source === 'cardmarket').length;
-      const itemsWithValues = marketData.filter(item => item.market_value_cents && item.market_value_cents > 0).length;
+      const itemsWithMarketData = marketData ? marketData.length : 0;
+      const itemsWithCardMarketData = marketData ? marketData.filter(item => item.source === 'cardmarket').length : 0;
+      const itemsWithValues = marketData ? marketData.filter(item => item.market_value_cents && item.market_value_cents > 0).length : 0;
 
       // Get recent updates (last 24 hours)
       const now = new Date();
       const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      const recentUpdates = marketData.filter(item => 
+      const recentUpdates = marketData ? marketData.filter(item => 
         new Date(item.last_updated) > twentyFourHoursAgo
-      ).length;
+      ).length : 0;
 
       return {
         totalItems,

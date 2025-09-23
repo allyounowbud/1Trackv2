@@ -2,40 +2,24 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
-import { getBatchMarketData, getMarketValueInCents, marketDataService } from '../services/marketDataService';
-import ItemMatchingManager from '../components/ItemMatchingManager.jsx';
+import { getItemDisplayName, getItemSetName } from '../utils/nameUtils';
 
-// Data fetching functions (v2 schema)
+
+// Simple data fetching - just one table!
 async function getOrders() {
   const { data, error } = await supabase
-    .from("orders")
-    .select(`
-      id, 
-      buy_date, 
-      buy_price_cents, 
-      sell_price_cents, 
-      order_type,
-      buy_quantity,
-      sell_quantity,
-      items!inner(
-        id,
-        name,
-        set_name,
-        item_type,
-        market_value_cents,
-        image_url
-      )
-    `)
-    .order("buy_date", { ascending: false });
+    .from("individual_orders_clean")
+    .select("*")
+    .order("item_id, order_number", { ascending: true });
   if (error) throw error;
   return data || [];
 }
 
-async function getItems() {
+async function getCollectionSummary() {
   const { data, error } = await supabase
-    .from("items")
-    .select("id, name, market_value_cents")
-    .order("name", { ascending: true });
+    .from("collection_summary_clean")
+    .select("*")
+    .order("item_name", { ascending: true });
   if (error) throw error;
   return data || [];
 }
@@ -45,24 +29,11 @@ const Collection = () => {
   const [searchQuery, setSearchQuery] = useState(
     location.state?.searchQuery || ''
   );
+  const [viewMode, setViewMode] = useState('summary'); // 'summary' or 'individual'
+  const [showOrderMenu, setShowOrderMenu] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [showMarkAsSoldModal, setShowMarkAsSoldModal] = useState(false);
   const [timeRange, setTimeRange] = useState('7D');
-  const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
-  const [selectedCurrency, setSelectedCurrency] = useState({
-    code: 'USD',
-    name: 'United States Dollar',
-    flag: (
-      <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-        <rect width="20" height="15" fill="#B22234"/>
-        <rect y="1.15" width="20" height="1.15" fill="white"/>
-        <rect y="3.46" width="20" height="1.15" fill="white"/>
-        <rect y="5.77" width="20" height="1.15" fill="white"/>
-        <rect y="8.08" width="20" height="1.15" fill="white"/>
-        <rect y="10.38" width="20" height="1.15" fill="white"/>
-        <rect y="12.69" width="20" height="1.15" fill="white"/>
-        <rect width="8" height="8.08" fill="#3C3B6E"/>
-      </svg>
-    )
-  });
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [showBulkActionsMenu, setShowBulkActionsMenu] = useState(false);
@@ -70,218 +41,52 @@ const Collection = () => {
   const [selectedItemId, setSelectedItemId] = useState(null);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('All');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [ordersToDelete, setOrdersToDelete] = useState([]);
+  const [selectedOrderIds, setSelectedOrderIds] = useState(new Set());
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [ordersToConfirmDelete, setOrdersToConfirmDelete] = useState([]);
+  const [isOrderSelectionMode, setIsOrderSelectionMode] = useState(false);
 
-  // Fetch real data
-  const { data: orders = [], isLoading: ordersLoading, error: ordersError } = useQuery({
-    queryKey: ["collection_orders"],
-    queryFn: getOrders,
-  });
-
-  const { data: items = [], isLoading: itemsLoading, error: itemsError } = useQuery({
-    queryKey: ["collection_items"],
-    queryFn: getItems,
-  });
-
-  // Market data state
-  const [marketData, setMarketData] = useState({});
-  const [marketDataLoading, setMarketDataLoading] = useState(false);
-
-
-  // Fetch market data from database (centralized prices)
-  useEffect(() => {
-    const fetchMarketData = async () => {
-      if (orders.length === 0) return;
-      
-      // Get unique items from orders that are currently in inventory (not sold)
-      const inventoryItems = orders
-        .filter(order => order.order_type === 'buy' && !order.sell_price_cents)
-        .map(order => order.items.name)
-        .filter(Boolean);
-      
-      const uniqueItems = [...new Set(inventoryItems)];
-      
-      console.log('🔍 Collection items to fetch market data for:', uniqueItems);
-      
-      if (uniqueItems.length > 0) {
-        setMarketDataLoading(true);
-        
-        try {
-          // Fetch prices from API
-          console.log(`🚀 Fetching market data from API for ${uniqueItems.length} items...`);
-          const result = await getBatchMarketData(uniqueItems);
-          if (result.success && result.data) {
-            setMarketData(result.data);
-          } else {
-            setMarketData({});
-          }
-          console.log(`✅ API market data fetch complete: ${Object.keys(result.data || {}).length}/${uniqueItems.length} items found`);
-        } catch (error) {
-          console.error('❌ Error fetching market data:', error);
-          setMarketData({});
-        } finally {
-          setMarketDataLoading(false);
-        }
-      }
-    };
-
-    // Add a small delay to prevent excessive calls during rapid re-renders
-    const timeoutId = setTimeout(fetchMarketData, 100);
-    return () => clearTimeout(timeoutId);
-  }, [orders]);
-
-  // Available currencies with SVG flag components
-  const currencies = [
-    { 
-      code: 'USD', 
-      name: 'United States Dollar', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="15" fill="#B22234"/>
-          <rect y="1.15" width="20" height="1.15" fill="white"/>
-          <rect y="3.46" width="20" height="1.15" fill="white"/>
-          <rect y="5.77" width="20" height="1.15" fill="white"/>
-          <rect y="8.08" width="20" height="1.15" fill="white"/>
-          <rect y="10.38" width="20" height="1.15" fill="white"/>
-          <rect y="12.69" width="20" height="1.15" fill="white"/>
-          <rect width="8" height="8.08" fill="#3C3B6E"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'CAD', 
-      name: 'Canadian Dollar', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="15" fill="#FF0000"/>
-          <rect width="6.67" height="15" fill="white"/>
-          <rect x="13.33" width="6.67" height="15" fill="white"/>
-          <rect x="6.67" y="5" width="6.67" height="5" fill="#FF0000"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'EUR', 
-      name: 'European Euro', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="15" fill="#003399"/>
-          <circle cx="10" cy="7.5" r="3" fill="#FFCC00"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'GBP', 
-      name: 'British Pound', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="15" fill="#012169"/>
-          <path d="M0 0l20 15M20 0L0 15" stroke="white" strokeWidth="2"/>
-          <path d="M0 7.5h20M10 0v15" stroke="white" strokeWidth="2"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'AUD', 
-      name: 'Australian Dollar', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="15" fill="#00008B"/>
-          <circle cx="5" cy="5" r="2" fill="white"/>
-          <path d="M0 0l20 15M20 0L0 15" stroke="white" strokeWidth="0.5"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'NZD', 
-      name: 'New Zealand Dollar', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="15" fill="#000080"/>
-          <circle cx="5" cy="5" r="2" fill="white"/>
-          <path d="M0 0l20 15M20 0L0 15" stroke="white" strokeWidth="0.5"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'MXN', 
-      name: 'Mexican Peso', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="6.67" height="15" fill="#006847"/>
-          <rect x="6.67" width="6.67" height="15" fill="white"/>
-          <rect x="13.33" width="6.67" height="15" fill="#CE1126"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'NOK', 
-      name: 'Norwegian Krone', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="15" fill="#EF2B2D"/>
-          <rect x="6" width="2" height="15" fill="white"/>
-          <rect y="6" width="20" height="2" fill="white"/>
-          <rect x="5" width="4" height="15" fill="#002868"/>
-          <rect y="5" width="20" height="4" fill="#002868"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'SEK', 
-      name: 'Swedish Krona', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="15" fill="#006AA7"/>
-          <rect x="6" width="2" height="15" fill="#FECC00"/>
-          <rect y="6" width="20" height="2" fill="#FECC00"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'DKK', 
-      name: 'Danish Krone', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="15" fill="#C60C30"/>
-          <rect x="6" width="2" height="15" fill="white"/>
-          <rect y="6" width="20" height="2" fill="white"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'MYR', 
-      name: 'Malaysian Ringgit', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="3" fill="#FF0000"/>
-          <rect y="3" width="20" height="3" fill="white"/>
-          <rect y="6" width="20" height="3" fill="#FF0000"/>
-          <rect y="9" width="20" height="3" fill="white"/>
-          <rect y="12" width="20" height="3" fill="#FF0000"/>
-          <rect width="8" height="9" fill="#000080"/>
-        </svg>
-      )
-    },
-    { 
-      code: 'JPY', 
-      name: 'Japanese Yen', 
-      flag: (
-        <svg className="w-5 h-4" viewBox="0 0 20 15" fill="none">
-          <rect width="20" height="15" fill="white"/>
-          <circle cx="10" cy="7.5" r="3" fill="#BC002D"/>
-        </svg>
-      )
-    },
-  ];
-
-  // Click outside handler for currency dropdown
-  const dropdownRef = useRef(null);
+  // Refs for dropdowns and long press
   const filterDropdownRef = useRef(null);
+  const longPressRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
+
+  // Selection functions
+  const handleItemSelect = (itemId) => {
+    const newSelectedItems = new Set(selectedItems);
+    if (newSelectedItems.has(itemId)) {
+      newSelectedItems.delete(itemId);
+    } else {
+      newSelectedItems.add(itemId);
+    }
+    setSelectedItems(newSelectedItems);
+    
+    if (newSelectedItems.size === 0) {
+      setIsSelectionMode(false);
+    }
+  };
+
+  const handleLongPress = (itemId) => {
+    setIsSelectionMode(true);
+    handleItemSelect(itemId);
+  };
+
+  const clearSelection = () => {
+    setSelectedItems(new Set());
+    setIsSelectionMode(false);
+  };
+
+  const selectAll = () => {
+    const allItemIds = new Set((collectionData.items || []).map(item => item.id));
+    setSelectedItems(allItemIds);
+    setIsSelectionMode(true);
+  };
+
+  // Click outside handler for dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowCurrencyDropdown(false);
-      }
       if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target)) {
         setShowFilterDropdown(false);
       }
@@ -290,58 +95,417 @@ const Collection = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Currency conversion rates (to USD)
-  const exchangeRates = {
-    USD: 1.0,
-    CAD: 0.74,
-    EUR: 1.08,
-    GBP: 1.27,
-    AUD: 0.66,
-    NZD: 0.61,
-    MXN: 0.059,
-    NOK: 0.093,
-    SEK: 0.092,
-    DKK: 0.145,
-    MYR: 0.21,
-    JPY: 0.0067,
-  };
+  // Fetch data
+  const { data: orders = [], isLoading: ordersLoading, refetch: refetchOrders } = useQuery({
+    queryKey: ['orders'],
+    queryFn: getOrders,
+  });
 
-  // Currency symbols
-  const currencySymbols = {
-    USD: '$',
-    CAD: 'C$',
-    EUR: '€',
-    GBP: '£',
-    AUD: 'A$',
-    NZD: 'NZ$',
-    MXN: '$',
-    NOK: 'kr',
-    SEK: 'kr',
-    DKK: 'kr',
-    MYR: 'RM',
-    JPY: '¥',
-  };
+  const { data: collectionSummary = [], isLoading: summaryLoading, refetch: refetchSummary } = useQuery({
+    queryKey: ['collectionSummary'],
+    queryFn: getCollectionSummary,
+  });
 
-  // Convert values based on selected currency
-  const convertValue = (usdValue) => {
-    const rate = exchangeRates[selectedCurrency.code] || 1.0;
-    return usdValue / rate;
-  };
-
-  const getCurrencySymbol = () => {
-    return currencySymbols[selectedCurrency.code] || '$';
-  };
-
-  const formatPrice = (price) => {
-    const convertedPrice = convertValue(price);
-    const symbol = getCurrencySymbol();
-    
-    if (selectedCurrency.code === 'JPY') {
-      return `${symbol}${Math.round(convertedPrice).toLocaleString()}`;
-    } else {
-      return `${symbol}${convertedPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // Delete order - SIMPLE!
+  const deleteOrder = async (orderId) => {
+    try {
+      const { error } = await supabase.rpc('delete_order_clean', {
+        p_order_id: orderId
+      });
+      if (error) throw error;
+      
+      await refetchOrders();
+      await refetchSummary();
+      setShowOrderMenu(false);
+    } catch (error) {
+      console.error('Error deleting order:', error);
     }
   };
+
+  // Mark order as sold - SIMPLE!
+  const markOrderAsSold = async (orderId, sellData) => {
+    try {
+      const { error } = await supabase.rpc('mark_order_sold', {
+        p_order_id: orderId,
+        p_sell_date: sellData.sellDate,
+        p_sell_price_cents: Math.round(parseFloat(sellData.sellPrice) * 100),
+        p_sell_quantity: parseInt(sellData.quantity),
+        p_sell_location: sellData.location,
+        p_sell_fees_cents: Math.round(parseFloat(sellData.fees || 0) * 100),
+        p_sell_notes: sellData.notes
+      });
+      if (error) throw error;
+      
+      await refetchOrders();
+      await refetchSummary();
+      setShowMarkAsSoldModal(false);
+      setShowOrderMenu(false);
+    } catch (error) {
+      console.error('Error marking order as sold:', error);
+    }
+  };
+
+  // Handle delete product - show orders for selection
+  const handleDeleteProduct = (itemId) => {
+    console.log('🔍 Debug - handleDeleteProduct called with itemId:', itemId);
+    console.log('🔍 Debug - All orders:', orders);
+    console.log('🔍 Debug - Orders with item_id field:', orders.map(order => ({
+      id: order.id,
+      item_id: order.item_id,
+      item_name: order.item_name
+    })));
+    console.log('🔍 Debug - All item_id values:', orders.map(order => order.item_id));
+    
+    const itemOrders = orders.filter(order => order.item_id === itemId);
+    console.log('🔍 Debug - Filtered itemOrders:', itemOrders);
+    
+    setOrdersToDelete(itemOrders);
+    setShowDeleteModal(true);
+    setShowItemMenu(false);
+  };
+
+  // Delete selected orders
+  const deleteSelectedOrders = async (orderIds) => {
+    try {
+      for (const orderId of orderIds) {
+        const { error } = await supabase.rpc('delete_order_clean', {
+          p_order_id: orderId
+        });
+        if (error) throw error;
+      }
+      
+      await refetchOrders();
+      await refetchSummary();
+      setShowDeleteModal(false);
+      setShowDeleteConfirmation(false);
+      setOrdersToDelete([]);
+      setSelectedOrderIds(new Set());
+      setOrdersToConfirmDelete([]);
+      setIsOrderSelectionMode(false);
+    } catch (error) {
+      console.error('Error deleting orders:', error);
+    }
+  };
+
+  const confirmDeleteOrders = (orderIds) => {
+    const ordersToConfirm = ordersToDelete.filter(order => orderIds.includes(order.id));
+    setOrdersToConfirmDelete(ordersToConfirm);
+    setShowDeleteConfirmation(true);
+  };
+
+  const toggleOrderSelection = (orderId) => {
+    const newSelected = new Set(selectedOrderIds);
+    if (newSelected.has(orderId)) {
+      newSelected.delete(orderId);
+    } else {
+      newSelected.add(orderId);
+    }
+    setSelectedOrderIds(newSelected);
+  };
+
+  const selectAllOrders = () => {
+    const allOrderIds = new Set(ordersToDelete.map(order => order.id));
+    setSelectedOrderIds(allOrderIds);
+  };
+
+  const clearOrderSelection = () => {
+    setSelectedOrderIds(new Set());
+    setIsOrderSelectionMode(false);
+  };
+
+  // Group orders by item for summary view
+  const groupedOrders = orders.reduce((acc, order) => {
+    if (!acc[order.item_id]) {
+      acc[order.item_id] = {
+        item: {
+          id: order.item_id,
+          name: order.item_name,
+          set_name: order.set_name,
+          image_url: order.image_url,
+          market_value_cents: order.market_value_cents,
+          item_type: order.item_type,
+          card_number: order.card_number
+        },
+        orders: []
+      };
+    }
+    acc[order.item_id].orders.push(order);
+    return acc;
+  }, {});
+
+  const formatPrice = (price) => {
+    return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // Calculate collection statistics
+  const collectionData = (() => {
+    const totalValueCents = orders.reduce((sum, order) => {
+      if (!order.is_sold) {
+        return sum + ((order.market_value_cents || 0) * order.buy_quantity);
+      }
+      return sum;
+    }, 0);
+
+    const totalPaidCents = orders.reduce((sum, order) => {
+      return sum + (order.total_cost_cents || 0);
+    }, 0);
+
+    const totalProfitCents = orders.reduce((sum, order) => {
+      if (order.is_sold) {
+        // For sold items, use the actual net profit
+        return sum + (order.net_profit_cents || 0);
+      } else {
+        // For unsold items, calculate unrealized profit (market value - cost)
+        const marketValue = (order.market_value_cents || 0) * order.buy_quantity;
+        const cost = order.total_cost_cents || 0;
+        return sum + (marketValue - cost);
+      }
+    }, 0);
+
+    // Convert cents to dollars
+    const totalValue = totalValueCents / 100;
+    const totalPaid = totalPaidCents / 100;
+    const totalProfit = totalProfitCents / 100;
+    const profitPercentage = totalPaid > 0 ? (totalProfit / totalPaid) * 100 : 0;
+
+    // Debug: Log profit calculation
+    console.log('💰 Profit Debug:', {
+      totalValueCents,
+      totalPaidCents,
+      totalProfitCents,
+      totalValue,
+      totalPaid,
+      totalProfit,
+      profitPercentage,
+      ordersWithMarketData: orders.map(order => ({
+        item_name: order.item_name,
+        market_value_cents: order.market_value_cents,
+        buy_quantity: order.buy_quantity,
+        total_cost_cents: order.total_cost_cents,
+        is_sold: order.is_sold,
+        calculatedMarketValue: (order.market_value_cents || 0) * order.buy_quantity,
+        calculatedProfit: order.is_sold ? (order.net_profit_cents || 0) : ((order.market_value_cents || 0) * order.buy_quantity - (order.total_cost_cents || 0))
+      }))
+    });
+
+    // Debug: Log orders data to see what we're working with
+    console.log('🔍 Debug - Orders data:', orders.map(order => ({
+      item_name: order.item_name,
+      item_type: order.item_type,
+      buy_quantity: order.buy_quantity,
+      is_sold: order.is_sold
+    })));
+    
+    // Debug: Show all item_type values
+    console.log('🔍 Debug - All item_type values:', orders.map(order => order.item_type));
+    
+    // Debug: Log filtered orders for each category
+    const ungradedOrders = orders.filter(order => 
+      !order.is_sold && 
+      order.item_type !== 'Sealed Product' && 
+      !order.item_type?.toLowerCase().includes('graded') &&
+      !order.item_name?.toLowerCase().includes('box') &&
+      !order.item_name?.toLowerCase().includes('bundle') &&
+      !order.item_name?.toLowerCase().includes('collection') &&
+      !order.item_name?.toLowerCase().includes('tin')
+    );
+    const sealedOrders = orders.filter(order => 
+      !order.is_sold && (
+        order.item_type === 'Sealed Product' ||
+        order.item_name?.toLowerCase().includes('box') ||
+        order.item_name?.toLowerCase().includes('bundle') ||
+        order.item_name?.toLowerCase().includes('collection') ||
+        order.item_name?.toLowerCase().includes('tin')
+      )
+    );
+    
+    console.log('🔍 Debug - Ungraded orders:', ungradedOrders.map(order => ({
+      item_name: order.item_name,
+      item_type: order.item_type,
+      buy_quantity: order.buy_quantity
+    })));
+    console.log('🔍 Debug - Sealed orders:', sealedOrders.map(order => ({
+      item_name: order.item_name,
+      item_type: order.item_type,
+      buy_quantity: order.buy_quantity
+    })));
+
+    // Count items by type - sum quantities, not order count
+    const ungradedCount = orders
+      .filter(order => 
+        !order.is_sold && 
+        order.item_type !== 'Sealed Product' && 
+        !order.item_type?.toLowerCase().includes('graded') &&
+        !order.item_name?.toLowerCase().includes('box') &&
+        !order.item_name?.toLowerCase().includes('bundle') &&
+        !order.item_name?.toLowerCase().includes('collection') &&
+        !order.item_name?.toLowerCase().includes('tin')
+      )
+      .reduce((sum, order) => sum + (order.buy_quantity || 1), 0);
+
+    const gradedCount = orders
+      .filter(order => 
+        !order.is_sold && order.item_type?.toLowerCase().includes('graded')
+      )
+      .reduce((sum, order) => sum + (order.buy_quantity || 1), 0);
+
+    const sealedCount = orders
+      .filter(order => 
+        !order.is_sold && (
+          order.item_type === 'Sealed Product' ||
+          order.item_name?.toLowerCase().includes('box') ||
+          order.item_name?.toLowerCase().includes('bundle') ||
+          order.item_name?.toLowerCase().includes('collection') ||
+          order.item_name?.toLowerCase().includes('tin')
+        )
+      )
+      .reduce((sum, order) => sum + (order.buy_quantity || 1), 0);
+
+    // Debug: Log the filtered results
+    console.log('🔍 Debug - Counts:', {
+      ungradedCount,
+      gradedCount, 
+      sealedCount,
+      totalOrders: orders.length
+    });
+
+    // Group orders by item name for display
+    const itemGroups = {};
+    orders.forEach(order => {
+      if (!order.item_name) return;
+      
+      const itemName = order.item_name;
+      if (!itemGroups[itemName]) {
+        itemGroups[itemName] = {
+          name: itemName,
+          set_name: order.set_name,
+          item_type: order.item_type,
+          market_value_cents: order.market_value_cents,
+          image_url: order.image_url,
+          quantity: 0,
+          totalPaid: 0,
+          orders: []
+        };
+      }
+      
+      if (!order.is_sold) {
+        itemGroups[itemName].quantity += order.buy_quantity || 1;
+        itemGroups[itemName].totalPaid += (order.total_cost_cents || 0);
+      }
+      itemGroups[itemName].orders.push(order);
+    });
+
+    // Convert to collection items format
+    const items = Object.values(itemGroups).map((group, index) => {
+      const perItemValue = group.market_value_cents || 0;
+      const totalValue = perItemValue * group.quantity;
+      const profit = totalValue - group.totalPaid;
+      const profitPercent = group.totalPaid > 0 ? (profit / group.totalPaid) * 100 : 0;
+      
+      // Determine status based on item name
+      let status = "Ungraded";
+      if (group.name.toLowerCase().includes('graded') || group.name.toLowerCase().includes('psa') || group.name.toLowerCase().includes('bgs')) {
+        status = "Graded";
+      } else if (group.name.toLowerCase().includes('box') || group.name.toLowerCase().includes('bundle') || 
+                 group.name.toLowerCase().includes('pack') || group.name.toLowerCase().includes('collection') ||
+                 group.name.toLowerCase().includes('tin') || group.name.toLowerCase().includes('display')) {
+        status = "Sealed";
+      }
+
+      // Use clean item name and add card number if available
+      const cleanName = getItemDisplayName(group);
+      const displayName = group.card_number ? `${cleanName} #${group.card_number}` : cleanName;
+      
+      return {
+        id: group.orders[0]?.item_id || `item-${index}`, // Use actual item_id from database
+        name: displayName, // Include card number if available
+        set: group.set_name || "Unknown Set",
+        status: status,
+        value: perItemValue / 100, // Convert cents to dollars (per-item value)
+        paid: group.totalPaid / 100, // Convert cents to dollars (total paid)
+        quantity: group.quantity,
+        profit: profit / 100, // Convert cents to dollars (total profit)
+        profitPercent: profitPercent,
+        image: group.image_url || null
+      };
+    });
+
+    return {
+      totalValue,
+      totalPaid,
+      totalProfit,
+      profitPercentage,
+      ungradedCount,
+      gradedCount,
+      sealedCount,
+      items
+    };
+  })();
+
+  // Generate real chart data based on actual order history
+  const generateChartData = () => {
+    const days = timeRange === '7D' ? 7 : timeRange === '1M' ? 30 : timeRange === '3M' ? 90 : timeRange === '6M' ? 180 : 365;
+    const data = [];
+    const today = new Date();
+    
+    // Group orders by date to calculate cumulative value
+    const ordersByDate = {};
+    orders.forEach(order => {
+      if (!order.is_sold) {
+        const orderDate = new Date(order.buy_date).toISOString().split('T')[0];
+        if (!ordersByDate[orderDate]) {
+          ordersByDate[orderDate] = [];
+        }
+        ordersByDate[orderDate].push(order);
+      }
+    });
+    
+    let cumulativeValue = 0;
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Add value for orders placed on this date
+      if (ordersByDate[dateStr]) {
+        ordersByDate[dateStr].forEach(order => {
+          cumulativeValue += (order.market_value_cents || 0) * order.buy_quantity;
+        });
+      }
+      
+      data.push({
+        date: dateStr,
+        value: cumulativeValue / 100 // Convert cents to dollars
+      });
+    }
+    
+    return data;
+  };
+
+  const chartData = generateChartData();
+  const maxValue = Math.max(...chartData.map(d => d.value));
+  const minValue = Math.min(...chartData.map(d => d.value));
+  
+  // Debug logging
+  console.log('📊 Chart Debug:', {
+    chartData: chartData.slice(-3), // Last 3 data points
+    maxValue,
+    minValue,
+    totalOrders: orders.length,
+    timeRange
+  });
+  
+  // Calculate percentage change for the selected time range
+  const calculatePercentageChange = () => {
+    if (chartData.length < 2) return 0;
+    const firstValue = chartData[0].value;
+    const lastValue = chartData[chartData.length - 1].value;
+    if (firstValue === 0) return 0;
+    return ((lastValue - firstValue) / firstValue) * 100;
+  };
+  
+  const percentageChange = calculatePercentageChange();
 
   // Get date range and labels based on selected time range
   const getDateRange = () => {
@@ -402,250 +566,35 @@ const Collection = () => {
 
   const currentDateRange = getDateRange();
 
-  // Selection functions
-  const handleItemSelect = (itemId) => {
-    const newSelectedItems = new Set(selectedItems);
-    if (newSelectedItems.has(itemId)) {
-      newSelectedItems.delete(itemId);
-    } else {
-      newSelectedItems.add(itemId);
-    }
-    setSelectedItems(newSelectedItems);
-    
-    if (newSelectedItems.size === 0) {
-      setIsSelectionMode(false);
-    }
-  };
-
-  const handleLongPress = (itemId) => {
-    setIsSelectionMode(true);
-    handleItemSelect(itemId);
-  };
-
-  const clearSelection = () => {
-    setSelectedItems(new Set());
-    setIsSelectionMode(false);
-  };
-
-  const selectAll = () => {
-    const allItemIds = new Set(collectionData.items.map(item => item.id));
-    setSelectedItems(allItemIds);
-    setIsSelectionMode(true);
-  };
-
-         // Track long press state
-         const longPressRef = useRef(null);
-         const longPressTriggeredRef = useRef(false);
-
-  // Process real data into collection format
-  const collectionData = (() => {
-    if (ordersLoading || itemsLoading) {
-      return {
-        totalValue: 0,
-        totalPaid: 0,
-        profitLoss: 0,
-        profitLossPercent: 0,
-        totalItems: 0,
-        ungraded: 0,
-        graded: 0,
-        sealed: 0,
-        items: []
-      };
-    }
-
-    // Group orders by item name
-    const itemGroups = {};
-    orders.forEach(order => {
-      if (!order.items || !order.items.name) return;
-      
-      const itemName = order.items.name;
-      if (!itemGroups[itemName]) {
-        itemGroups[itemName] = {
-          name: itemName,
-          set_name: order.items.set_name,
-          item_type: order.items.item_type,
-          market_value_cents: order.items.market_value_cents,
-          image_url: order.items.image_url,
-          quantity: 0,
-          totalPaid: 0,
-          orders: []
-        };
-      }
-      
-      if (order.order_type === 'buy') {
-        itemGroups[itemName].quantity += order.buy_quantity || 1;
-        itemGroups[itemName].totalPaid += (order.buy_price_cents || 0) * (order.buy_quantity || 1);
-      }
-      itemGroups[itemName].orders.push(order);
-    });
-
-    // Convert to collection items format
-    const collectionItems = Object.values(itemGroups).map((group, index) => {
-      // Use market value from database if available, otherwise fall back to marketData
-      const dbMarketValue = group.market_value_cents;
-      const marketInfo = marketData[group.name];
-      const currentValue = dbMarketValue || (marketInfo ? getMarketValueInCents(marketInfo) : group.totalPaid);
-      const profit = currentValue - group.totalPaid;
-      const profitPercent = group.totalPaid > 0 ? (profit / group.totalPaid) * 100 : 0;
-      
-      // Determine status based on item name
-      let status = "Ungraded";
-      if (group.name.toLowerCase().includes('graded') || group.name.toLowerCase().includes('psa') || group.name.toLowerCase().includes('bgs')) {
-        status = "Graded";
-      } else if (group.name.toLowerCase().includes('box') || group.name.toLowerCase().includes('bundle') || 
-                 group.name.toLowerCase().includes('pack') || group.name.toLowerCase().includes('collection') ||
-                 group.name.toLowerCase().includes('tin') || group.name.toLowerCase().includes('display')) {
-        status = "Sealed";
-      }
-
-      return {
-        id: index + 1,
-        name: group.name,
-        set: group.set_name || marketInfo?.set || "Unknown Set",
-        status: status,
-        value: currentValue / 100, // Convert cents to dollars
-        paid: group.totalPaid / 100, // Convert cents to dollars
-        quantity: group.quantity,
-        profit: profit / 100, // Convert cents to dollars
-        profitPercent: profitPercent,
-        image: group.image_url || marketInfo?.imageUrl || null
-      };
-    });
-
-    // Calculate totals
-    const totalValue = collectionItems.reduce((sum, item) => sum + (item.value * item.quantity), 0);
-    const totalPaid = collectionItems.reduce((sum, item) => sum + (item.paid * item.quantity), 0);
-    const profitLoss = totalValue - totalPaid;
-    const profitLossPercent = totalPaid > 0 ? (profitLoss / totalPaid) * 100 : 0;
-
-    return {
-      totalValue,
-      totalPaid,
-      profitLoss,
-      profitLossPercent,
-      totalItems: collectionItems.reduce((sum, item) => sum + item.quantity, 0),
-      ungraded: collectionItems.filter(item => item.status === "Ungraded").reduce((sum, item) => sum + item.quantity, 0),
-      graded: collectionItems.filter(item => item.status === "Graded").reduce((sum, item) => sum + item.quantity, 0),
-      sealed: collectionItems.filter(item => item.status === "Sealed").reduce((sum, item) => sum + item.quantity, 0),
-      items: collectionItems
-    };
-  })();
-
-
-  // Loading state
-  if (ordersLoading || itemsLoading) {
+  if (ordersLoading || summaryLoading) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto mb-4"></div>
-          <div className="text-gray-300">Loading your collection...</div>
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
-  if (ordersError || itemsError) {
-    return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-500 mb-4">Error loading collection data</div>
-          <div className="text-gray-300 text-sm">
-            {ordersError?.message || itemsError?.message || 'Unknown error occurred'}
-          </div>
-          <div className="text-gray-400 text-xs mt-2">
-            Make sure your Supabase connection is configured correctly
-          </div>
-        </div>
+      <div className="min-h-screen bg-gray-900 mobile-bg-fix flex items-center justify-center">
+        {/* Mobile browser background fix */}
+        <div className="mobile-full-bg"></div>
+        <div className="text-white">Loading collection...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-gray-900 mobile-bg-fix">
+      {/* Mobile browser background fix */}
+      <div className="mobile-full-bg"></div>
       {/* Header */}
+      <div className="px-4 py-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-semibold text-white">OneTrack</h1>
+                </div>
+              </div>
+
+      {/* Collection Value Section */}
       <div className="px-4 py-3">
-        <div className="flex items-center justify-between mb-2">
-          {/* Logo */}
-          <div className="text-lg text-white">OneTrack</div>
-          
-          
-          {/* Currency Selector */}
-          <div className="relative" ref={dropdownRef}>
-            <button 
-              onClick={() => setShowCurrencyDropdown(!showCurrencyDropdown)}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs text-white hover:bg-gray-800/30 transition-colors"
-            >
-              <div className="flex items-center gap-1">
-                <div className="rounded-full overflow-hidden">
-                  {selectedCurrency.flag}
-                </div>
-                <span>{selectedCurrency.code}</span>
-              </div>
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-            
-            {/* Currency Dropdown */}
-            {showCurrencyDropdown && (
-              <div className="absolute right-0 top-full mt-2 w-80 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-20">
-                {/* Header */}
-                <div className="px-4 py-3 border-b border-gray-700">
-                  <h3 className="text-xs font-medium text-white">Choose App Currency</h3>
-                </div>
-                
-                {/* Currency List */}
-                <div className="max-h-80 overflow-y-auto">
-                  {currencies.map((currency) => (
-                    <button
-                      key={currency.code}
-                      onClick={() => {
-                        setSelectedCurrency(currency);
-                        setShowCurrencyDropdown(false);
-                      }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-800 transition-colors ${
-                        selectedCurrency.code === currency.code ? 'bg-gray-800' : ''
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {currency.flag}
-                        <span className="text-sm text-white">{currency.code}</span>
-                      </div>
-                      <span className="text-sm text-white flex-1">{currency.name}</span>
-                      {selectedCurrency.code === currency.code ? (
-                        <svg className="w-4 h-4 text-indigo-500" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-
-
-        {/* Collection Value */}
         <div className="text-center mb-3 pt-4">
           <div className="text-xs text-gray-300 mb-0.5">Your collection is worth</div>
           <div className="text-3xl font-bold text-indigo-500 mb-0.5">
-            {marketDataLoading ? (
-              <div className="flex items-center gap-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-500"></div>
-                <span className="text-sm">Loading market data...</span>
-              </div>
-            ) : (
-              formatPrice(collectionData.totalValue)
-            )}
+            {formatPrice(collectionData.totalValue)}
           </div>
-          <div className="text-xs text-gray-300">Total Paid • {formatPrice(collectionData.totalPaid)} <span className="text-indigo-500">({collectionData.profitLossPercent.toFixed(1)}%)</span></div>
+          <div className="text-xs text-gray-300">Total Paid • {formatPrice(collectionData.totalPaid)} <span className={collectionData.profitPercentage >= 0 ? 'text-green-400' : 'text-red-400'}>({collectionData.profitPercentage >= 0 ? '+' : ''}{collectionData.profitPercentage.toFixed(1)}%)</span></div>
         </div>
 
         {/* Item Status Breakdown */}
@@ -653,24 +602,23 @@ const Collection = () => {
           <div className="text-center">
             <div className="text-xs text-gray-400 mb-1">Ungraded</div>
             <div className="text-xs text-indigo-500">
-              {collectionData.items.filter(item => item.status === "Ungraded").reduce((sum, item) => sum + item.quantity, 0)}
+              {collectionData.ungradedCount}
             </div>
           </div>
           <div className="text-center">
             <div className="text-xs text-gray-400 mb-1">Graded</div>
             <div className="text-xs text-indigo-500">
-              {collectionData.items.filter(item => item.status === "Graded").reduce((sum, item) => sum + item.quantity, 0)}
+              {collectionData.gradedCount}
             </div>
           </div>
           <div className="text-center">
             <div className="text-xs text-gray-400 mb-1">Sealed</div>
             <div className="text-xs text-indigo-500">
-              {collectionData.items.filter(item => item.status === "Sealed").reduce((sum, item) => sum + item.quantity, 0)}
+              {collectionData.sealedCount}
             </div>
           </div>
         </div>
       </div>
-
 
       {/* Collection History */}
       <div className="px-3 py-2">
@@ -688,7 +636,12 @@ const Collection = () => {
 
           {/* Summary Text */}
           <div className="flex items-center justify-between mb-2 text-xs">
-            <div className="text-gray-400">{currentDateRange.label} <span className="text-indigo-500">{formatPrice(collectionData.totalValue)}</span> (0.00%)</div>
+            <div className="text-gray-400">
+              {currentDateRange.label} <span className="text-indigo-500">{formatPrice(collectionData.totalValue)}</span> 
+              <span className="text-indigo-500 ml-1">
+                ({percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(2)}%)
+              </span>
+            </div>
           </div>
           
                  {/* Chart */}
@@ -702,135 +655,102 @@ const Collection = () => {
                        </linearGradient>
                      </defs>
 
-                     {/* Dynamic chart based on time range */}
-                     {timeRange === '7D' && (
-                       <>
-                         {/* Area under the line for 7D */}
-                         <path
-                           d="M 0 50 L 300 50 L 300 100 L 0 100 Z"
-                           fill="url(#chartGradient)"
-                         />
-                         {/* Flat line for 7D */}
-                         <line
-                           x1="0"
-                           y1="50"
-                           x2="300"
-                           y2="50"
-                           stroke="#6366f1"
-                           strokeWidth="2"
-                           strokeLinecap="round"
-                         />
-                         {/* Data point circle */}
-                         <circle
-                           cx="300"
-                           cy="50"
-                           r="3"
-                           fill="#6366f1"
-                           stroke="#1f2937"
-                           strokeWidth="1"
-                         />
-                       </>
-                     )}
-
-                     {timeRange === '1M' && (
-                       <>
-                         {/* Slight upward trend for 1M */}
-                         <path
-                           d="M 0 60 L 100 55 L 200 45 L 300 40 L 300 100 L 0 100 Z"
-                           fill="url(#chartGradient)"
-                         />
-                         <path
-                           d="M 0 60 L 100 55 L 200 45 L 300 40"
-                           stroke="#6366f1"
-                           strokeWidth="2"
-                           strokeLinecap="round"
-                           fill="none"
-                         />
-                         <circle
-                           cx="300"
-                           cy="40"
-                           r="3"
-                           fill="#6366f1"
-                           stroke="#1f2937"
-                           strokeWidth="1"
-                         />
-                       </>
-                     )}
-
-                     {timeRange === '3M' && (
-                       <>
-                         {/* More pronounced trend for 3M */}
-                         <path
-                           d="M 0 70 L 75 60 L 150 35 L 225 25 L 300 20 L 300 100 L 0 100 Z"
-                           fill="url(#chartGradient)"
-                         />
-                         <path
-                           d="M 0 70 L 75 60 L 150 35 L 225 25 L 300 20"
-                           stroke="#6366f1"
-                           strokeWidth="2"
-                           strokeLinecap="round"
-                           fill="none"
-                         />
-                         <circle
-                           cx="300"
-                           cy="20"
-                           r="3"
-                           fill="#6366f1"
-                           stroke="#1f2937"
-                           strokeWidth="1"
-                         />
-                       </>
-                     )}
-
-                     {timeRange === '6M' && (
-                       <>
-                         {/* Steep upward trend for 6M */}
-                         <path
-                           d="M 0 80 L 50 70 L 100 50 L 150 30 L 200 15 L 250 10 L 300 5 L 300 100 L 0 100 Z"
-                           fill="url(#chartGradient)"
-                         />
-                         <path
-                           d="M 0 80 L 50 70 L 100 50 L 150 30 L 200 15 L 250 10 L 300 5"
-                           stroke="#6366f1"
-                           strokeWidth="2"
-                           strokeLinecap="round"
-                           fill="none"
-                         />
-                         <circle
-                           cx="300"
-                           cy="5"
-                           r="3"
-                           fill="#6366f1"
-                           stroke="#1f2937"
-                           strokeWidth="1"
-                         />
-                       </>
-                     )}
-
-                     {timeRange === '1Y' && (
-                       <>
-                         {/* Dramatic upward trend for 1Y */}
-                         <path
-                           d="M 0 85 L 30 80 L 60 70 L 90 55 L 120 35 L 150 20 L 180 10 L 210 5 L 240 3 L 270 2 L 300 1 L 300 100 L 0 100 Z"
-                           fill="url(#chartGradient)"
-                         />
-                         <path
-                           d="M 0 85 L 30 80 L 60 70 L 90 55 L 120 35 L 150 20 L 180 10 L 210 5 L 240 3 L 270 2 L 300 1"
-                           stroke="#6366f1"
-                           strokeWidth="2"
-                           strokeLinecap="round"
-                           fill="none"
-                         />
-                         <circle
-                           cx="300"
-                           cy="1"
-                           r="3"
-                           fill="#6366f1"
-                           stroke="#1f2937"
-                           strokeWidth="1"
-                         />
-                       </>
-                     )}
+                     {/* Dynamic chart based on real data */}
+                     {(() => {
+                       if (chartData.length === 0) return null;
+                       
+                       const width = 300;
+                       const height = 100;
+                       const padding = 10;
+                       
+                       // Calculate scale factors
+                       const valueRange = maxValue - minValue;
+                       const scaleY = valueRange > 0 ? (height - 2 * padding) / valueRange : 1;
+                       const scaleX = (width - 2 * padding) / (chartData.length - 1);
+                       
+                       // Generate path data
+                       const points = chartData.map((point, index) => {
+                         const x = padding + (index * scaleX);
+                         const y = height - padding - ((point.value - minValue) * scaleY);
+                         return { x, y };
+                       });
+                       
+                       // Create smooth curved line using quadratic Bézier curves
+                       const createSmoothPath = (points) => {
+                         if (points.length < 2) return '';
+                         
+                         let path = `M ${points[0].x},${points[0].y}`;
+                         
+                         for (let i = 1; i < points.length; i++) {
+                           const prev = points[i - 1];
+                           const curr = points[i];
+                           
+                           // Calculate control point for smooth curve
+                           const controlX = (prev.x + curr.x) / 2;
+                           const controlY = prev.y;
+                           
+                           path += ` Q ${controlX},${controlY} ${curr.x},${curr.y}`;
+                         }
+                         
+                         return path;
+                       };
+                       
+                       // Create area path (for gradient fill) - also smooth
+                       const createSmoothAreaPath = (points) => {
+                         if (points.length < 2) return '';
+                         
+                         let path = `M ${points[0].x},${height - padding}`;
+                         path += ` L ${points[0].x},${points[0].y}`;
+                         
+                         for (let i = 1; i < points.length; i++) {
+                           const prev = points[i - 1];
+                           const curr = points[i];
+                           
+                           // Calculate control point for smooth curve
+                           const controlX = (prev.x + curr.x) / 2;
+                           const controlY = prev.y;
+                           
+                           path += ` Q ${controlX},${controlY} ${curr.x},${curr.y}`;
+                         }
+                         
+                         path += ` L ${points[points.length - 1].x},${height - padding} Z`;
+                         
+                         return path;
+                       };
+                       
+                       const areaPath = createSmoothAreaPath(points);
+                       const linePath = createSmoothPath(points);
+                       
+                       // Get last point for circle
+                       const lastPoint = points[points.length - 1];
+                       
+                       return (
+                         <>
+                           {/* Area under the line */}
+                           <path
+                             d={areaPath}
+                             fill="url(#chartGradient)"
+                           />
+                           {/* Line */}
+                           <path
+                             d={linePath}
+                             stroke="#6366f1"
+                             strokeWidth="2"
+                             strokeLinecap="round"
+                             fill="none"
+                           />
+                           {/* Data point circle */}
+                           <circle
+                             cx={lastPoint.x}
+                             cy={lastPoint.y}
+                             r="3"
+                             fill="#6366f1"
+                             stroke="#1f2937"
+                             strokeWidth="1"
+                           />
+                         </>
+                       );
+                     })()}
                    </svg>
                  </div>
           
@@ -864,8 +784,6 @@ const Collection = () => {
             </div>
         </div>
       </div>
-
-
 
       {/* Collected Items */}
       <div className="px-3 py-2">
@@ -909,8 +827,8 @@ const Collection = () => {
               </div>
               <div className="text-xs text-gray-400">
                 {selectedFilter === 'All' 
-                  ? collectionData.items.length 
-                  : collectionData.items.filter(item => item.status === selectedFilter).reduce((sum, item) => sum + item.quantity, 0)
+                  ? (collectionData.items?.length || 0)
+                  : (collectionData.items?.filter(item => item.status === selectedFilter).reduce((sum, item) => sum + item.quantity, 0) || 0)
                 } Results
               </div>
             </div>
@@ -919,7 +837,7 @@ const Collection = () => {
                 {formatPrice(
                   selectedFilter === 'All' 
                     ? collectionData.totalValue 
-                    : collectionData.items
+                    : (collectionData.items || [])
                         .filter(item => item.status === selectedFilter)
                         .reduce((sum, item) => sum + (item.value * item.quantity), 0)
                 )}
@@ -927,12 +845,6 @@ const Collection = () => {
               <div className="text-xs text-gray-400">Press + Hold To Multi-Select</div>
             </div>
           </div>
-
-
-      {/* Item Matching Manager */}
-      <div className="mb-6">
-        <ItemMatchingManager />
-      </div>
 
         {/* Search Bar */}
         <div className="relative mb-3">
@@ -964,11 +876,14 @@ const Collection = () => {
             </svg>
             All Items
           </button>
+          </div>
+        </div>
         </div>
 
         {/* Items Grid */}
+      <div className="px-3 pb-4">
         <div className="grid grid-cols-2 gap-3">
-          {collectionData.items
+          {(collectionData.items || [])
             .filter(item => selectedFilter === 'All' || item.status === selectedFilter)
             .map((item) => {
             const isSelected = selectedItems.has(item.id);
@@ -1028,33 +943,24 @@ const Collection = () => {
                    >
               {/* Card Image */}
               <div className="aspect-[4/3] flex items-center justify-center py-2 relative">
-                {/* Status Pill - Top Left */}
-                <div className={`absolute top-2 left-2 z-10 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                  item.status === 'Ungraded' ? 'bg-yellow-500/60 text-yellow-100' :
-                  item.status === 'Graded' ? 'bg-purple-500/60 text-purple-100' :
-                  item.status === 'Sealed' ? 'bg-blue-500/60 text-blue-100' :
-                  'bg-gray-500/60 text-gray-100'
-                }`}>
-                  {item.status}
-                </div>
                 
                 {item.image ? (
                   <img 
                     src={item.image} 
                     alt={item.name}
                     className="w-full h-full object-contain"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.nextSibling.style.display = 'flex';
-                    }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }}
                   />
-                ) : null}
-                <div className={`w-full h-full flex items-center justify-center bg-gray-800 ${item.image ? 'hidden' : 'flex'}`}>
-                  <div className="text-center">
-                    <div className="text-2xl mb-1">📦</div>
+                  ) : null}
+                  <div className={`w-full h-full flex items-center justify-center bg-gray-800 ${item.image ? 'hidden' : 'flex'}`}>
+                    <div className="text-center">
+                      <div className="text-2xl mb-1">📦</div>
                   <div className="text-gray-400 text-xs">No Image</div>
+                    </div>
                   </div>
-                </div>
               </div>
               
               {/* Card Details */}
@@ -1070,6 +976,16 @@ const Collection = () => {
                 <div className="text-xs text-gray-400 truncate" style={{fontSize: '12px'}}>
                   {item.set}
                 </div>
+                  
+                  {/* Status Text */}
+                  <div className={`text-xs italic opacity-60 ${
+                    item.status === 'Ungraded' ? 'text-yellow-400' :
+                    item.status === 'Graded' ? 'text-purple-400' :
+                    item.status === 'Sealed' ? 'text-blue-400' :
+                    'text-gray-400'
+                  }`}>
+                    {item.status}
+                  </div>
                 
                 {/* Spacing */}
                 <div className="h-1"></div>
@@ -1077,18 +993,18 @@ const Collection = () => {
                 {/* Financial Details */}
                 <div className="space-y-0.5">
                   <div className="text-xs text-white" style={{fontSize: '12px'}}>
-                    {item.value > 0 ? formatPrice(item.value) : 'No Market Data'} Value • Qty {item.quantity}
+                      {item.value > 0 ? formatPrice(item.value * item.quantity) : 'No Market Data'} Value • Qty {item.quantity}
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="text-xs text-white" style={{fontSize: '12px'}}>
                       {formatPrice(item.paid)} Paid 
-                      {item.value > 0 ? (
+                        {item.value > 0 ? (
                       <span className={`ml-1 ${item.profit > 0 ? 'text-green-400' : 'text-red-400'}`}>
                         ({item.profit > 0 ? '+' : ''}{item.profitPercent.toFixed(1)}%)
                       </span>
-                      ) : (
-                        <span className="ml-1 text-gray-400">(No market data)</span>
-                      )}
+                        ) : (
+                          <span className="ml-1 text-gray-400">(No market data)</span>
+                        )}
                     </div>
                     
                     {/* Menu Button / Check Icon - Bottom Right */}
@@ -1120,7 +1036,52 @@ const Collection = () => {
           })}
         </div>
         </div>
+
+      {/* Order Menu Modal */}
+      {showOrderMenu && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-80 max-w-[90vw]">
+            <h3 className="text-white font-medium mb-4">Order Actions</h3>
+            <div className="space-y-2">
+              {!orders.find(o => o.id === selectedOrderId)?.is_sold && (
+                <button
+                  onClick={() => {
+                    setShowOrderMenu(false);
+                    setShowMarkAsSoldModal(true);
+                  }}
+                  className="w-full text-left px-3 py-2 text-green-400 hover:bg-gray-700 rounded-md transition-colors"
+                >
+                  Mark as Sold
+                </button>
+              )}
+              <button 
+                onClick={() => deleteOrder(selectedOrderId)}
+                className="w-full text-left px-3 py-2 text-red-400 hover:bg-gray-700 rounded-md transition-colors"
+              >
+                Delete Order
+              </button>
+              <button
+                onClick={() => setShowOrderMenu(false)}
+                className="w-full text-left px-3 py-2 text-gray-400 hover:bg-gray-700 rounded-md transition-colors"
+              >
+                Cancel
+              </button>
       </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mark as Sold Modal */}
+      {showMarkAsSoldModal && (
+        <MarkAsSoldModal
+          order={orders.find(o => o.id === selectedOrderId)}
+          onClose={() => {
+            setShowMarkAsSoldModal(false);
+            setSelectedOrderId(null);
+          }}
+          onSubmit={(sellData) => markOrderAsSold(selectedOrderId, sellData)}
+        />
+      )}
 
       {/* Bulk Actions Bar - Fixed at bottom */}
       {isSelectionMode && (
@@ -1129,7 +1090,7 @@ const Collection = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-white font-medium">
-                  {selectedItems.size}/{collectionData.items.filter(item => selectedFilter === 'All' || item.status === selectedFilter).length} Selected
+                  {selectedItems.size}/{(collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length} Selected
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -1197,38 +1158,6 @@ const Collection = () => {
                 </svg>
               </button>
 
-              {/* Change Group */}
-              <button className="w-full flex items-center justify-between p-3 hover:bg-gray-700/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd"/>
-                  </svg>
-                  <div className="text-left">
-                    <div className="text-xs font-medium text-white">Change Group</div>
-                    <div className="text-xs text-gray-400">Move these selections to another group in your collection.</div>
-                  </div>
-                </div>
-                <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                </svg>
-              </button>
-
-              {/* Set Custom Tags */}
-              <button className="w-full flex items-center justify-between p-3 hover:bg-gray-700/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/>
-                  </svg>
-                  <div className="text-left">
-                    <div className="text-xs font-medium text-white">Set Custom Tags</div>
-                    <div className="text-xs text-gray-400">Tag these selections with a custom searchable note.</div>
-                  </div>
-                </div>
-                <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                </svg>
-              </button>
-
               {/* Delete All Selected */}
               <button className="w-full flex items-center justify-between p-3 hover:bg-gray-700/50 transition-colors">
                 <div className="flex items-center gap-3">
@@ -1257,7 +1186,7 @@ const Collection = () => {
           onClick={() => setShowItemMenu(false)}
         >
           <div 
-            className="w-full bg-gray-950 border border-indigo-500/50 rounded-t-2xl max-h-[80vh] overflow-y-auto"
+            className="w-full bg-gray-900 border border-gray-700 rounded-t-2xl max-h-[80vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -1269,25 +1198,8 @@ const Collection = () => {
 
             {/* Action Options */}
             <div className="px-3 pb-6 space-y-1">
-              {/* Set Custom Price */}
-              <button className="w-full flex items-center justify-between p-3 hover:bg-gray-700/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"/>
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd"/>
-                  </svg>
-                  <div className="text-left">
-                    <div className="text-xs font-medium text-white">Set Custom Price</div>
-                    <div className="text-xs text-gray-400">Override this product's price with your own.</div>
-                  </div>
-                </div>
-                <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                </svg>
-              </button>
-
               {/* Edit Price Paid */}
-              <button className="w-full flex items-center justify-between p-3 hover:bg-gray-700/50 transition-colors">
+              <button className="w-full flex items-center justify-between p-3 hover:bg-gray-700 transition-colors">
                 <div className="flex items-center gap-3">
                   <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
@@ -1302,24 +1214,10 @@ const Collection = () => {
                 </svg>
               </button>
 
-              {/* Mark Sold */}
-              <button className="w-full flex items-center justify-between p-3 hover:bg-gray-700/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
-                  </svg>
-                  <div className="text-left">
-                    <div className="text-xs font-medium text-white">Mark Sold</div>
-                    <div className="text-xs text-gray-400">Add this product to the sold items log.</div>
-                  </div>
-                </div>
-                <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                </svg>
-              </button>
-
               {/* Delete Product */}
-              <button className="w-full flex items-center justify-between p-3 hover:bg-gray-700/50 transition-colors">
+              <button 
+                onClick={() => handleDeleteProduct(selectedItemId)}
+                className="w-full flex items-center justify-between p-3 hover:bg-gray-700 transition-colors">
                 <div className="flex items-center gap-3">
                   <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd"/>
@@ -1339,8 +1237,332 @@ const Collection = () => {
         </div>
       )}
 
+      {/* Delete Orders Modal */}
+      {showDeleteModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-50 flex items-end"
+          onClick={() => setShowDeleteModal(false)}
+        >
+          <div 
+            className="w-full bg-gray-900 border border-gray-700 rounded-t-2xl max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4">
+              <h2 className="text-sm font-semibold text-white">Delete Orders</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Select which orders to delete. This action cannot be undone.
+              </p>
+              
+              {/* Item Preview Header */}
+              {ordersToDelete.length > 0 && (
+                <div className="flex items-center gap-3 mt-4 p-3 bg-gray-800 rounded-lg border border-gray-600">
+                  {ordersToDelete[0].image_url && (
+                    <div className="w-12 h-12 flex-shrink-0">
+                      <img 
+                        src={ordersToDelete[0].image_url} 
+                        alt={ordersToDelete[0].item_name}
+                        className="w-full h-full object-contain rounded"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-white truncate">
+                      {ordersToDelete[0].item_name}
+                    </div>
+                    <div className="text-xs text-gray-400 truncate">
+                      {ordersToDelete[0].set_name || ordersToDelete[0].item_set_name || "Unknown Set"}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Bulk Selection Controls - Show when multiple orders exist */}
+            {ordersToDelete.length > 1 && (
+              <div className="px-6 py-3 border-b border-gray-700/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={selectAllOrders}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={clearOrderSelection}
+                      className="text-xs text-gray-400 hover:text-gray-300 font-medium"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {selectedOrderIds.size} of {ordersToDelete.length} selected
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Orders List */}
+            <div className="px-6 pb-6 max-h-80 overflow-y-auto">
+              <div className="space-y-1">
+                {ordersToDelete.map((order, index) => (
+                  <div 
+                    key={order.id} 
+                    className={`bg-gray-800 border rounded-lg p-3 transition-all duration-200 ${
+                      selectedOrderIds.has(order.id) 
+                        ? 'border-red-500' 
+                        : 'border-gray-600 hover:border-gray-500'
+                    }`}
+                    onClick={(e) => {
+                      if (ordersToDelete.length > 1) {
+                        e.preventDefault();
+                        if (!isOrderSelectionMode) {
+                          setIsOrderSelectionMode(true);
+                        }
+                        toggleOrderSelection(order.id);
+                      }
+                    }}
+                  >
+                    {/* Date Header */}
+                    <div className="pb-1 border-b border-gray-700/30 mb-2">
+                      <div className="text-sm font-semibold text-white">
+                        {new Date(order.buy_date).toLocaleDateString('en-US', { 
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Compact Details Row */}
+                    <div className="flex items-center justify-between mt-2 text-xs">
+                      <div className="flex items-center gap-4">
+                        <span className="text-gray-400">Qty: <span className="text-white font-medium">{order.buy_quantity}</span></span>
+                        <span className="text-gray-400">Price: <span className="text-white font-medium">{formatPrice((order.buy_price_cents || 0) / 100)}</span></span>
+                        {order.buy_location && (
+                          <span className="text-gray-400">Location: <span className="text-white font-medium">{order.buy_location}</span></span>
+                        )}
+                      </div>
+                      {order.buy_notes && (
+                        <div className="text-gray-400 truncate max-w-[200px]" title={order.buy_notes}>
+                          {order.buy_notes}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Action Buttons */}
+            <div className="px-6 pb-6 pt-4 border-t border-gray-600">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setOrdersToDelete([]);
+                    setSelectedOrderIds(new Set());
+                    setIsOrderSelectionMode(false);
+                  }}
+                  className="flex-1 px-4 py-3 bg-gray-800 text-gray-300 rounded-xl hover:bg-gray-700 transition-all duration-200 border border-gray-600 font-medium text-sm"
+                >
+                  Cancel
+                </button>
+                {selectedOrderIds.size > 0 ? (
+                  <button
+                    onClick={() => confirmDeleteOrders(Array.from(selectedOrderIds))}
+                    className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all duration-200 border border-red-500 font-medium text-sm"
+                  >
+                    Delete Selected ({selectedOrderIds.size})
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => confirmDeleteOrders(ordersToDelete.map(order => order.id))}
+                    className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all duration-200 border border-red-500 font-medium text-sm"
+                  >
+                    Delete All ({ordersToDelete.length})
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirmation && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-50 flex items-end"
+          onClick={() => setShowDeleteConfirmation(false)}
+        >
+          <div 
+            className="w-full bg-gray-900 border border-gray-700 rounded-t-2xl max-h-[60vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4">
+              <h2 className="text-sm font-semibold text-white">Confirm Deletion</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Are you sure you want to delete {ordersToConfirmDelete.length} order{ordersToConfirmDelete.length > 1 ? 's' : ''}? This action cannot be undone.
+              </p>
+            </div>
+
+            {/* Orders to Delete Preview */}
+            <div className="px-6 pb-4">
+              <div className="space-y-2">
+                {ordersToConfirmDelete.map((order) => (
+                  <div key={order.id} className="bg-gray-800 border border-gray-600 rounded-lg p-3">
+                    <div className="text-sm font-medium text-white">
+                      {new Date(order.buy_date).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      Qty: {order.buy_quantity} • Price: {formatPrice((order.buy_price_cents || 0) / 100)}
+                      {order.buy_location && ` • Location: ${order.buy_location}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="px-6 pb-6 pt-4 border-t border-gray-600">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirmation(false)}
+                  className="flex-1 px-4 py-3 bg-gray-800 text-gray-300 rounded-xl hover:bg-gray-700 transition-all duration-200 border border-gray-600 font-medium text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteSelectedOrders(ordersToConfirmDelete.map(order => order.id))}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all duration-200 border border-red-500 font-medium text-sm"
+                >
+                  Delete {ordersToConfirmDelete.length} Order{ordersToConfirmDelete.length > 1 ? 's' : ''}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default Collection;
+
+// Mark as Sold Modal Component
+const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState({
+    sellDate: new Date().toISOString().split('T')[0],
+    sellPrice: '',
+    quantity: order?.buy_quantity || 1,
+    location: '',
+    fees: 0,
+    notes: ''
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-gray-800 rounded-lg p-6 w-80 max-w-[90vw]">
+        <h3 className="text-white font-medium mb-4">Mark as Sold</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-gray-300 text-sm mb-1">Sell Date</label>
+            <input
+              type="date"
+              value={formData.sellDate}
+              onChange={(e) => setFormData({...formData, sellDate: e.target.value})}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-gray-300 text-sm mb-1">Sell Price (per item)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={formData.sellPrice}
+              onChange={(e) => setFormData({...formData, sellPrice: e.target.value})}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-gray-300 text-sm mb-1">Quantity Sold</label>
+            <input
+              type="number"
+              min="1"
+              max={order?.buy_quantity || 1}
+              value={formData.quantity}
+              onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value)})}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-gray-300 text-sm mb-1">Location</label>
+            <input
+              type="text"
+              value={formData.location}
+              onChange={(e) => setFormData({...formData, location: e.target.value})}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-gray-300 text-sm mb-1">Fees</label>
+            <input
+              type="number"
+              step="0.01"
+              value={formData.fees}
+              onChange={(e) => setFormData({...formData, fees: e.target.value})}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-gray-300 text-sm mb-1">Notes</label>
+            <textarea
+              value={formData.notes}
+              onChange={(e) => setFormData({...formData, notes: e.target.value})}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              rows="3"
+            />
+          </div>
+          
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Mark as Sold
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};

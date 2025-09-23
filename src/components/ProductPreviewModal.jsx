@@ -1,75 +1,22 @@
 import { useState, useEffect } from 'react';
+import { getCleanItemName } from '../utils/nameUtils';
 
 const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) => {
   const [quantity, setQuantity] = useState(1);
   const [selectedTimeRange, setSelectedTimeRange] = useState('1M');
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'prices', 'details'
 
   const formatPrice = (value) => {
-    if (!value) return 'Unavailable';
-    if (value > 1000) {
-      return `$${(value / 100).toFixed(2)}`;
-    } else {
-      return `$${value.toFixed(2)}`;
-    }
+    if (!value || value === 0) return 'Unavailable';
+    // API returns values in dollars, so just format as currency
+    return `$${value.toFixed(2)}`;
   };
 
-  // Parse product name to separate set name from item name
-  const parseProductName = (fullName) => {
-    if (!fullName) return { setName: 'Unknown', itemName: 'Product' };
-    
-    // Common expansion names to look for
-    const expansions = [
-      'Prismatic Evolutions', 'Base Set', 'Jungle', 'Fossil', 'Team Rocket',
-      'Gym Heroes', 'Gym Challenge', 'Neo Genesis', 'Neo Discovery', 'Neo Destiny',
-      'Expedition', 'Aquapolis', 'Skyridge', 'Ruby & Sapphire', 'Sandstorm',
-      'Dragon', 'Team Magma vs Team Aqua', 'Hidden Legends', 'FireRed & LeafGreen',
-      'Team Rocket Returns', 'Deoxys', 'Emerald', 'Unseen Forces', 'Delta Species',
-      'Legend Maker', 'Holon Phantoms', 'Crystal Guardians', 'Dragon Frontiers',
-      'Power Keepers', 'Diamond & Pearl', 'Mysterious Treasures', 'Secret Wonders',
-      'Great Encounters', 'Majestic Dawn', 'Legends Awakened', 'Stormfront',
-      'Platinum', 'Rising Rivals', 'Supreme Victors', 'Arceus', 'HeartGold SoulSilver',
-      'Unleashed', 'Undaunted', 'Triumphant', 'Call of Legends', 'Black & White',
-      'Emerging Powers', 'Noble Victories', 'Next Destinies', 'Dark Explorers',
-      'Dragons Exalted', 'Boundaries Crossed', 'Plasma Storm', 'Plasma Freeze',
-      'Plasma Blast', 'Legendary Treasures', 'XY', 'Flashfire', 'Furious Fists',
-      'Phantom Forces', 'Primal Clash', 'Roaring Skies', 'Ancient Origins',
-      'BREAKthrough', 'BREAKpoint', 'Fates Collide', 'Steam Siege', 'Evolutions',
-      'Sun & Moon', 'Guardians Rising', 'Burning Shadows', 'Crimson Invasion',
-      'Ultra Prism', 'Forbidden Light', 'Celestial Storm', 'Lost Thunder',
-      'Team Up', 'Detective Pikachu', 'Unbroken Bonds', 'Unified Minds',
-      'Hidden Fates', 'Cosmic Eclipse', 'Sword & Shield', 'Rebel Clash',
-      'Darkness Ablaze', 'Vivid Voltage', 'Battle Styles', 'Chilling Reign',
-      'Evolving Skies', 'Fusion Strike', 'Brilliant Stars', 'Astral Radiance',
-      'Lost Origin', 'Silver Tempest', 'Crown Zenith', 'Scarlet & Violet',
-      'Paldea Evolved', 'Obsidian Flames', '151', 'Paradox Rift', 'Temporal Forces'
-    ];
-
-    // Try to find expansion name in the full name
-    for (const expansion of expansions) {
-      if (fullName.toLowerCase().includes(expansion.toLowerCase())) {
-        const itemName = fullName.replace(expansion, '').trim();
-        return { setName: expansion, itemName: itemName || 'Product' };
-      }
-    }
-
-    // If no expansion found, try to split on common patterns
-    const words = fullName.split(' ');
-    if (words.length > 2) {
-      // Try to find where the set name ends and item name begins
-      for (let i = 1; i < words.length - 1; i++) {
-        const potentialSet = words.slice(0, i).join(' ');
-        const potentialItem = words.slice(i).join(' ');
-        
-        // Check if potential set looks like an expansion name
-        if (potentialSet.length > 3 && potentialItem.length > 2) {
-          return { setName: potentialSet, itemName: potentialItem };
-        }
-      }
-    }
-
-    // Fallback: return the full name as item name
-    return { setName: 'Unknown', itemName: fullName };
+  const formatPriceCents = (cents) => {
+    if (!cents || cents === 0) return 'Unavailable';
+    return `$${(cents / 100).toFixed(2)}`;
   };
+
 
   const handleAddToCollection = () => {
     if (onAddToCollection) {
@@ -95,19 +42,16 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
 
   if (!isOpen || !product) return null;
 
-  // Debug: Log the product data being passed to the modal
-  console.log('🔍 Modal received product data:', product);
+  // Get clean item name and set name
+  const itemName = getCleanItemName(product.name, product.set);
+  const setName = product.set;
 
-  // Parse the product name
-  const { setName, itemName } = parseProductName(product.name);
+  // Extract pricing data from product
+  const prices = product.prices || {};
+  const cardMarketPrices = prices.cardMarket || {};
+  const tcgPlayerPrices = prices.tcgPlayer || {};
 
-  // Mock data for price change
-  const priceChange = Math.random() > 0.5 ? Math.random() * 2 - 1 : 0;
-  const isPositive = priceChange > 0;
-  const priceChangeAmount = Math.abs(priceChange);
-
-
-  // Generate price history data from API or mock data
+  // Generate price history data
   const generatePriceHistory = (timeRange) => {
     const data = [];
     const basePrice = product.marketValue ? (product.marketValue > 1000 ? product.marketValue / 100 : product.marketValue) : 10;
@@ -122,55 +66,19 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
       default: days = 30;
     }
     
-    // If we have historical data from the API, use it for more realistic trends
-    if (product?.historicalData) {
-      const historical = product.historicalData;
-      const avg7d = historical.average7d || basePrice;
-      const avg30d = historical.average30d || basePrice;
+    for (let i = 0; i < days; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - (days - 1 - i));
       
-      for (let i = 0; i < days; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() - (days - 1 - i));
-        
-        // Interpolate between 30d and 7d averages for realistic curve
-        let price;
-        if (i < days - 30) {
-          // Use 30d average as base for older data
-          const variation = (Math.random() - 0.5) * 0.15;
-          price = avg30d * (1 + variation);
-        } else if (i < days - 7) {
-          // Interpolate between 30d and 7d
-          const ratio = (days - 7 - i) / (days - 7 - (days - 30));
-          const interpolated = avg30d + (avg7d - avg30d) * ratio;
-          const variation = (Math.random() - 0.5) * 0.1;
-          price = interpolated * (1 + variation);
-        } else {
-          // Use 7d average for recent data
-          const variation = (Math.random() - 0.5) * 0.05;
-          price = avg7d * (1 + variation);
-        }
-        
-        data.push({
-          date: date.toISOString().split('T')[0],
-          price: Math.max(price, basePrice * 0.6)
-        });
-      }
-    } else {
-      // Fallback to mock data with realistic trends
-      for (let i = 0; i < days; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() - (days - 1 - i));
-        
-        // Create a more realistic price trend with some volatility
-        const trend = Math.sin(i / (days / 4)) * 0.3; // Long-term trend
-        const volatility = (Math.random() - 0.5) * 0.4; // Short-term volatility
-        const price = basePrice * (1 + trend + volatility);
-        
-        data.push({
-          date: date.toISOString().split('T')[0],
-          price: Math.max(price, basePrice * 0.6) // Ensure price doesn't go too low
-        });
-      }
+      // Create a more realistic price trend with some volatility
+      const trend = Math.sin(i / (days / 4)) * 0.3; // Long-term trend
+      const volatility = (Math.random() - 0.5) * 0.4; // Short-term volatility
+      const price = basePrice * (1 + trend + volatility);
+      
+      data.push({
+        date: date.toISOString().split('T')[0],
+        price: Math.max(price, basePrice * 0.6) // Ensure price doesn't go too low
+      });
     }
     
     return data;
@@ -206,33 +114,33 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
 
   const xAxisLabels = getXAxisLabels();
 
+  // Price change calculation
+  const priceChange = product.trend || 0;
+  const dollarChange = product.dollarChange || 0;
+  const isPositive = priceChange > 0;
+
   return (
     <div className="fixed inset-0 z-[9999] bg-black">
       {/* Top Navigation Bar */}
-      <div className="flex items-center justify-between p-4 bg-black">
+      <div className="flex items-center justify-between p-4 bg-black border-b border-gray-800">
         <button
           onClick={onClose}
-          className="w-10 h-10 bg-black rounded-full flex items-center justify-center border border-gray-700"
+          className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center"
         >
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
         
-        <div className="flex items-center gap-3">
-          <button className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
+        <div className="flex items-center gap-2">
+          <button className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center">
             <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
             </svg>
           </button>
-          <button className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
+          <button className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center">
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
-            </svg>
-          </button>
-          <button className="w-8 h-8 bg-black rounded-full flex items-center justify-center">
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
             </svg>
           </button>
         </div>
@@ -240,9 +148,9 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
 
       {/* Scrollable Content */}
       <div className="h-full overflow-y-auto bg-black pb-20">
-        {/* Product Image - moved up and no background */}
+        {/* Product Image */}
         <div className="flex justify-center pt-4 pb-2">
-          <div className="w-80 h-96 overflow-hidden">
+          <div className="w-72 h-80 overflow-hidden">
             {product.imageUrl ? (
               <img
                 src={product.imageUrl}
@@ -263,176 +171,381 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
         </div>
 
         {/* Product Information */}
-        <div className="px-6 pb-6">
-          {/* Product Title - smaller */}
-          <h1 className="text-lg font-semibold text-white mb-2">
+        <div className="px-4 pb-6">
+          {/* Product Title */}
+          <h1 className="text-lg font-semibold text-white mb-1">
             {itemName}
           </h1>
           
-          {/* Product Type and Condition - with parsed set name */}
-          <div className="text-gray-400 mb-4">
+          {/* Set Name and Type */}
+          <div className="text-sm text-gray-400 mb-4">
             {setName} • {product.type === 'product' ? 'Sealed' : (product.rarity || 'Card')}
           </div>
 
-          {/* Price and Trend */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <div className="text-2xl font-bold text-white">
+          {/* Current Market Price and Trend */}
+          <div className="bg-gray-900 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-gray-400">Current Market Value</span>
+              <span className="text-lg font-bold text-white">
                 {formatPrice(product.marketValue)}
-              </div>
-              {product.marketValue && priceChange !== 0 && (
-                <div className={`flex items-center gap-1 text-sm ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                  <svg className={`w-4 h-4 ${isPositive ? 'rotate-0' : 'rotate-180'}`} fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L6.707 7.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                  </svg>
-                  <span>
-                    {isPositive ? '+' : ''}${priceChangeAmount.toFixed(2)} ({priceChange.toFixed(2)}%)
-                  </span>
-                  <span className="text-gray-400">Last 7 days</span>
-                </div>
-              )}
+              </span>
             </div>
+            
+            {priceChange !== 0 && (
+              <div className={`flex items-center gap-1 text-sm ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                <svg className={`w-4 h-4 ${isPositive ? 'rotate-0' : 'rotate-180'}`} fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L6.707 7.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                </svg>
+                <span>
+                  {isPositive ? '+' : ''}${Math.abs(dollarChange).toFixed(2)} ({isPositive ? '+' : ''}{priceChange.toFixed(2)}%)
+                </span>
+                <span className="text-gray-400">Last 7 days</span>
+              </div>
+            )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="space-y-3 mb-6">
+          {/* Tab Navigation */}
+          <div className="flex bg-gray-800 rounded-lg p-1 mb-4">
             <button
-              onClick={handleAddToCollection}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-4 px-6 rounded-lg transition-colors flex items-center justify-center gap-3"
+              onClick={() => setActiveTab('overview')}
+              className={`flex-1 py-2 px-3 text-xs font-medium rounded-md transition-colors ${
+                activeTab === 'overview' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'text-gray-400 hover:text-white'
+              }`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              Add To Collection
+              Overview
             </button>
-            
-            <button className="w-full bg-black border border-gray-700 hover:bg-gray-800 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m6-5v6a2 2 0 01-2 2H9a2 2 0 01-2-2v-6m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v4.01" />
-              </svg>
-              View Sold On eBay
-              <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
+            <button
+              onClick={() => setActiveTab('prices')}
+              className={`flex-1 py-2 px-3 text-xs font-medium rounded-md transition-colors ${
+                activeTab === 'prices' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Prices
+            </button>
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`flex-1 py-2 px-3 text-xs font-medium rounded-md transition-colors ${
+                activeTab === 'details' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Details
             </button>
           </div>
 
-          {/* Price History Section */}
-          <div className="bg-gray-900 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-white mb-3">Price History</h3>
-            
-            {/* Price Range and Current Price */}
-            <div className="flex justify-between items-center mb-3">
-              <div className="flex gap-3 text-xs">
-                <span className="text-white">Min {formatPrice(minPrice * 100)}</span>
-                <span className="text-white">Max {formatPrice(maxPrice * 100)}</span>
+          {/* Tab Content */}
+          {activeTab === 'overview' && (
+            <div className="space-y-4">
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-900 rounded-lg p-3">
+                  <div className="text-xs text-gray-400 mb-1">Market Value</div>
+                  <div className="text-sm font-semibold text-white">
+                    {formatPrice(product.marketValue)}
+                  </div>
+                </div>
+                <div className="bg-gray-900 rounded-lg p-3">
+                  <div className="text-xs text-gray-400 mb-1">7-Day Trend</div>
+                  <div className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                    {priceChange !== 0 ? `${isPositive ? '+' : ''}${priceChange.toFixed(2)}%` : 'No change'}
+                  </div>
+                </div>
               </div>
-              <div className="text-xs">
-                <span className="text-white">{currentDate}</span>
-                <span className="text-teal-400 ml-1">{formatPrice(currentPrice * 100)}</span>
-              </div>
-            </div>
-            
-            {/* Chart Container */}
-            <div className="h-40 mb-3">
-              <svg width="100%" height="100%" viewBox="0 0 400 160" className="overflow-visible">
-                <defs>
-                  {/* Gradient definition */}
-                  <linearGradient id="priceGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#14B8A6" stopOpacity="0.3"/>
-                    <stop offset="100%" stopColor="#14B8A6" stopOpacity="0"/>
-                  </linearGradient>
-                </defs>
-                
-                {/* Generate smooth curve points */}
-                {(() => {
-                  const points = priceHistory.map((point, index) => {
-                    const x = (index / (priceHistory.length - 1)) * 360 + 20;
-                    const y = 140 - ((point.price - minPrice) / (maxPrice - minPrice)) * 120;
-                    return { x, y };
-                  });
-                  
-                  // Create smooth curve using quadratic Bézier curves
-                  let pathData = `M ${points[0].x} ${points[0].y}`;
-                  for (let i = 1; i < points.length; i++) {
-                    const prev = points[i - 1];
-                    const curr = points[i];
-                    const next = points[i + 1];
-                    
-                    if (next) {
-                      const cp1x = prev.x + (curr.x - prev.x) / 2;
-                      const cp1y = prev.y;
-                      const cp2x = curr.x - (next.x - curr.x) / 2;
-                      const cp2y = curr.y;
-                      pathData += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${curr.x} ${curr.y}`;
-                    } else {
-                      pathData += ` L ${curr.x} ${curr.y}`;
-                    }
-                  }
-                  
-                  return (
-                    <>
-                      {/* Gradient area */}
-                      <path
-                        d={`${pathData} L ${points[points.length - 1].x} 160 L 20 160 Z`}
-                        fill="url(#priceGradient)"
-                      />
-                      {/* Smooth line */}
-                      <path
-                        d={pathData}
-                        fill="none"
-                        stroke="#14B8A6"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </>
-                  );
-                })()}
-                
-                {/* Current point - teal circle */}
-                <circle
-                  cx={(priceHistory.length - 1) / (priceHistory.length - 1) * 360 + 20}
-                  cy={140 - ((currentPrice - minPrice) / (maxPrice - minPrice)) * 120}
-                  r="3"
-                  fill="#14B8A6"
-                />
-              </svg>
-              
-              {/* X-axis labels */}
-              <div className="flex justify-between mt-2 px-5">
-                {xAxisLabels.map((label, index) => (
-                  <span key={index} className="text-xs text-gray-400">
-                    {label.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-            
-            {/* Time Range Selectors */}
-            <div className="flex justify-center gap-2 mb-4 mt-8">
-              {['7D', '1M', '3M', '6M', '1Y'].map((period) => (
+
+              {/* Action Buttons */}
+              <div className="space-y-3">
                 <button
-                  key={period}
-                  onClick={() => setSelectedTimeRange(period)}
-                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                    period === selectedTimeRange
-                      ? 'bg-yellow-400 text-black'
-                      : 'text-white hover:bg-gray-700'
-                  }`}
+                  onClick={handleAddToCollection}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
-                  {period}
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Add To Collection
                 </button>
-              ))}
+                
+                <button className="w-full bg-gray-800 border border-gray-700 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  View on eBay
+                </button>
+              </div>
             </div>
-            
-            {/* Footer */}
-            <div className="text-xs text-gray-500 text-center">
-              <button className="text-gray-500 underline hover:text-gray-400 opacity-60 hover:opacity-80">
-                View market data sources
-              </button>
+          )}
+
+          {activeTab === 'prices' && (
+            <div className="space-y-4">
+              {/* Market Sources */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-white">Market Sources</h3>
+                
+                {/* TCGPlayer Prices */}
+                <div className="bg-gray-900 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-white">TCGPlayer</span>
+                    <span className="text-xs text-gray-400">US Market</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Market</span>
+                      <span className="text-white">{formatPriceCents(tcgPlayerPrices.market || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Low</span>
+                      <span className="text-white">{formatPriceCents(tcgPlayerPrices.low || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Mid</span>
+                      <span className="text-white">{formatPriceCents(tcgPlayerPrices.mid || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">High</span>
+                      <span className="text-white">{formatPriceCents(tcgPlayerPrices.high || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Market Prices */}
+                <div className="bg-gray-900 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-white">Card Market</span>
+                    <span className="text-xs text-gray-400">EU Market</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Average</span>
+                      <span className="text-white">{formatPriceCents(cardMarketPrices.average || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Low</span>
+                      <span className="text-white">{formatPriceCents(cardMarketPrices.low || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Trend</span>
+                      <span className="text-white">{formatPriceCents(cardMarketPrices.trend || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Sell</span>
+                      <span className="text-white">{formatPriceCents(cardMarketPrices.sell || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Graded Prices */}
+                {(tcgPlayerPrices.graded || cardMarketPrices.graded) && (
+                  <div className="bg-gray-900 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-white">Graded Prices</span>
+                      <span className="text-xs text-gray-400">PSA/BGS</span>
+                    </div>
+                    <div className="space-y-1">
+                      {tcgPlayerPrices.graded && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">TCGPlayer Graded</span>
+                          <span className="text-white">{formatPriceCents(tcgPlayerPrices.graded)}</span>
+                        </div>
+                      )}
+                      {cardMarketPrices.graded && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">Card Market Graded</span>
+                          <span className="text-white">{formatPriceCents(cardMarketPrices.graded)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Price History Chart */}
+              <div className="bg-gray-900 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-white mb-3">Price History</h3>
+                
+                {/* Price Range and Current Price */}
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex gap-3 text-xs">
+                    <span className="text-white">Min {formatPrice(minPrice)}</span>
+                    <span className="text-white">Max {formatPrice(maxPrice)}</span>
+                  </div>
+                  <div className="text-xs">
+                    <span className="text-white">{currentDate}</span>
+                    <span className="text-teal-400 ml-1">{formatPrice(currentPrice)}</span>
+                  </div>
+                </div>
+                
+                {/* Chart Container */}
+                <div className="h-32 mb-3">
+                  <svg width="100%" height="100%" viewBox="0 0 400 128" className="overflow-visible">
+                    <defs>
+                      <linearGradient id="priceGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#14B8A6" stopOpacity="0.3"/>
+                        <stop offset="100%" stopColor="#14B8A6" stopOpacity="0"/>
+                      </linearGradient>
+                    </defs>
+                    
+                    {/* Generate smooth curve points */}
+                    {(() => {
+                      const points = priceHistory.map((point, index) => {
+                        const x = (index / (priceHistory.length - 1)) * 360 + 20;
+                        const y = 108 - ((point.price - minPrice) / (maxPrice - minPrice)) * 96;
+                        return { x, y };
+                      });
+                      
+                      let pathData = `M ${points[0].x} ${points[0].y}`;
+                      for (let i = 1; i < points.length; i++) {
+                        const prev = points[i - 1];
+                        const curr = points[i];
+                        const next = points[i + 1];
+                        
+                        if (next) {
+                          const cp1x = prev.x + (curr.x - prev.x) / 2;
+                          const cp1y = prev.y;
+                          const cp2x = curr.x - (next.x - curr.x) / 2;
+                          const cp2y = curr.y;
+                          pathData += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${curr.x} ${curr.y}`;
+                        } else {
+                          pathData += ` L ${curr.x} ${curr.y}`;
+                        }
+                      }
+                      
+                      return (
+                        <>
+                          <path
+                            d={`${pathData} L ${points[points.length - 1].x} 128 L 20 128 Z`}
+                            fill="url(#priceGradient)"
+                          />
+                          <path
+                            d={pathData}
+                            fill="none"
+                            stroke="#14B8A6"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </>
+                      );
+                    })()}
+                    
+                    <circle
+                      cx={(priceHistory.length - 1) / (priceHistory.length - 1) * 360 + 20}
+                      cy={108 - ((currentPrice - minPrice) / (maxPrice - minPrice)) * 96}
+                      r="3"
+                      fill="#14B8A6"
+                    />
+                  </svg>
+                  
+                  {/* X-axis labels */}
+                  <div className="flex justify-between mt-2 px-5">
+                    {xAxisLabels.map((label, index) => (
+                      <span key={index} className="text-xs text-gray-400">
+                        {label.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Time Range Selectors */}
+                <div className="flex justify-center gap-1">
+                  {['7D', '1M', '3M', '6M', '1Y'].map((period) => (
+                    <button
+                      key={period}
+                      onClick={() => setSelectedTimeRange(period)}
+                      className={`px-2 py-1 text-xs rounded transition-colors ${
+                        period === selectedTimeRange
+                          ? 'bg-teal-600 text-white'
+                          : 'text-gray-400 hover:bg-gray-700'
+                      }`}
+                    >
+                      {period}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {activeTab === 'details' && (
+            <div className="space-y-4">
+              {/* Product Details */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-white">Product Information</h3>
+                
+                <div className="bg-gray-900 rounded-lg p-3 space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">Name</span>
+                    <span className="text-white text-right flex-1 ml-2">{itemName}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">Set</span>
+                    <span className="text-white">{setName}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">Type</span>
+                    <span className="text-white">{product.type === 'product' ? 'Sealed Product' : 'Individual Card'}</span>
+                  </div>
+                  {product.rarity && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">Rarity</span>
+                      <span className="text-white">{product.rarity}</span>
+                    </div>
+                  )}
+                  {product.details && (
+                    <>
+                      {product.details.cardNumber && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">Card Number</span>
+                          <span className="text-white">{product.details.cardNumber}</span>
+                        </div>
+                      )}
+                      {product.details.hp && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">HP</span>
+                          <span className="text-white">{product.details.hp}</span>
+                        </div>
+                      )}
+                      {product.details.supertype && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">Supertype</span>
+                          <span className="text-white">{product.details.supertype}</span>
+                        </div>
+                      )}
+                      {product.details.type && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">Type</span>
+                          <span className="text-white">{product.details.type}</span>
+                        </div>
+                      )}
+                      {product.details.setCode && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">Set Code</span>
+                          <span className="text-white">{product.details.setCode}</span>
+                        </div>
+                      )}
+                      {product.details.releaseDate && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">Release Date</span>
+                          <span className="text-white">{new Date(product.details.releaseDate).toLocaleDateString()}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Market Data Sources */}
+              <div className="bg-gray-900 rounded-lg p-3">
+                <h4 className="text-sm font-medium text-white mb-2">Data Sources</h4>
+                <div className="text-xs text-gray-400">
+                  Market data provided by TCGPlayer and Card Market APIs. Prices are updated regularly and may vary by condition and marketplace.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
