@@ -20,6 +20,10 @@
     background-color: #111827;
     min-height: 100vh;
     min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
+    /* Prevent scroll issues on mobile */
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    position: relative;
   }
   
   /* Make all text elements use thin font by default */
@@ -156,7 +160,25 @@
     /* Fix for mobile web app status bar area */
     padding-top: env(safe-area-inset-top);
     /* Ensure content doesn't go behind bottom navigation */
-    padding-bottom: 80px; /* Height of bottom navigation + safe area */
+    padding-bottom: calc(80px + env(safe-area-inset-bottom)); /* Height of bottom navigation + safe area */
+  }
+  
+  /* Bottom navigation specific fixes */
+  .bottom-nav-fixed {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 9999 !important;
+    transform: translateZ(0) !important; /* Force hardware acceleration */
+    will-change: transform !important;
+    -webkit-transform: translateZ(0) !important; /* Safari fix */
+  }
+  
+  /* Content spacing for bottom navigation */
+  .content-with-bottom-nav {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
+    min-height: calc(100vh - 80px - env(safe-area-inset-bottom)) !important;
   }
   
   /* Fix for mobile web app viewport issues */
@@ -164,6 +186,31 @@
     .mobile-web-app {
       /* iOS Safari specific fixes */
       min-height: -webkit-fill-available;
+    }
+  }
+  
+  /* Prevent body scroll issues on mobile */
+  body {
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Ensure bottom navigation never moves */
+  .bottom-nav-fixed {
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-perspective: 1000;
+    perspective: 1000;
+  }
+  
+  /* Fix for iOS Safari bottom bar issues */
+  @supports (padding: max(0px)) {
+    .mobile-web-app {
+      padding-bottom: max(80px, env(safe-area-inset-bottom));
+    }
+    
+    .content-with-bottom-nav {
+      padding-bottom: max(80px, env(safe-area-inset-bottom)) !important;
     }
   }
 

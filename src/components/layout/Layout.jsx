@@ -10,7 +10,7 @@ const Layout = ({ children }) => {
       <div className="mobile-full-bg"></div>
       
       {/* Main Content */}
-      <main className="relative z-10">
+      <main className="relative z-10 content-with-bottom-nav">
         {children}
       </main>
       
