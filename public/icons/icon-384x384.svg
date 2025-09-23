@@ -1,0 +1,26 @@
+<svg width="384" height="384" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="#111827"/>
+  
+  <!-- Main icon - stylized "1T" -->
+  <g transform="translate(256, 256)">
+    <!-- Circle background -->
+    <circle cx="0" cy="0" r="180" fill="url(#gradient)"/>
+    
+    <!-- "1T" text -->
+    <text x="0" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="200" font-weight="bold" fill="white">1T</text>
+    
+    <!-- Decorative elements -->
+    <circle cx="-120" cy="-120" r="8" fill="white" opacity="0.3"/>
+    <circle cx="120" cy="-120" r="6" fill="white" opacity="0.2"/>
+    <circle cx="-120" cy="120" r="6" fill="white" opacity="0.2"/>
+    <circle cx="120" cy="120" r="8" fill="white" opacity="0.3"/>
+  </g>
+</svg>

@@ -7,11 +7,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import App from "./App.jsx";
 import { startBackgroundPriceService } from "./services/startBackgroundService.js";
+import { initializePWA } from "./utils/pwa.js";
 
 const queryClient = new QueryClient();
 
 // Start background price service
 startBackgroundPriceService();
+
+// Initialize PWA features
+initializePWA();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
