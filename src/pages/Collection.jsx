@@ -568,18 +568,14 @@ const Collection = () => {
 
   if (ordersLoading || summaryLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 mobile-bg-fix flex items-center justify-center">
-        {/* Mobile browser background fix */}
-        <div className="mobile-full-bg"></div>
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-white">Loading collection...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 mobile-bg-fix">
-      {/* Mobile browser background fix */}
-      <div className="mobile-full-bg"></div>
+    <div>
       {/* Header */}
       <div className="px-4 py-4">
         <div className="flex items-center justify-between">

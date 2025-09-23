@@ -625,9 +625,7 @@ const Search = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 mobile-bg-fix text-white">
-      {/* Mobile browser background fix */}
-      <div className="mobile-full-bg"></div>
+    <div className="text-white">
 
       {/* Search Interface */}
       <div className="px-3 py-2">

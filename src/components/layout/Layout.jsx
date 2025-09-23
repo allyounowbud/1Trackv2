@@ -5,9 +5,12 @@ const Layout = ({ children }) => {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-gray-900 mobile-bg-fix mobile-web-app">
+      {/* Mobile browser background fix */}
+      <div className="mobile-full-bg"></div>
+      
       {/* Main Content */}
-      <main className="pb-16 bg-black">
+      <main className="relative z-10">
         {children}
       </main>
       
