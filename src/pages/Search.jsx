@@ -318,8 +318,8 @@ const Search = () => {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    // If search query is empty, show trending products
-    if (!searchQuery.trim()) {
+    // If search query is empty or too short, show trending products
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
       setSearchResults([]);
       setAllResults([]);
       setDisplayedResults([]);
@@ -334,7 +334,7 @@ const Search = () => {
     setError(null);
     setCurrentPage(1);
 
-    // Debounce the search - wait 500ms after user stops typing
+    // Debounce the search - wait 800ms after user stops typing (increased for fewer API calls)
     searchTimeoutRef.current = setTimeout(async () => {
       try {
         console.log(`🔍 Live searching for: "${searchQuery}"`);

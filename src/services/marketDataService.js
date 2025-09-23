@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseClient.js';
+import apiUsageMonitor from './apiUsageMonitor.js';
 
 // Market data service supporting both PriceCharting API and Card Market API via RapidAPI
 class MarketDataService {
@@ -19,7 +20,7 @@ class MarketDataService {
     
     // Cache for API responses
     this.cache = new Map();
-    this.cacheTimeout = 6 * 60 * 60 * 1000; // 6 hours (more frequent updates with upgraded plan)
+    this.cacheTimeout = 12 * 60 * 60 * 1000; // 12 hours (matches price update frequency)
     
     // API preference: 'cardmarket' (with images) or 'pricecharting' (fallback)
     this.preferredApi = this.rapidApiKey ? 'cardmarket' : 'pricecharting';
@@ -37,6 +38,25 @@ class MarketDataService {
       cardMarket: !!this.rapidApiKey,
       preferred: this.preferredApi
     };
+  }
+
+  // Helper method to make API calls with usage monitoring
+  async makeApiCall(url, options = {}, apiType = 'cardmarket') {
+    // Check if we should skip this API call due to usage limits
+    if (apiUsageMonitor.shouldSkipApiCall(apiType)) {
+      throw new Error('API call skipped due to usage limits');
+    }
+
+    const response = await fetch(url, options);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    // Record successful API call
+    apiUsageMonitor.recordCall(apiType);
+    
+    return response;
   }
 
   // Clear cache for debugging
@@ -70,17 +90,13 @@ class MarketDataService {
     try {
       console.log('🔍 Fetching all expansions from Card Market API...');
       
-      const response = await fetch(`${this.cardMarketBaseUrl}/pokemon/episodes?rapidapi-key=${this.rapidApiKey}`, {
+      const response = await this.makeApiCall(`${this.cardMarketBaseUrl}/pokemon/episodes?rapidapi-key=${this.rapidApiKey}`, {
         method: 'GET',
         headers: {
           'X-RapidAPI-Key': this.rapidApiKey,
           'X-RapidAPI-Host': 'cardmarket-api-tcg.p.rapidapi.com'
         }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      }, 'cardmarket');
 
       const data = await response.json();
       console.log(`✅ Fetched ${data.length} expansions`);

@@ -113,7 +113,7 @@ class DatabasePriceService {
 
       return {
         lastUpdated: lastUpdated,
-        needsUpdate: hoursSinceUpdate >= 24, // Updated for 24-hour refresh cycle
+        needsUpdate: hoursSinceUpdate >= 12, // Updated for 12-hour refresh cycle (twice daily)
         hoursSinceUpdate: Math.floor(hoursSinceUpdate)
       };
 

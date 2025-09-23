@@ -147,7 +147,7 @@ class BackgroundPriceService {
       console.log('⏰ Prices updated recently, skipping...');
     }
 
-    // Schedule next update (check every 30 minutes)
+    // Schedule next update (check every 2 hours - reduced frequency)
     setInterval(async () => {
       if (this.shouldUpdatePrices()) {
         await this.updateMarketPrices();

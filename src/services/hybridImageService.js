@@ -5,7 +5,7 @@ import { getProductMarketData } from './marketDataService.js';
 
 // Cache for in-memory image storage
 const imageCache = new Map();
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days (images rarely change) in milliseconds
 
 // Generate image URLs based on product data
 function generateImageUrl(productName, productId, consoleName) {

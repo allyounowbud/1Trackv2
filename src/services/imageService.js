@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient.js';
 
 // Cache for in-memory image storage
 const imageCache = new Map();
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds (images rarely change)
 
 // Get images for a product
 export async function getProductImages(productName, consoleName = null, forceRefresh = false) {

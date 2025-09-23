@@ -7,15 +7,21 @@ export const API_CONFIG = {
   dailyLimit: 3000, // requests per day
   
   // Update frequency (conservative to stay well under limits)
-  priceUpdateInterval: 24, // hours between price updates (once per day)
-  checkInterval: 60, // minutes between checks (every hour)
+  priceUpdateInterval: 12, // hours between price updates (twice per day as requested)
+  checkInterval: 120, // minutes between checks (every 2 hours - reduced frequency)
   
-  // Cache settings
-  cacheTimeout: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+  // Cache settings - Extended for better performance
+  cacheTimeout: 12 * 60 * 60 * 1000, // 12 hours in milliseconds (matches price updates)
+  searchCacheTimeout: 2 * 60 * 60 * 1000, // 2 hours for search results
+  imageCacheTimeout: 7 * 24 * 60 * 60 * 1000, // 7 days for images (rarely change)
   
   // Batch settings (conservative for reliability)
-  batchSize: 8, // items per batch
-  batchDelay: 1000, // milliseconds between batches (1 second for safety)
+  batchSize: 5, // items per batch (reduced to be more conservative)
+  batchDelay: 2000, // milliseconds between batches (2 seconds for safety)
+  
+  // React Query settings
+  reactQueryStaleTime: 10 * 60 * 1000, // 10 minutes - data stays fresh
+  reactQueryCacheTime: 30 * 60 * 1000, // 30 minutes - cache retention
   
   // User capacity estimates
   maxUsers: {

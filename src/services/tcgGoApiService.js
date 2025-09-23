@@ -3,19 +3,26 @@
  * Based on Card Market API documentation
  */
 
+import apiUsageMonitor from './apiUsageMonitor.js';
+
 class TCGGoApiService {
   constructor() {
     this.rapidApiKey = import.meta.env.VITE_RAPIDAPI_KEY;
     this.baseUrl = 'https://cardmarket-api-tcg.p.rapidapi.com';
     this.cache = new Map();
-    this.cacheTimeout = 6 * 60 * 60 * 1000; // 6 hours
+    this.cacheTimeout = 12 * 60 * 60 * 1000; // 12 hours (matches price update frequency)
     this.loadPersistentCache();
   }
 
   /**
-   * Make API request with proper headers
+   * Make API request with proper headers and usage monitoring
    */
   async makeRequest(endpoint, options = {}) {
+    // Check if we should skip this API call due to usage limits
+    if (apiUsageMonitor.shouldSkipApiCall('tcg_go')) {
+      throw new Error('API call skipped due to usage limits');
+    }
+
     const url = `${this.baseUrl}${endpoint}`;
     
     const response = await fetch(url, {
@@ -32,6 +39,9 @@ class TCGGoApiService {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
+    // Record successful API call
+    apiUsageMonitor.recordCall('tcg_go');
+    
     return response.json();
   }
 
