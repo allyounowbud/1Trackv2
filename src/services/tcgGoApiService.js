@@ -256,7 +256,7 @@ class TCGGoApiService {
       
       do {
         const responseData = await this.makeRequest(`/pokemon/episodes/${expansionId}/cards?sort=${sort}&page=${currentPage}`);
-        console.log(`🔍 Raw expansion cards API response (page ${currentPage}):`, responseData);
+        // console.log(`🔍 Raw expansion cards API response (page ${currentPage}):`, responseData);
         
         // Handle different response structures
         let data;
@@ -320,7 +320,7 @@ class TCGGoApiService {
       
       do {
         const responseData = await this.makeRequest(`/pokemon/episodes/${expansionId}/products?sort=${sort}&page=${currentPage}`);
-        console.log(`🔍 Raw expansion products API response (page ${currentPage}):`, responseData);
+        // console.log(`🔍 Raw expansion products API response (page ${currentPage}):`, responseData);
         
         // Handle different response structures
         let data;
@@ -917,49 +917,21 @@ class TCGGoApiService {
       // Use TCGPlayer as primary (US market), Card Market as fallback (EU market)
       const marketValue = tcgPlayerMarketPrice || cardMarketPrice;
       
-      // Debug: Log price selection for accuracy
-      console.log(`🔍 Price selection for ${card.name}:`, {
-        tcgPlayerMarket: tcgPlayerMarketPrice,
-        cardMarketPrice: cardMarketPrice,
-        selectedValue: marketValue,
-        source: tcgPlayerMarketPrice ? 'TCGPlayer' : 'CardMarket'
-      });
+      // Debug: Log price selection for accuracy (only for specific cards to reduce spam)
+      if (card.name && (card.name.includes('Umbreon') || card.name.includes('Charizard'))) {
+        console.log(`🔍 Price selection for ${card.name}:`, {
+          tcgPlayerMarket: tcgPlayerMarketPrice,
+          cardMarketPrice: cardMarketPrice,
+          selectedValue: marketValue,
+          source: tcgPlayerMarketPrice ? 'TCGPlayer' : 'CardMarket'
+        });
+      }
 
-      // Try to get accurate trend from history prices (only for actual cards)
-      let trend = 0;
-      let dollarChange = 0;
-      
-      // Check if this is actually a card (not a product) by looking for card-specific properties
-      const isActualCard = card.card_number || card.hp || card.supertype === 'Pokémon';
-      
-      if (isActualCard) {
-        try {
-          console.log(`🔍 Attempting to fetch history prices for card ${card.id} (${card.name})`);
-          const historyPrices = await this.getCardHistoryPrices(card.id);
-          console.log(`🔍 History prices result for ${card.name}:`, historyPrices);
-          
-          if (historyPrices && historyPrices.length > 0) {
-            const trendData = this.calculateTrendFromHistory(historyPrices, 7);
-            trend = trendData.trend;
-            dollarChange = trendData.dollarChange;
-            console.log(`🔍 Trend calculation for ${card.name}:`, { trend, dollarChange });
-          } else {
-            console.log(`🔍 No history prices found for ${card.name}, using fallback`);
-          }
-        } catch (error) {
-          console.warn(`⚠️ Could not fetch history prices for card ${card.id} (${card.name}), falling back to 7d/30d averages:`, error);
-        }
-      } else {
-        console.log(`🔍 Skipping history prices for ${card.name} (not a card)`);
-      }
-      
-      // Fallback to Card Market 7d/30d averages if history prices failed or not available
-      if (trend === 0 && dollarChange === 0) {
-        const cardMarket7d = cardMarketPrices['7d_average'];
-        const cardMarket30d = cardMarketPrices['30d_average'];
-        trend = this.calculateTrend(cardMarket7d, cardMarket30d);
-        dollarChange = cardMarket7d && cardMarket30d ? cardMarket7d - cardMarket30d : 0;
-      }
+      // Calculate trend from available 7d/30d averages (no individual API calls)
+      const cardMarket7d = cardMarketPrices['7d_average'];
+      const cardMarket30d = cardMarketPrices['30d_average'];
+      const trend = this.calculateTrend(cardMarket7d, cardMarket30d);
+      const dollarChange = cardMarket7d && cardMarket30d ? cardMarket7d - cardMarket30d : 0;
 
       // Debug logging for trend data - expanded for all cards
       console.log('🔍 TCG Go API Debug - Card:', {
@@ -1035,42 +1007,21 @@ class TCGGoApiService {
       // Use TCGPlayer as primary (US market), Card Market as fallback (EU market)
       const marketValue = tcgPlayerMarketPrice || cardMarketPrice;
       
-      // Debug: Log price selection for accuracy
-      console.log(`🔍 Price selection for product ${product.name}:`, {
-        tcgPlayerMarket: tcgPlayerMarketPrice,
-        cardMarketPrice: cardMarketPrice,
-        selectedValue: marketValue,
-        source: tcgPlayerMarketPrice ? 'TCGPlayer' : 'CardMarket'
-      });
+      // Debug: Log price selection for accuracy (only for specific products to reduce spam)
+      if (product.name && (product.name.includes('Booster') || product.name.includes('Box'))) {
+        console.log(`🔍 Price selection for product ${product.name}:`, {
+          tcgPlayerMarket: tcgPlayerMarketPrice,
+          cardMarketPrice: cardMarketPrice,
+          selectedValue: marketValue,
+          source: tcgPlayerMarketPrice ? 'TCGPlayer' : 'CardMarket'
+        });
+      }
 
-      // Try to get accurate trend from history prices for products
-      let trend = 0;
-      let dollarChange = 0;
-      
-      try {
-        console.log(`🔍 Attempting to fetch history prices for product ${product.id} (${product.name})`);
-        const historyPrices = await this.getProductHistoryPrices(product.id);
-        console.log(`🔍 History prices result for ${product.name}:`, historyPrices);
-        
-        if (historyPrices && historyPrices.length > 0) {
-          const trendData = this.calculateTrendFromHistory(historyPrices, 7);
-          trend = trendData.trend;
-          dollarChange = trendData.dollarChange;
-          console.log(`🔍 Trend calculation for ${product.name}:`, { trend, dollarChange });
-        } else {
-          console.log(`🔍 No history prices found for ${product.name}, using fallback`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ Could not fetch history prices for product ${product.id} (${product.name}), falling back to 7d/30d averages:`, error);
-      }
-      
-      // Fallback to Card Market 7d/30d averages if history prices failed or not available
-      if (trend === 0 && dollarChange === 0) {
-        const cardMarket7d = cardMarketPrices['7d_average'];
-        const cardMarket30d = cardMarketPrices['30d_average'];
-        trend = this.calculateTrend(cardMarket7d, cardMarket30d);
-        dollarChange = cardMarket7d && cardMarket30d ? cardMarket7d - cardMarket30d : 0;
-      }
+      // Calculate trend from available 7d/30d averages (no individual API calls)
+      const cardMarket7d = cardMarketPrices['7d_average'];
+      const cardMarket30d = cardMarketPrices['30d_average'];
+      const trend = this.calculateTrend(cardMarket7d, cardMarket30d);
+      const dollarChange = cardMarket7d && cardMarket30d ? cardMarket7d - cardMarket30d : 0;
       
       console.log(`🔍 Product trend calculation for ${product.name}:`, { 
         id: product.id,
