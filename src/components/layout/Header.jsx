@@ -24,7 +24,7 @@ const Header = ({ searchQuery, onSearch, onThemeToggle, isDarkMode }) => {
               </button>
               
               {showCurrencyDropdown && (
-                <div className="absolute right-0 mt-2 w-32 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50">
+                <div className="absolute right-0 mt-2 w-32 bg-gray-800 border border-gray-700 rounded-lg shadow-lg modal-overlay">
                   <div className="py-1">
                     <button className="w-full px-3 py-2 text-left text-sm text-white hover:bg-gray-700">
                       USD

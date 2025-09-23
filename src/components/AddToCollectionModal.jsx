@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { marketplaceRetailerService } from '../services/marketplaceRetailerService';
 import { getCleanItemName } from '../utils/nameUtils';
+import { useModal } from '../contexts/ModalContext';
 
 const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
+  const { openModal, closeModal } = useModal();
   const [formData, setFormData] = useState({
     // Purchase details
     buyDate: new Date().toISOString().split('T')[0], // Today's date
@@ -230,6 +232,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       });
       
       onClose();
+      closeModal();
     } catch (err) {
       console.error('Error adding to collection:', err);
       setError(err.message || 'Failed to add item to collection');
@@ -260,13 +263,14 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       setShowCustomFeeInput(false);
       setCustomFeePercentage('');
       onClose();
+      closeModal();
     }
   };
 
   if (!isOpen || !product) return null;
 
   return (
-    <div className="fixed inset-0 bg-gray-900 z-50 flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-gray-900 flex flex-col overflow-hidden modal-overlay">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-800">
         <div>

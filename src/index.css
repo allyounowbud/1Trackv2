@@ -174,11 +174,22 @@
     will-change: transform !important;
     -webkit-transform: translateZ(0) !important; /* Safari fix */
   }
+
+  /* Modal overlay fixes - must be higher than bottom navigation */
+  .modal-overlay {
+    z-index: 10000 !important;
+  }
   
   /* Content spacing for bottom navigation */
   .content-with-bottom-nav {
     padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
     min-height: calc(100vh - 80px - env(safe-area-inset-bottom)) !important;
+  }
+
+  /* Content spacing without bottom navigation (when modal is open) */
+  .content-without-bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    min-height: calc(100vh - env(safe-area-inset-bottom)) !important;
   }
   
   /* Fix for mobile web app viewport issues */

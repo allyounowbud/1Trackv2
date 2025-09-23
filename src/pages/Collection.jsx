@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { getItemDisplayName, getItemSetName } from '../utils/nameUtils';
+import { useModal } from '../contexts/ModalContext';
 
 
 // Simple data fetching - just one table!
@@ -26,6 +27,7 @@ async function getCollectionSummary() {
 
 const Collection = () => {
   const location = useLocation();
+  const { openModal, closeModal } = useModal();
   const [searchQuery, setSearchQuery] = useState(
     location.state?.searchQuery || ''
   );
@@ -162,6 +164,7 @@ const Collection = () => {
     setOrdersToDelete(itemOrders);
     setShowDeleteModal(true);
     setShowItemMenu(false);
+    // Don't close modal here - delete modal is opening
   };
 
   // Delete selected orders
@@ -179,6 +182,7 @@ const Collection = () => {
       setShowDeleteModal(false);
       setShowDeleteConfirmation(false);
       setOrdersToDelete([]);
+      closeModal();
       setSelectedOrderIds(new Set());
       setOrdersToConfirmDelete([]);
       setIsOrderSelectionMode(false);
@@ -1016,6 +1020,7 @@ const Collection = () => {
                           e.stopPropagation();
                           setSelectedItemId(item.id);
                           setShowItemMenu(true);
+                          openModal();
                         }}
                         className="text-gray-400 hover:text-white"
                       >
@@ -1035,7 +1040,7 @@ const Collection = () => {
 
       {/* Order Menu Modal */}
       {showOrderMenu && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center modal-overlay">
           <div className="bg-gray-800 rounded-lg p-6 w-80 max-w-[90vw]">
             <h3 className="text-white font-medium mb-4">Order Actions</h3>
             <div className="space-y-2">
@@ -1081,7 +1086,7 @@ const Collection = () => {
 
       {/* Bulk Actions Bar - Fixed at bottom */}
       {isSelectionMode && (
-        <div className="fixed bottom-16 left-0 right-0 z-50">
+        <div className="fixed bottom-16 left-0 right-0 modal-overlay">
           <div className="bg-indigo-600 border-t border-indigo-500 px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1097,7 +1102,10 @@ const Collection = () => {
                   Select All
                 </button>
                 <button 
-                  onClick={() => setShowBulkActionsMenu(true)}
+                  onClick={() => {
+                    setShowBulkActionsMenu(true);
+                    openModal();
+                  }}
                   className="px-3 py-1 bg-indigo-500 hover:bg-indigo-400 rounded-md text-xs text-white transition-colors flex items-center gap-1"
                 >
                   Bulk Actions
@@ -1122,8 +1130,11 @@ const Collection = () => {
       {/* Bulk Actions Menu Overlay */}
       {showBulkActionsMenu && (
         <div 
-          className="fixed inset-0 bg-black/50 z-50 flex items-end"
-          onClick={() => setShowBulkActionsMenu(false)}
+          className="fixed inset-0 bg-black/50 flex items-end modal-overlay"
+          onClick={() => {
+            setShowBulkActionsMenu(false);
+            closeModal();
+          }}
         >
           <div 
             className="w-full bg-gray-950 border border-indigo-500/50 rounded-t-2xl max-h-[80vh] overflow-y-auto"
@@ -1178,8 +1189,11 @@ const Collection = () => {
       {/* Individual Item Menu Overlay */}
       {showItemMenu && (
         <div 
-          className="fixed inset-0 bg-black/50 z-50 flex items-end"
-          onClick={() => setShowItemMenu(false)}
+          className="fixed inset-0 bg-black/50 flex items-end modal-overlay"
+          onClick={() => {
+            setShowItemMenu(false);
+            closeModal();
+          }}
         >
           <div 
             className="w-full bg-gray-900 border border-gray-700 rounded-t-2xl max-h-[80vh] overflow-y-auto"
@@ -1236,8 +1250,11 @@ const Collection = () => {
       {/* Delete Orders Modal */}
       {showDeleteModal && (
         <div 
-          className="fixed inset-0 bg-black/50 z-50 flex items-end"
-          onClick={() => setShowDeleteModal(false)}
+          className="fixed inset-0 bg-black/50 flex items-end modal-overlay"
+          onClick={() => {
+            setShowDeleteModal(false);
+            closeModal();
+          }}
         >
           <div 
             className="w-full bg-gray-900 border border-gray-700 rounded-t-2xl max-h-[80vh] overflow-y-auto"
@@ -1362,6 +1379,7 @@ const Collection = () => {
                     setShowDeleteModal(false);
                     setOrdersToDelete([]);
                     setSelectedOrderIds(new Set());
+                    closeModal();
                     setIsOrderSelectionMode(false);
                   }}
                   className="flex-1 px-4 py-3 bg-gray-800 text-gray-300 rounded-xl hover:bg-gray-700 transition-all duration-200 border border-gray-600 font-medium text-sm"
@@ -1392,7 +1410,7 @@ const Collection = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirmation && (
         <div 
-          className="fixed inset-0 bg-black/50 z-50 flex items-end"
+          className="fixed inset-0 bg-black/50 flex items-end modal-overlay"
           onClick={() => setShowDeleteConfirmation(false)}
         >
           <div 
@@ -1471,7 +1489,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center modal-overlay">
       <div className="bg-gray-800 rounded-lg p-6 w-80 max-w-[90vw]">
         <h3 className="text-white font-medium mb-4">Mark as Sold</h3>
         <form onSubmit={handleSubmit} className="space-y-4">

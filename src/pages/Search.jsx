@@ -3,8 +3,10 @@ import tcgGoApiService from '../services/tcgGoApiService';
 import ProductPreviewModal from '../components/ProductPreviewModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
 import { getCleanItemName } from '../utils/nameUtils';
+import { useModal } from '../contexts/ModalContext';
 
 const Search = () => {
+  const { openModal, closeModal } = useModal();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -610,18 +612,21 @@ const Search = () => {
     setProductToAdd(product);
     setIsAddModalOpen(true);
     setIsPreviewOpen(false); // Close preview modal
+    openModal();
   };
 
   const handleAddSuccess = (result) => {
     console.log('Successfully added to collection:', result);
     // You could show a toast notification here
     setIsAddModalOpen(false);
+    closeModal();
     setProductToAdd(null);
   };
 
   const handleCloseAddModal = () => {
     setIsAddModalOpen(false);
     setProductToAdd(null);
+    closeModal();
   };
 
   return (

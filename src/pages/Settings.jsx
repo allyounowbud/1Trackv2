@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useModal } from '../contexts/ModalContext';
 
 const Settings = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { openModal, closeModal } = useModal();
   const [loading, setLoading] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
@@ -22,6 +24,7 @@ const Settings = () => {
     } finally {
       setLoading(false);
       setShowSignOutConfirm(false);
+      closeModal();
     }
   };
 
@@ -197,7 +200,10 @@ const Settings = () => {
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
             <h3 className="text-white font-medium mb-3">Account Actions</h3>
             <button 
-              onClick={() => setShowSignOutConfirm(true)}
+              onClick={() => {
+                setShowSignOutConfirm(true);
+                openModal();
+              }}
               className="w-full text-left p-3 bg-red-600/20 hover:bg-red-600/30 rounded-lg transition-colors border border-red-500/30"
             >
               <div className="flex items-center space-x-3">
@@ -218,7 +224,7 @@ const Settings = () => {
 
       {/* Sign Out Confirmation Modal */}
       {showSignOutConfirm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 modal-overlay">
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 w-full max-w-sm">
             <h3 className="text-white font-medium mb-2">Sign Out</h3>
             <p className="text-gray-400 text-sm mb-6">
@@ -226,7 +232,10 @@ const Settings = () => {
             </p>
             <div className="flex space-x-3">
               <button
-                onClick={() => setShowSignOutConfirm(false)}
+                onClick={() => {
+                  setShowSignOutConfirm(false);
+                  closeModal();
+                }}
                 className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
               >
                 Cancel

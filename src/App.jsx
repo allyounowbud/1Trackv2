@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useState } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ModalProvider } from './contexts/ModalContext';
 import Layout from './components/layout/Layout';
 import Collection from './pages/Collection';
 import Search from './pages/Search';
@@ -40,26 +41,28 @@ function App() {
   return (
     <ThemeProvider value={{ isDarkMode, toggleTheme }}>
       <AuthProvider>
-        <Router>
-          <div className={`min-h-screen transition-colors duration-200 ${
-            isDarkMode ? 'dark' : ''
-          }`}>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/*" element={
-                <AuthGuard>
-                  <Layout>
-                    <Routes>
-                      <Route path="/" element={<Collection />} />
-                      <Route path="/search" element={<Search />} />
-                      <Route path="/settings" element={<Settings />} />
-                    </Routes>
-                  </Layout>
-                </AuthGuard>
-              } />
-            </Routes>
-          </div>
-        </Router>
+        <ModalProvider>
+          <Router>
+            <div className={`min-h-screen transition-colors duration-200 ${
+              isDarkMode ? 'dark' : ''
+            }`}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/*" element={
+                  <AuthGuard>
+                    <Layout>
+                      <Routes>
+                        <Route path="/" element={<Collection />} />
+                        <Route path="/search" element={<Search />} />
+                        <Route path="/settings" element={<Settings />} />
+                      </Routes>
+                    </Layout>
+                  </AuthGuard>
+                } />
+              </Routes>
+            </div>
+          </Router>
+        </ModalProvider>
       </AuthProvider>
     </ThemeProvider>
   );

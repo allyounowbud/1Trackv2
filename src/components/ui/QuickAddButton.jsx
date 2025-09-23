@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useModal } from '../../contexts/ModalContext';
 
 const QuickAddButton = ({ onAdd }) => {
+  const { openModal, closeModal } = useModal();
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -33,6 +35,7 @@ const QuickAddButton = ({ onAdd }) => {
       notes: ''
     });
     setIsOpen(false);
+    closeModal();
   };
 
   const handleCancel = () => {
@@ -43,13 +46,17 @@ const QuickAddButton = ({ onAdd }) => {
       notes: ''
     });
     setIsOpen(false);
+    closeModal();
   };
 
   return (
     <>
       {/* Floating Action Button */}
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          setIsOpen(true);
+          openModal();
+        }}
         className="fixed bottom-24 right-4 z-40 w-14 h-14 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -59,7 +66,7 @@ const QuickAddButton = ({ onAdd }) => {
 
       {/* Modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+        <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/50 modal-overlay">
           <div className="bg-gray-900 rounded-2xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-white">
