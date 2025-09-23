@@ -1070,7 +1070,6 @@ class TCGGoApiService {
     const cacheKey = `product_history_${productId}_${dateFrom || 'default'}_${dateTo || 'default'}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) {
-      console.log(`📈 Using cached history prices for product ${productId}`);
       return cached;
     }
 
@@ -1087,10 +1086,8 @@ class TCGGoApiService {
       }
 
       const endpoint = `/pokemon/products/${productId}/history-prices?date_from=${dateFrom}&date_to=${dateTo}`;
-      console.log(`📈 Fetching history prices for product ${productId} from ${dateFrom} to ${dateTo}`);
       
       const responseData = await this.makeRequest(endpoint);
-      console.log('📈 Raw product history prices API response:', responseData);
       
       // Handle different response structures
       let data;
@@ -1190,7 +1187,6 @@ class TCGGoApiService {
     const cacheKey = `card_history_${cardId}_${dateFrom || 'default'}_${dateTo || 'default'}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) {
-      console.log(`📈 Using cached history prices for card ${cardId}`);
       return cached;
     }
 
@@ -1207,7 +1203,6 @@ class TCGGoApiService {
       }
 
       const endpoint = `/pokemon/cards/${cardId}/history-prices?id=${cardId}&date_from=${dateFrom}&date_to=${dateTo}`;
-      console.log(`📈 Fetching history prices for card ${cardId} from ${dateFrom} to ${dateTo}`);
       
       const responseData = await this.makeRequest(endpoint);
       console.log('🚨 ENHANCED DEBUG - Raw history prices API response:', responseData);
@@ -1299,11 +1294,6 @@ class TCGGoApiService {
         return [];
       }
       
-      console.log('📈 Extracted data:', data);
-      console.log('📈 Data length:', data ? data.length : 'null');
-      if (data && data.length > 0) {
-        console.log('📈 Sample data point:', data[0]);
-      }
       
       // Format and sort by date
       const formattedData = data

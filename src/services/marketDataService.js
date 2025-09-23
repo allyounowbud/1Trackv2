@@ -304,7 +304,6 @@ class MarketDataService {
   async refreshCachedData(searchTerm) {
     const cacheKey = this.getCacheKey('cardmarket', 'search_products', { searchTerm, limit: 20 });
     this.cache.delete(cacheKey);
-    console.log(`🔄 Cleared cache for: "${searchTerm}"`);
   }
 
   // Load persistent cache from localStorage
@@ -366,7 +365,6 @@ class MarketDataService {
       
       localStorage.setItem('apiUsage', JSON.stringify(usage));
       
-      console.log(`📊 API Usage Today: ${usage[today]} calls`);
       return usage[today];
     } catch (error) {
       console.error('Error tracking API usage:', error);
@@ -464,7 +462,6 @@ class MarketDataService {
           const data = await response.json();
           console.log(`✅ ${endpoint.name} successful!`);
           console.log('📄 Response data:', data);
-          console.log('📊 Response keys:', Object.keys(data));
           
           // Check for the correct data structure
           const cards = data.data || data.cards || [];
@@ -562,7 +559,6 @@ class MarketDataService {
         totalResults = data.results || totalResults;
         
         console.log(`📄 Page ${currentPage}: Found ${cards.length} results`);
-        console.log(`📊 Total results available: ${totalResults}`);
         
         if (cards.length === 0) {
           console.log(`📄 No more results on page ${currentPage}, stopping pagination`);
@@ -580,7 +576,6 @@ class MarketDataService {
       }
       
       console.log(`✅ Total collected: ${allCards.length} results for "${searchTerm}"`);
-      console.log(`📊 Total available: ${totalResults}`);
       
       // Format the results for display
       const formattedResults = allCards
@@ -648,7 +643,6 @@ class MarketDataService {
         totalResults = data.results || totalResults;
         
         console.log(`📄 Page ${currentPage}: Found ${products.length} results`);
-        console.log(`📊 Total results available: ${totalResults}`);
         
         if (products.length === 0) {
           console.log(`📄 No more results on page ${currentPage}, stopping pagination`);
@@ -666,7 +660,6 @@ class MarketDataService {
       }
       
       console.log(`✅ Total collected: ${allProducts.length} results for "${searchTerm}"`);
-      console.log(`📊 Total available: ${totalResults}`);
       
       // Format the results for display
       const formattedResults = allProducts

@@ -4,9 +4,12 @@ import ProductPreviewModal from '../components/ProductPreviewModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
 import { getCleanItemName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryClient';
 
 const Search = () => {
   const { openModal, closeModal } = useModal();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,7 +41,6 @@ const Search = () => {
   const loadPopularExpansions = async () => {
     setIsLoadingTrending(true);
     try {
-      console.log('🔍 Loading popular expansions with search API...');
       
       // List of popular expansions to search for
       const popularExpansionNames = [
@@ -76,7 +78,6 @@ const Search = () => {
         setTrendingProducts(expansions);
       } else {
         // Fallback to regular API if search fails
-        console.log('🔄 Search failed, falling back to regular API...');
         await loadAllExpansions();
       }
     } catch (error) {
@@ -90,10 +91,6 @@ const Search = () => {
 
   // Browse expansion cards using expansion ID
   const browseExpansionCards = async (expansion) => {
-    console.log('🔍 Browsing expansion:', expansion);
-    console.log('🔍 Expansion ID:', expansion.id);
-    console.log('🔍 Expansion keys:', Object.keys(expansion));
-    console.log('🔍 Expansion type:', typeof expansion);
     
     // Manual ID mapping for known expansions
     const expansionIdMap = {
@@ -123,7 +120,6 @@ const Search = () => {
       console.error('Available properties:', Object.keys(expansion));
       
       // Try to find ID in different possible locations
-      console.log('🔍 Checking for ID in different locations:');
       console.log('  - expansion.id:', expansion.id);
       console.log('  - expansion.ID:', expansion.ID);
       console.log('  - expansion.episode_id:', expansion.episode_id);
@@ -141,7 +137,6 @@ const Search = () => {
     setSearchQuery(expansion.name);
     
     try {
-      console.log(`🔍 Browsing all items (cards + products) for expansion: ${expansion.name} (ID: ${expansionId})`);
       
       // Use the expansion all API (cards + products)
       const allItems = await tcgGoApiService.getExpansionAll(expansionId, 'price_highest');
@@ -169,16 +164,13 @@ const Search = () => {
   const loadAllExpansions = async () => {
     setIsLoadingTrending(true);
     try {
-      console.log('🔍 Loading all expansions...');
       // Clear cache to ensure we get fresh data with updated images
       tcgGoApiService.clearCache();
       const expansions = await tcgGoApiService.getAllExpansions();
       
-      console.log('📊 Expansions response:', expansions);
       
       // The getAllExpansions function returns the data directly, not wrapped in success/data
       if (expansions && Array.isArray(expansions)) {
-        console.log(`✅ Loaded ${expansions.length} expansions:`, expansions);
         
         
         setTrendingProducts(expansions);
@@ -289,7 +281,6 @@ const Search = () => {
         }
       ];
       
-      console.log('🔄 Using fallback expansions');
       setTrendingProducts(fallbackExpansions);
     } finally {
       setIsLoadingTrending(false);
@@ -339,7 +330,6 @@ const Search = () => {
     // Debounce the search - wait 800ms after user stops typing (increased for fewer API calls)
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        console.log(`🔍 Live searching for: "${searchQuery}"`);
         
         let result;
         
@@ -585,13 +575,11 @@ const Search = () => {
 
   // Debug function to check price accuracy for a specific item
   const debugItemPricing = async (itemId, itemType = 'card') => {
-    console.log(`🔍 Debugging pricing for ${itemType} ID: ${itemId}`);
     try {
       if (itemType === 'card') {
         await tcgGoApiService.debugCardData(itemId);
       } else {
         // For products, we'd need to implement debugProductData
-        console.log('Product debugging not yet implemented');
       }
     } catch (error) {
       console.error('Error debugging item pricing:', error);
@@ -616,8 +604,11 @@ const Search = () => {
   };
 
   const handleAddSuccess = (result) => {
-    console.log('Successfully added to collection:', result);
-    // You could show a toast notification here
+    // Invalidate collection queries to trigger smooth refresh
+    queryClient.invalidateQueries({ queryKey: queryKeys.orders });
+    queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary });
+    queryClient.invalidateQueries({ queryKey: queryKeys.collectionData });
+    
     setIsAddModalOpen(false);
     closeModal();
     setProductToAdd(null);
@@ -647,8 +638,18 @@ const Search = () => {
               placeholder="Search your items..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full pl-8 pr-8 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white transition-colors"
+              >
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
 
 

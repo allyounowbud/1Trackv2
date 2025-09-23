@@ -12,6 +12,18 @@
   "categories": ["finance", "lifestyle", "utilities"],
   "icons": [
     {
+      "src": "/icons/icon-16x16.svg",
+      "sizes": "16x16",
+      "type": "image/svg+xml",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-32x32.svg",
+      "sizes": "32x32",
+      "type": "image/svg+xml",
+      "purpose": "maskable any"
+    },
+    {
       "src": "/icons/icon-72x72.svg",
       "sizes": "72x72",
       "type": "image/svg+xml",

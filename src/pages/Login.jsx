@@ -77,7 +77,7 @@ const Login = () => {
           </h2>
           <p className="mt-2 text-gray-400">
             {isLogin 
-              ? 'Sign in to your 1Track account' 
+              ? 'Sign in to your OneTrack account' 
               : 'Start tracking your TCG collection'
             }
           </p>
@@ -87,7 +87,7 @@ const Login = () => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-500">
                 Email address
               </label>
               <input
@@ -97,13 +97,14 @@ const Login = () => {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Enter your email"
+                disabled
+                className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-gray-500 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 cursor-not-allowed opacity-50"
+                placeholder="Email authentication disabled"
               />
             </div>
             
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-500">
                 Password
               </label>
               <input
@@ -113,14 +114,15 @@ const Login = () => {
                 required
                 value={formData.password}
                 onChange={handleChange}
-                className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Enter your password"
+                disabled
+                className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-gray-500 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 cursor-not-allowed opacity-50"
+                placeholder="Password authentication disabled"
               />
             </div>
 
             {!isLogin && (
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300">
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-500">
                   Confirm Password
                 </label>
                 <input
@@ -130,8 +132,9 @@ const Login = () => {
                   required
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Confirm your password"
+                  disabled
+                  className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-gray-500 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 cursor-not-allowed opacity-50"
+                  placeholder="Password authentication disabled"
                 />
               </div>
             )}
@@ -146,17 +149,10 @@ const Login = () => {
           <div className="space-y-3">
             <button
               type="submit"
-              disabled={loading}
-              className="w-full px-4 py-3 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={true}
+              className="w-full px-4 py-3 bg-gray-600 text-gray-400 rounded-xl cursor-not-allowed opacity-50"
             >
-              {loading ? (
-                <div className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  {isLogin ? 'Signing in...' : 'Creating account...'}
-                </div>
-              ) : (
-                isLogin ? 'Sign In' : 'Create Account'
-              )}
+              Sign In
             </button>
 
             {/* Divider */}
@@ -165,7 +161,7 @@ const Login = () => {
                 <div className="w-full border-t border-gray-700"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-black text-gray-400">Or continue with</span>
+                <span className="px-2 bg-gray-900 text-gray-400">Continue with</span>
               </div>
             </div>
 
@@ -184,40 +180,12 @@ const Login = () => {
           </div>
 
           <div className="text-center">
-            <button
-              type="button"
-              onClick={() => {
-                if (isLogin) {
-                  // Disable account creation for now
-                  setError('Account creation is temporarily disabled. Please use Discord to sign in.');
-                  return;
-                }
-                setIsLogin(!isLogin);
-                setError('');
-                setFormData({ email: '', password: '', confirmPassword: '' });
-              }}
-              className={`text-sm font-medium ${
-                isLogin 
-                  ? 'text-indigo-400 hover:text-indigo-300 cursor-pointer' 
-                  : 'text-indigo-400 hover:text-indigo-300 cursor-pointer'
-              }`}
-            >
-              {isLogin 
-                ? "Don't have an account? Sign up (Coming Soon)" 
-                : 'Already have an account? Sign in'
-              }
-            </button>
+            <p className="text-sm text-gray-500">
+              Account creation is temporarily disabled. Please sign in with Discord to continue using the app.
+            </p>
           </div>
         </form>
 
-        {/* Development Note */}
-        {window.location.hostname === 'localhost' && (
-          <div className="text-center">
-            <div className="text-xs text-gray-500 mt-2">
-              Discord OAuth: Make sure localhost:5175 is added to your Supabase Discord OAuth redirect URLs
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

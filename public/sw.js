@@ -1,6 +1,6 @@
-const CACHE_NAME = 'onetrack-v1.0.0';
-const STATIC_CACHE_NAME = 'onetrack-static-v1.0.0';
-const DYNAMIC_CACHE_NAME = 'onetrack-dynamic-v1.0.0';
+const CACHE_NAME = 'onetrack-v2.0.0';
+const STATIC_CACHE_NAME = 'onetrack-static-v2.0.0';
+const DYNAMIC_CACHE_NAME = 'onetrack-dynamic-v2.0.0';
 
 // Files to cache for offline functionality
 const STATIC_FILES = [
@@ -8,11 +8,9 @@ const STATIC_FILES = [
   '/search',
   '/settings',
   '/login',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
   '/manifest.json',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png'
+  '/icons/icon-192x192.svg',
+  '/icons/icon-512x512.svg'
 ];
 
 // API endpoints to cache
@@ -23,16 +21,12 @@ const API_CACHE_PATTERNS = [
 
 // Install event - cache static files
 self.addEventListener('install', (event) => {
-  console.log('Service Worker: Installing...');
-  
   event.waitUntil(
     caches.open(STATIC_CACHE_NAME)
       .then((cache) => {
-        console.log('Service Worker: Caching static files');
         return cache.addAll(STATIC_FILES);
       })
       .then(() => {
-        console.log('Service Worker: Static files cached');
         return self.skipWaiting();
       })
       .catch((error) => {
@@ -43,22 +37,18 @@ self.addEventListener('install', (event) => {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker: Activating...');
-  
   event.waitUntil(
     caches.keys()
       .then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
             if (cacheName !== STATIC_CACHE_NAME && cacheName !== DYNAMIC_CACHE_NAME) {
-              console.log('Service Worker: Deleting old cache', cacheName);
               return caches.delete(cacheName);
             }
           })
         );
       })
       .then(() => {
-        console.log('Service Worker: Activated');
         return self.clients.claim();
       })
   );
@@ -105,7 +95,6 @@ async function cacheFirst(request) {
     }
     return networkResponse;
   } catch (error) {
-    console.error('Cache first strategy failed:', error);
     return new Response('Offline - Resource not available', { status: 503 });
   }
 }
@@ -120,7 +109,6 @@ async function networkFirst(request) {
     }
     return networkResponse;
   } catch (error) {
-    console.log('Network failed, trying cache:', error);
     const cachedResponse = await caches.match(request);
     if (cachedResponse) {
       return cachedResponse;
@@ -135,7 +123,6 @@ async function navigationHandler(request) {
     const networkResponse = await fetch(request);
     return networkResponse;
   } catch (error) {
-    console.log('Navigation failed, serving offline page');
     const cachedResponse = await caches.match('/');
     if (cachedResponse) {
       return cachedResponse;
@@ -162,8 +149,6 @@ function isNavigationRequest(request) {
 
 // Background sync for offline actions
 self.addEventListener('sync', (event) => {
-  console.log('Service Worker: Background sync triggered', event.tag);
-  
   if (event.tag === 'background-sync') {
     event.waitUntil(doBackgroundSync());
   }
@@ -172,7 +157,6 @@ self.addEventListener('sync', (event) => {
 async function doBackgroundSync() {
   try {
     // Handle any pending offline actions
-    console.log('Service Worker: Performing background sync');
     // Add your background sync logic here
   } catch (error) {
     console.error('Service Worker: Background sync failed', error);
@@ -181,12 +165,10 @@ async function doBackgroundSync() {
 
 // Push notifications
 self.addEventListener('push', (event) => {
-  console.log('Service Worker: Push notification received');
-  
   const options = {
     body: event.data ? event.data.text() : 'New update available',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-72x72.png',
+    icon: '/icons/icon-192x192.svg',
+    badge: '/icons/icon-72x72.svg',
     vibrate: [100, 50, 100],
     data: {
       dateOfArrival: Date.now(),
@@ -196,12 +178,12 @@ self.addEventListener('push', (event) => {
       {
         action: 'explore',
         title: 'View Collection',
-        icon: '/icons/icon-96x96.png'
+        icon: '/icons/icon-96x96.svg'
       },
       {
         action: 'close',
         title: 'Close',
-        icon: '/icons/icon-96x96.png'
+        icon: '/icons/icon-96x96.svg'
       }
     ]
   };
@@ -213,8 +195,6 @@ self.addEventListener('push', (event) => {
 
 // Notification click handler
 self.addEventListener('notificationclick', (event) => {
-  console.log('Service Worker: Notification clicked');
-  
   event.notification.close();
 
   if (event.action === 'explore') {

@@ -1,26 +1,26 @@
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
-    </linearGradient>
+    <!-- Chromatic aberration effect filters -->
+    <filter id="chromaticAberration" x="-50%" y="-50%" width="200%" height="200%">
+      <feOffset in="SourceGraphic" dx="2" dy="0" result="red">
+        <feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/>
+      </feOffset>
+      <feOffset in="SourceGraphic" dx="-2" dy="0" result="blue">
+        <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"/>
+      </feOffset>
+      <feOffset in="SourceGraphic" dx="0" dy="0" result="green">
+        <feColorMatrix type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"/>
+      </feOffset>
+      <feComposite in="red" in2="blue" operator="screen"/>
+      <feComposite in="SourceGraphic" in2="green" operator="screen"/>
+    </filter>
   </defs>
   
-  <!-- Background -->
-  <rect width="512" height="512" rx="80" fill="#111827"/>
+  <!-- Background with rounded corners (squircle) -->
+  <rect width="512" height="512" rx="80" fill="#4f46e5"/>
   
-  <!-- Main icon - stylized "1T" -->
+  <!-- Main "1T" text with chromatic aberration effect -->
   <g transform="translate(256, 256)">
-    <!-- Circle background -->
-    <circle cx="0" cy="0" r="180" fill="url(#gradient)"/>
-    
-    <!-- "1T" text -->
-    <text x="0" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="200" font-weight="bold" fill="white">1T</text>
-    
-    <!-- Decorative elements -->
-    <circle cx="-120" cy="-120" r="8" fill="white" opacity="0.3"/>
-    <circle cx="120" cy="-120" r="6" fill="white" opacity="0.2"/>
-    <circle cx="-120" cy="120" r="6" fill="white" opacity="0.2"/>
-    <circle cx="120" cy="120" r="8" fill="white" opacity="0.3"/>
+    <text x="0" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="200" font-weight="bold" fill="white" filter="url(#chromaticAberration)">1T</text>
   </g>
 </svg>

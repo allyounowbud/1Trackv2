@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { getItemDisplayName, getItemSetName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
+import { queryKeys } from '../lib/queryClient';
 
 
 // Simple data fetching - just one table!
@@ -98,13 +99,13 @@ const Collection = () => {
   }, []);
 
   // Fetch data
-  const { data: orders = [], isLoading: ordersLoading, refetch: refetchOrders } = useQuery({
-    queryKey: ['orders'],
+  const { data: orders = [], isLoading: ordersLoading, isFetching: ordersFetching, refetch: refetchOrders } = useQuery({
+    queryKey: queryKeys.orders,
     queryFn: getOrders,
   });
 
-  const { data: collectionSummary = [], isLoading: summaryLoading, refetch: refetchSummary } = useQuery({
-    queryKey: ['collectionSummary'],
+  const { data: collectionSummary = [], isLoading: summaryLoading, isFetching: summaryFetching, refetch: refetchSummary } = useQuery({
+    queryKey: queryKeys.collectionSummary,
     queryFn: getCollectionSummary,
   });
 
@@ -149,17 +150,7 @@ const Collection = () => {
 
   // Handle delete product - show orders for selection
   const handleDeleteProduct = (itemId) => {
-    console.log('🔍 Debug - handleDeleteProduct called with itemId:', itemId);
-    console.log('🔍 Debug - All orders:', orders);
-    console.log('🔍 Debug - Orders with item_id field:', orders.map(order => ({
-      id: order.id,
-      item_id: order.item_id,
-      item_name: order.item_name
-    })));
-    console.log('🔍 Debug - All item_id values:', orders.map(order => order.item_id));
-    
     const itemOrders = orders.filter(order => order.item_id === itemId);
-    console.log('🔍 Debug - Filtered itemOrders:', itemOrders);
     
     setOrdersToDelete(itemOrders);
     setShowDeleteModal(true);
@@ -272,36 +263,7 @@ const Collection = () => {
     const totalProfit = totalProfitCents / 100;
     const profitPercentage = totalPaid > 0 ? (totalProfit / totalPaid) * 100 : 0;
 
-    // Debug: Log profit calculation
-    console.log('💰 Profit Debug:', {
-      totalValueCents,
-      totalPaidCents,
-      totalProfitCents,
-      totalValue,
-      totalPaid,
-      totalProfit,
-      profitPercentage,
-      ordersWithMarketData: orders.map(order => ({
-        item_name: order.item_name,
-        market_value_cents: order.market_value_cents,
-        buy_quantity: order.buy_quantity,
-        total_cost_cents: order.total_cost_cents,
-        is_sold: order.is_sold,
-        calculatedMarketValue: (order.market_value_cents || 0) * order.buy_quantity,
-        calculatedProfit: order.is_sold ? (order.net_profit_cents || 0) : ((order.market_value_cents || 0) * order.buy_quantity - (order.total_cost_cents || 0))
-      }))
-    });
 
-    // Debug: Log orders data to see what we're working with
-    console.log('🔍 Debug - Orders data:', orders.map(order => ({
-      item_name: order.item_name,
-      item_type: order.item_type,
-      buy_quantity: order.buy_quantity,
-      is_sold: order.is_sold
-    })));
-    
-    // Debug: Show all item_type values
-    console.log('🔍 Debug - All item_type values:', orders.map(order => order.item_type));
     
     // Debug: Log filtered orders for each category
     const ungradedOrders = orders.filter(order => 
@@ -323,16 +285,6 @@ const Collection = () => {
       )
     );
     
-    console.log('🔍 Debug - Ungraded orders:', ungradedOrders.map(order => ({
-      item_name: order.item_name,
-      item_type: order.item_type,
-      buy_quantity: order.buy_quantity
-    })));
-    console.log('🔍 Debug - Sealed orders:', sealedOrders.map(order => ({
-      item_name: order.item_name,
-      item_type: order.item_type,
-      buy_quantity: order.buy_quantity
-    })));
 
     // Count items by type - sum quantities, not order count
     const ungradedCount = orders
@@ -583,9 +535,14 @@ const Collection = () => {
       {/* Header */}
       <div className="px-4 py-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-white">OneTrack</h1>
-                </div>
-              </div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold text-white">OneTrack</h1>
+            {(ordersFetching || summaryFetching) && (
+              <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Collection Value Section */}
       <div className="px-4 py-3">
@@ -791,7 +748,7 @@ const Collection = () => {
           <div className="flex items-center justify-between mb-2">
             <div>
               <div className="flex items-center gap-1">
-                <span className="text-xs font-medium text-white">Collected Items •</span>
+                <span className="text-xs font-medium text-white">Collection •</span>
                 <div className="relative" ref={filterDropdownRef}>
                   <button 
                     onClick={() => setShowFilterDropdown(!showFilterDropdown)}
@@ -842,7 +799,7 @@ const Collection = () => {
                         .reduce((sum, item) => sum + (item.value * item.quantity), 0)
                 )}
               </span></div>
-              <div className="text-xs text-gray-400">Press + Hold To Multi-Select</div>
+              <div className="text-xs text-gray-400">Press + Hold To Select</div>
             </div>
           </div>
 
