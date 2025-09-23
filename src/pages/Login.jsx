@@ -69,7 +69,7 @@ const Login = () => {
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <span className="text-white font-bold text-2xl">1T</span>
           </div>
           <h2 className="text-3xl font-bold text-white">
@@ -97,7 +97,7 @@ const Login = () => {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter your email"
               />
             </div>
@@ -113,7 +113,7 @@ const Login = () => {
                 required
                 value={formData.password}
                 onChange={handleChange}
-                className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Enter your password"
               />
             </div>
@@ -130,7 +130,7 @@ const Login = () => {
                   required
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="mt-1 w-full px-4 py-3 bg-gray-800 border-0 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="Confirm your password"
                 />
               </div>
@@ -147,7 +147,7 @@ const Login = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full px-4 py-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <div className="flex items-center justify-center">
@@ -187,36 +187,37 @@ const Login = () => {
             <button
               type="button"
               onClick={() => {
+                if (isLogin) {
+                  // Disable account creation for now
+                  setError('Account creation is temporarily disabled. Please use Discord to sign in.');
+                  return;
+                }
                 setIsLogin(!isLogin);
                 setError('');
                 setFormData({ email: '', password: '', confirmPassword: '' });
               }}
-              className="text-emerald-400 hover:text-emerald-300 text-sm font-medium"
+              className={`text-sm font-medium ${
+                isLogin 
+                  ? 'text-indigo-400 hover:text-indigo-300 cursor-pointer' 
+                  : 'text-indigo-400 hover:text-indigo-300 cursor-pointer'
+              }`}
             >
               {isLogin 
-                ? "Don't have an account? Sign up" 
+                ? "Don't have an account? Sign up (Coming Soon)" 
                 : 'Already have an account? Sign in'
               }
             </button>
           </div>
         </form>
 
-        {/* Demo Mode */}
-        <div className="text-center space-y-2">
-          <button
-            onClick={() => navigate('/')}
-            className="text-gray-400 hover:text-gray-300 text-sm"
-          >
-            Continue in demo mode
-          </button>
-          
-          {/* Development Note */}
-          {window.location.hostname === 'localhost' && (
+        {/* Development Note */}
+        {window.location.hostname === 'localhost' && (
+          <div className="text-center">
             <div className="text-xs text-gray-500 mt-2">
               Discord OAuth: Make sure localhost:5175 is added to your Supabase Discord OAuth redirect URLs
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
