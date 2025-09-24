@@ -30,7 +30,10 @@ self.addEventListener('install', (event) => {
         return self.skipWaiting();
       })
       .catch((error) => {
-        console.error('Service Worker: Failed to cache static files', error);
+        // Suppress common caching errors that don't affect functionality
+        if (!error.message.includes('Failed to fetch')) {
+          console.error('Service Worker: Failed to cache static files', error);
+        }
       })
   );
 });
@@ -164,6 +167,19 @@ async function doBackgroundSync() {
 }
 
 // Push notifications
+// Handle messages from main thread
+self.addEventListener('message', (event) => {
+  // Handle messages from the main thread
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  
+  // Send response back to prevent message channel errors
+  if (event.ports && event.ports[0]) {
+    event.ports[0].postMessage({ success: true });
+  }
+});
+
 self.addEventListener('push', (event) => {
   const options = {
     body: event.data ? event.data.text() : 'New update available',

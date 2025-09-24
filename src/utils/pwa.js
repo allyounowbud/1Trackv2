@@ -155,3 +155,30 @@ export const initializePWA = async () => {
     console.error('PWA initialization failed:', error);
   }
 };
+
+// Handle unhandled promise rejections (common with service workers)
+window.addEventListener('unhandledrejection', (event) => {
+  // Check if it's the common service worker message channel error
+  if (event.reason && event.reason.message && 
+      event.reason.message.includes('message channel closed')) {
+    // Suppress this specific error as it's usually harmless
+    event.preventDefault();
+    return;
+  }
+  
+  // Log other unhandled rejections
+  console.error('Unhandled promise rejection:', event.reason);
+});
+
+// Handle service worker errors
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    // Handle service worker messages
+    console.log('Service Worker message:', event.data);
+  });
+  
+  navigator.serviceWorker.addEventListener('error', (event) => {
+    // Handle service worker errors
+    console.error('Service Worker error:', event.error);
+  });
+}
