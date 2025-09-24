@@ -1,7 +1,7 @@
 {
   "name": "OneTrack - TCG Collection Tracker",
   "short_name": "OneTrack",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Track your TCG collection with real-time market values and comprehensive analytics",
   "start_url": "/",
   "display": "standalone",

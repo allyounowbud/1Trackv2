@@ -1,6 +1,6 @@
-const CACHE_NAME = 'onetrack-v2.1.0';
-const STATIC_CACHE_NAME = 'onetrack-static-v2.1.0';
-const DYNAMIC_CACHE_NAME = 'onetrack-dynamic-v2.1.0';
+const CACHE_NAME = 'onetrack-v2.2.0';
+const STATIC_CACHE_NAME = 'onetrack-static-v2.2.0';
+const DYNAMIC_CACHE_NAME = 'onetrack-dynamic-v2.2.0';
 
 // Files to cache for offline functionality
 const STATIC_FILES = [
@@ -45,9 +45,8 @@ self.addEventListener('activate', (event) => {
       .then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
-            if (cacheName !== STATIC_CACHE_NAME && cacheName !== DYNAMIC_CACHE_NAME) {
-              return caches.delete(cacheName);
-            }
+            // Delete ALL old caches to force fresh download
+            return caches.delete(cacheName);
           })
         );
       })
