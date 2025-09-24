@@ -181,43 +181,55 @@
     padding-bottom: calc(80px + env(safe-area-inset-bottom)); /* Height of bottom navigation + safe area */
   }
   
-  /* Bottom navigation - absolutely locked to viewport bottom */
+  /* FOOLPROOF BOTTOM NAVIGATION - ABSOLUTELY LOCKED TO VIEWPORT */
   .bottom-nav-fixed {
-    /* Force absolute positioning to viewport */
+    /* CRITICAL: Force absolute positioning to viewport */
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    z-index: 9999 !important;
+    z-index: 999999 !important;
     
-    /* Lock dimensions */
+    /* CRITICAL: Lock exact dimensions */
     height: 80px !important;
     width: 100vw !important;
     max-width: 100vw !important;
+    min-height: 80px !important;
+    max-height: 80px !important;
     
-    /* Remove all transforms and movement */
+    /* CRITICAL: Remove ALL transforms and movement */
     transform: none !important;
     -webkit-transform: none !important;
     will-change: auto !important;
     
-    /* Prevent any browser interference */
+    /* CRITICAL: Prevent any browser interference */
     -webkit-backface-visibility: hidden !important;
     backface-visibility: hidden !important;
     -webkit-perspective: 1000 !important;
     perspective: 1000 !important;
     
-    /* Override any browser defaults */
+    /* CRITICAL: Override ALL browser defaults */
     top: auto !important;
     margin: 0 !important;
     padding: 0 !important;
+    border: none !important;
+    outline: none !important;
     
-    /* Force it to stay at viewport bottom */
+    /* CRITICAL: Force it to stay at viewport bottom */
     position: -webkit-sticky !important;
     position: sticky !important;
     
-    /* Prevent any scroll interference */
+    /* CRITICAL: Prevent any scroll interference */
     overscroll-behavior: none !important;
     -webkit-overscroll-behavior: none !important;
+    
+    /* CRITICAL: Create new stacking context */
+    isolation: isolate !important;
+    contain: layout style paint !important;
+    
+    /* CRITICAL: Force hardware acceleration without transforms */
+    -webkit-transform: translateZ(0) !important;
+    transform: translateZ(0) !important;
   }
 
   /* Modal overlay fixes - must be higher than bottom navigation */
@@ -249,59 +261,40 @@
   body {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    /* Prevent any scroll behavior that could affect fixed elements */
-    overscroll-behavior: none;
-    -webkit-overscroll-behavior: none;
-    /* Prevent scroll bounce */
-    overscroll-behavior-y: none;
-    -webkit-overscroll-behavior-y: none;
   }
   
   /* Ensure the main content area doesn't interfere with bottom nav */
   html, body {
-    /* Prevent any scroll bounce or elastic scrolling on iOS */
-    overscroll-behavior-y: none;
-    -webkit-overscroll-behavior-y: none;
-    /* Prevent any scroll interference with fixed elements */
-    overscroll-behavior: none;
-    -webkit-overscroll-behavior: none;
+    /* Allow normal scrolling */
+    overflow-y: auto;
   }
   
   /* PWA-specific body fixes */
   @media (display-mode: standalone) {
     body {
-      /* PWA mode - prevent any scroll interference */
-      overscroll-behavior: none !important;
-      -webkit-overscroll-behavior: none !important;
-      /* Prevent elastic scrolling */
-      overscroll-behavior-y: none !important;
-      -webkit-overscroll-behavior-y: none !important;
-      /* Ensure body doesn't affect fixed elements */
-      position: relative !important;
-      overflow-x: hidden !important;
+      /* PWA mode - allow normal scrolling */
+      overflow-x: hidden;
+      overflow-y: auto;
     }
     
     html {
-      /* Ensure html doesn't affect fixed elements */
-      position: relative !important;
-      overflow-x: hidden !important;
+      /* PWA mode - allow normal scrolling */
+      overflow-x: hidden;
+      overflow-y: auto;
     }
   }
   
-  /* Force bottom navigation to be completely separate from content */
+  /* Allow normal scrolling */
   body {
-    /* Prevent body from affecting fixed elements */
-    position: relative !important;
-    overflow-x: hidden !important;
-    /* Ensure no scroll interference */
-    overscroll-behavior: none !important;
-    -webkit-overscroll-behavior: none !important;
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
   
   html {
-    /* Ensure html doesn't affect fixed elements */
-    position: relative !important;
-    overflow-x: hidden !important;
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
   
   /* PWA-specific fixes for bottom navigation */
@@ -363,24 +356,43 @@
     }
   }
   
-  /* Force bottom navigation to be completely isolated from content */
+  /* FOOLPROOF: Force bottom navigation to be completely isolated from content */
   .bottom-nav-fixed {
-    /* Create new stacking context */
+    /* CRITICAL: Create new stacking context */
     isolation: isolate !important;
     contain: layout style paint !important;
-    /* Force it to be completely separate */
+    /* CRITICAL: Force it to be completely separate */
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    z-index: 9999 !important;
-    /* Lock to viewport */
+    z-index: 999999 !important;
+    /* CRITICAL: Lock to viewport */
     height: 80px !important;
     width: 100vw !important;
-    /* No transforms or movement */
+    /* CRITICAL: No transforms or movement */
     transform: none !important;
     -webkit-transform: none !important;
     will-change: auto !important;
+    /* CRITICAL: Force it to stay at bottom */
+    top: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  /* Mobile scrolling */
+  @media (max-width: 768px) {
+    body {
+      position: relative;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+    
+    html {
+      position: relative;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
   }
   
   /* Fix for iOS Safari bottom bar issues */
