@@ -232,29 +232,48 @@ const Search = () => {
         filter: filterBy
       });
       
-      // Fetch all results for this expansion with a timeout
-      const fetchPromise = fetchAllExpansionResults(expansionId, sortBy, filterBy);
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Expansion fetch timeout')), 15000) // 15 second timeout
-      );
+      // Fetch cards and products separately for progressive loading
+      const cardsPromise = tcgGoApiService.getExpansionCards(expansionId, sortBy, 50).catch(() => []);
+      const productsPromise = tcgGoApiService.getExpansionProducts(expansionId, sortBy, 20).catch(() => []);
       
-      const allItems = await Promise.race([fetchPromise, timeoutPromise]);
+      // Show cards first (usually faster)
+      const cards = await cardsPromise;
+      if (cards && cards.length > 0) {
+        setAllResults(cards);
+        setCurrentPage(1);
+        setHasMore(false);
+      }
       
-      if (allItems && allItems.length > 0) {
+      // Then add products
+      const products = await productsPromise;
+      if (products && products.length > 0) {
+        const combinedResults = [...(cards || []), ...products];
         
-        // Store all results
-        setAllResults(allItems);
-        setTotalAvailableResults(allItems.length);
+        // Apply filtering
+        let filteredResults = combinedResults;
+        if (filterBy !== 'all') {
+          filteredResults = combinedResults.filter(item => {
+            if (filterBy === 'sealed') return item.type === 'sealed';
+            if (filterBy === 'singles') return item.type === 'singles';
+            return true;
+          });
+        }
+        
+        // Apply sorting
+        const sortedResults = sortResults(filteredResults, sortBy);
+        
+        setAllResults(sortedResults);
+        setTotalAvailableResults(sortedResults.length);
         
         // Show first page of results
-        const firstPageResults = allItems.slice(0, resultsPerPage);
+        const firstPageResults = sortedResults.slice(0, resultsPerPage);
         setDisplayedResults(firstPageResults);
         setSearchResults(firstPageResults);
-        setTotalResults(allItems.length);
+        setTotalResults(sortedResults.length);
         
         // Set pagination state
         setCurrentPage(1);
-        setHasMoreResults(allItems.length > resultsPerPage);
+        setHasMoreResults(sortedResults.length > resultsPerPage);
         
       } else {
         setSearchResults([]);

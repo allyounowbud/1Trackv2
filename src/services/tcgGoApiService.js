@@ -234,74 +234,46 @@ class TCGGoApiService {
    * Get cards from expansion with pagination
    * GET /pokemon/episodes/{id}/cards?sort={sort}
    */
-  async getExpansionCards(expansionId, sort = 'price_highest', maxResults = null) {
+  async getExpansionCards(expansionId, sort = 'price_highest', maxResults = 50) {
     const cacheKey = `expansion_cards_${expansionId}_${sort}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) return cached;
 
     try {
-      let allCards = [];
-      let currentPage = 1;
-      let totalPages = 1;
+      // Limit to first page only for faster loading (50 cards max)
+      const responseData = await this.makeRequest(`/pokemon/episodes/${expansionId}/cards?sort=${sort}&page=1`);
       
-      do {
-        const responseData = await this.makeRequest(`/pokemon/episodes/${expansionId}/cards?sort=${sort}&page=${currentPage}`);
-        // console.log(`🔍 Raw expansion cards API response (page ${currentPage}):`, responseData);
-        
-        // Handle different response structures
-        let data;
-        if (Array.isArray(responseData)) {
-          data = responseData;
-        } else if (responseData.data && Array.isArray(responseData.data)) {
-          data = responseData.data;
-        } else if (responseData.results && Array.isArray(responseData.results)) {
-          data = responseData.results;
-        } else {
-          console.error('❌ Unexpected expansion cards API response structure:', responseData);
-          break;
-        }
-        
-        // Add cards from this page
-        allCards = allCards.concat(data);
-        
-        // Check if we've reached the max results limit (if specified)
-        if (maxResults && allCards.length >= maxResults) {
-          allCards = allCards.slice(0, maxResults);
-          break;
-        }
-        
-        // Check pagination info
-        if (responseData.paging) {
-          totalPages = responseData.paging.total || 1;
-          currentPage++;
-        } else {
-          break; // No pagination info, assume single page
-        }
-        
-        
-      } while (currentPage <= totalPages && (!maxResults || allCards.length < maxResults));
-      
-      // Format all cards data
-      const formattedCards = [];
-      const failedCards = [];
-      
-      for (const card of allCards) {
-        try {
-          const formatted = await this.formatCard(card);
-          if (formatted) {
-            formattedCards.push(formatted);
-          } else {
-            failedCards.push(card);
-            console.log(`❌ Failed to format card: ${card.name || 'Unknown'} (ID: ${card.id || 'Unknown'})`);
-          }
-        } catch (error) {
-          failedCards.push(card);
-          console.log(`❌ Error formatting card: ${card.name || 'Unknown'} (ID: ${card.id || 'Unknown'})`, error);
-        }
+      // Handle different response structures
+      let data;
+      if (Array.isArray(responseData)) {
+        data = responseData;
+      } else if (responseData.data && Array.isArray(responseData.data)) {
+        data = responseData.data;
+      } else if (responseData.results && Array.isArray(responseData.results)) {
+        data = responseData.results;
+      } else {
+        console.error('❌ Unexpected expansion cards API response structure:', responseData);
+        return [];
       }
       
-      if (failedCards.length > 0) {
-        console.log(`⚠️ ${failedCards.length} cards failed to format out of ${allCards.length} total cards`);
+      // Limit results for faster processing
+      const allCards = data.slice(0, maxResults);
+      
+      // Format all cards data in parallel for much faster processing
+      const formatPromises = allCards.map(async (card) => {
+        try {
+          return await this.formatCard(card);
+        } catch (error) {
+          console.log(`❌ Error formatting card: ${card.name || 'Unknown'}`, error.message);
+          return null;
+        }
+      });
+      
+      const formattedResults = await Promise.all(formatPromises);
+      const formattedCards = formattedResults.filter(card => card !== null);
+      
+      if (formattedCards.length < allCards.length) {
+        console.log(`⚠️ ${allCards.length - formattedCards.length} cards failed to format out of ${allCards.length} total cards`);
       }
 
       this.setCache(cacheKey, formattedCards);
@@ -316,74 +288,46 @@ class TCGGoApiService {
    * Get products from expansion with pagination
    * GET /pokemon/episodes/{id}/products?sort={sort}
    */
-  async getExpansionProducts(expansionId, sort = 'price_highest', maxResults = null) {
+  async getExpansionProducts(expansionId, sort = 'price_highest', maxResults = 20) {
     const cacheKey = `expansion_products_${expansionId}_${sort}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) return cached;
 
     try {
-      let allProducts = [];
-      let currentPage = 1;
-      let totalPages = 1;
+      // Limit to first page only for faster loading (20 products max)
+      const responseData = await this.makeRequest(`/pokemon/episodes/${expansionId}/products?sort=${sort}&page=1`);
       
-      do {
-        const responseData = await this.makeRequest(`/pokemon/episodes/${expansionId}/products?sort=${sort}&page=${currentPage}`);
-        // console.log(`🔍 Raw expansion products API response (page ${currentPage}):`, responseData);
-        
-        // Handle different response structures
-        let data;
-        if (Array.isArray(responseData)) {
-          data = responseData;
-        } else if (responseData.data && Array.isArray(responseData.data)) {
-          data = responseData.data;
-        } else if (responseData.results && Array.isArray(responseData.results)) {
-          data = responseData.results;
-        } else {
-          console.error('❌ Unexpected expansion products API response structure:', responseData);
-          break;
-        }
-        
-        // Add products from this page
-        allProducts = allProducts.concat(data);
-        
-        // Check if we've reached the max results limit (if specified)
-        if (maxResults && allProducts.length >= maxResults) {
-          allProducts = allProducts.slice(0, maxResults);
-          break;
-        }
-        
-        // Check pagination info
-        if (responseData.paging) {
-          totalPages = responseData.paging.total || 1;
-          currentPage++;
-        } else {
-          break; // No pagination info, assume single page
-        }
-        
-        
-      } while (currentPage <= totalPages && (!maxResults || allProducts.length < maxResults));
-      
-      // Format all products data
-      const formattedProducts = [];
-      const failedProducts = [];
-      
-      for (const product of allProducts) {
-        try {
-          const formatted = await this.formatProduct(product);
-          if (formatted) {
-            formattedProducts.push(formatted);
-          } else {
-            failedProducts.push(product);
-            console.log(`❌ Failed to format product: ${product.name || 'Unknown'} (ID: ${product.id || 'Unknown'})`);
-          }
-        } catch (error) {
-          failedProducts.push(product);
-          console.log(`❌ Error formatting product: ${product.name || 'Unknown'} (ID: ${product.id || 'Unknown'})`, error);
-        }
+      // Handle different response structures
+      let data;
+      if (Array.isArray(responseData)) {
+        data = responseData;
+      } else if (responseData.data && Array.isArray(responseData.data)) {
+        data = responseData.data;
+      } else if (responseData.results && Array.isArray(responseData.results)) {
+        data = responseData.results;
+      } else {
+        console.error('❌ Unexpected expansion products API response structure:', responseData);
+        return [];
       }
       
-      if (failedProducts.length > 0) {
-        console.log(`⚠️ ${failedProducts.length} products failed to format out of ${allProducts.length} total products`);
+      // Limit results for faster processing
+      const allProducts = data.slice(0, maxResults);
+      
+      // Format all products data in parallel for much faster processing
+      const formatPromises = allProducts.map(async (product) => {
+        try {
+          return await this.formatProduct(product);
+        } catch (error) {
+          console.log(`❌ Error formatting product: ${product.name || 'Unknown'}`, error.message);
+          return null;
+        }
+      });
+      
+      const formattedResults = await Promise.all(formatPromises);
+      const formattedProducts = formattedResults.filter(product => product !== null);
+      
+      if (formattedProducts.length < allProducts.length) {
+        console.log(`⚠️ ${allProducts.length - formattedProducts.length} products failed to format out of ${allProducts.length} total products`);
       }
 
       this.setCache(cacheKey, formattedProducts);
