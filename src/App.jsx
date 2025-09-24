@@ -8,6 +8,7 @@ import Collection from './pages/Collection';
 import Search from './pages/Search';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import LoadingScreen from './components/LoadingScreen';
 import './index.css';
 
 // Auth Guard Component
@@ -15,11 +16,7 @@ function AuthGuard({ children }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
-    );
+    return <LoadingScreen message="Loading your collection..." />;
   }
 
   if (!user) {

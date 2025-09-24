@@ -248,7 +248,7 @@ const Settings = () => {
                 {loading ? 'Signing Out...' : 'Sign Out'}
               </button>
             </div>
-          </div>
+      </div>
         </div>
       )}
     </div>

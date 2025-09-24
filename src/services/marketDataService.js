@@ -42,8 +42,8 @@ class MarketDataService {
   // Helper method to make API calls
   async makeApiCall(url, options = {}, apiType = 'cardmarket') {
     const response = await fetch(url, options);
-
-    if (!response.ok) {
+      
+      if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
@@ -88,7 +88,7 @@ class MarketDataService {
           'X-RapidAPI-Host': 'cardmarket-api-tcg.p.rapidapi.com'
         }
       }, 'cardmarket');
-
+      
       const data = await response.json();
       console.log(`✅ Fetched ${data.length} expansions`);
 
@@ -117,25 +117,25 @@ class MarketDataService {
 
     if (!this.rapidApiKey) {
       throw new Error('RapidAPI key not available for expansion search');
-    }
-
-    try {
+  }
+  
+  try {
       console.log(`🔍 Searching expansions for: "${searchTerm}"`);
       
       const encodedSearch = encodeURIComponent(searchTerm);
       const response = await fetch(`${this.cardMarketBaseUrl}/pokemon/episodes/search?search=${encodedSearch}&rapidapi-key=${this.rapidApiKey}`, {
         method: 'GET',
-        headers: {
+      headers: {
           'X-RapidAPI-Key': this.rapidApiKey,
           'X-RapidAPI-Host': 'cardmarket-api-tcg.p.rapidapi.com'
         }
-      });
-
-      if (!response.ok) {
+    });
+    
+    if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+    }
+    
+    const data = await response.json();
       console.log(`✅ Found ${data.length} matching expansions`);
 
       // Cache the results
@@ -175,11 +175,11 @@ class MarketDataService {
           'X-RapidAPI-Host': 'cardmarket-api-tcg.p.rapidapi.com'
         }
       });
-
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
+      
       const data = await response.json();
       console.log(`✅ Fetched ${data.length} cards from expansion`);
 
@@ -192,7 +192,7 @@ class MarketDataService {
       this.setCache(cacheKey, formattedCards);
       return formattedCards;
 
-    } catch (error) {
+  } catch (error) {
       console.error('❌ Error fetching expansion cards:', error);
       throw error;
     }

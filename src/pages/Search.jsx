@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import tcgGoApiService from '../services/tcgGoApiService';
 import ProductPreviewModal from '../components/ProductPreviewModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
-import { getCleanItemName } from '../utils/nameUtils';
+import { getCleanItemName, getCardDisplayName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryClient';
@@ -33,11 +33,101 @@ const Search = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMoreResults, setHasMoreResults] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [expansionInfo, setExpansionInfo] = useState(null);
+  const [totalAvailableResults, setTotalAvailableResults] = useState(0);
+  const loadMoreTimeoutRef = useRef(null);
   const sortDropdownRef = useRef(null);
   const filterDropdownRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const resultsPerPage = 30;
   const maxResults = 500; // Increased max results to show all expansion items
+
+  // Sort results based on sortBy option
+  const sortResults = useCallback((results, sortOption) => {
+    if (!results || results.length === 0) return results;
+
+    const sortedResults = [...results];
+
+    switch (sortOption) {
+      case 'price-high':
+        return sortedResults.sort((a, b) => (b.marketValue || 0) - (a.marketValue || 0));
+      case 'price-low':
+        return sortedResults.sort((a, b) => (a.marketValue || 0) - (b.marketValue || 0));
+      case 'alphabetical':
+        return sortedResults.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      case 'recent':
+        // For now, just return as-is since we don't have date data
+        return sortedResults;
+      case 'relevance':
+      default:
+        // Smart default sorting: singles by card number (highest first), sealed by price (lowest first)
+        return sortedResults.sort((a, b) => {
+          // If both are singles (cards), sort by card number (highest first)
+          if (a.type !== 'product' && b.type !== 'product') {
+            const aCardNumber = parseInt(a.details?.cardNumber) || 0;
+            const bCardNumber = parseInt(b.details?.cardNumber) || 0;
+            return bCardNumber - aCardNumber; // Highest card number first
+          }
+          
+          // If both are sealed products, sort by price (lowest first)
+          if (a.type === 'product' && b.type === 'product') {
+            return (a.marketValue || 0) - (b.marketValue || 0); // Lowest price first
+          }
+          
+          // Mixed types: singles first, then sealed
+          if (a.type !== 'product' && b.type === 'product') return -1;
+          if (a.type === 'product' && b.type !== 'product') return 1;
+          
+          return 0;
+        });
+    }
+  }, []);
+
+  // Fetch all expansion results and handle pagination
+  const fetchAllExpansionResults = useCallback(async (expansionId, sort, filter) => {
+    try {
+      console.log(`Fetching all results for expansion ${expansionId}`);
+      
+      // Check cache first
+      const cacheKey = `expansion_all_${expansionId}_${sort}_${filter}`;
+      const cached = localStorage.getItem(cacheKey);
+      
+      if (cached) {
+        console.log('Using cached expansion results');
+        return JSON.parse(cached);
+      }
+
+      // Fetch all cards and products
+      const [cards, products] = await Promise.all([
+        tcgGoApiService.getExpansionCards(expansionId, sort).catch(() => []),
+        tcgGoApiService.getExpansionProducts(expansionId, sort).catch(() => [])
+      ]);
+
+      // Combine results
+      let allItems = [...cards, ...products];
+
+      // Apply filtering
+      if (filter !== 'all') {
+        allItems = allItems.filter(item => {
+          if (filter === 'sealed') return item.type === 'sealed';
+          if (filter === 'singles') return item.type === 'singles';
+          return true;
+        });
+      }
+
+      // Apply sorting
+      allItems = sortResults(allItems, sort);
+
+      // Cache results
+      localStorage.setItem(cacheKey, JSON.stringify(allItems));
+      
+      console.log(`Fetched ${allItems.length} total results for expansion ${expansionId}`);
+      return allItems;
+    } catch (error) {
+      console.error('Error fetching expansion results:', error);
+      return [];
+    }
+  }, [sortResults]);
 
   // Load popular expansions using search API for better image data
   const loadPopularExpansions = async () => {
@@ -139,19 +229,45 @@ const Search = () => {
     setSearchQuery(expansion.name);
     
     try {
+      // Store expansion info for pagination
+      setExpansionInfo({
+        id: expansionId,
+        name: expansion.name,
+        sort: sortBy,
+        filter: filterBy
+      });
       
-      // Use the expansion all API (cards + products)
-      const allItems = await tcgGoApiService.getExpansionAll(expansionId, 'price_highest');
+      // Fetch all results for this expansion
+      const allItems = await fetchAllExpansionResults(expansionId, sortBy, filterBy);
       
       if (allItems && allItems.length > 0) {
-        console.log(`✅ Found ${allItems.length} total items (cards + products) in ${expansion.name}`);
-        setSearchResults(allItems);
+        console.log(`✅ Found ${allItems.length} total items from ${expansion.name}`);
+        
+        // Store all results
+        setAllResults(allItems);
+        setTotalAvailableResults(allItems.length);
+        
+        // Show first page of results
+        const firstPageResults = allItems.slice(0, resultsPerPage);
+        setDisplayedResults(firstPageResults);
+        setSearchResults(firstPageResults);
         setTotalResults(allItems.length);
+        
+        // Set pagination state
         setCurrentPage(1);
+        setHasMoreResults(allItems.length > resultsPerPage);
+        
+        console.log(`✅ Expansion browse started: showing ${firstPageResults.length} of ${allItems.length} results`);
+        console.log(`📊 Pagination state - hasMoreResults: ${allItems.length > resultsPerPage}, allItems.length: ${allItems.length}, resultsPerPage: ${resultsPerPage}`);
       } else {
         console.log(`❌ No items found for ${expansion.name}`);
         setSearchResults([]);
+        setAllResults([]);
+        setDisplayedResults([]);
         setTotalResults(0);
+        setTotalAvailableResults(0);
+        setHasMoreResults(false);
+        setCurrentPage(1);
       }
     } catch (error) {
       console.error('❌ Error browsing expansion items:', error);
@@ -161,6 +277,7 @@ const Search = () => {
       setIsLoading(false);
     }
   };
+
 
   // Load all expansions function
   const loadAllExpansions = async () => {
@@ -319,8 +436,10 @@ const Search = () => {
       setAllResults([]);
       setDisplayedResults([]);
       setTotalResults(0);
+      setTotalAvailableResults(0);
       setCurrentPage(1);
       setHasMoreResults(false);
+      setExpansionInfo(null); // Clear expansion info for regular search
       return;
     }
 
@@ -440,14 +559,15 @@ const Search = () => {
           // Apply sorting based on sortBy
           filteredResults = sortResults(filteredResults, sortBy);
 
-          // Store all results and show first page
+          // Store all results
           setAllResults(filteredResults);
-          setTotalResults(filteredResults.length);
+          setTotalAvailableResults(filteredResults.length);
           
           // Show first page of results
           const firstPageResults = filteredResults.slice(0, resultsPerPage);
           setDisplayedResults(firstPageResults);
           setSearchResults(firstPageResults);
+          setTotalResults(filteredResults.length);
           
           // Check if there are more results to load
           setHasMoreResults(filteredResults.length > resultsPerPage);
@@ -458,6 +578,7 @@ const Search = () => {
           setAllResults([]);
           setDisplayedResults([]);
           setTotalResults(0);
+          setTotalAvailableResults(0);
           setHasMoreResults(false);
         }
       } catch (error) {
@@ -467,6 +588,7 @@ const Search = () => {
         setAllResults([]);
         setDisplayedResults([]);
         setTotalResults(0);
+        setTotalAvailableResults(0);
         setHasMoreResults(false);
       } finally {
         setIsLoading(false);
@@ -486,29 +608,6 @@ const Search = () => {
     loadPopularExpansions();
   }, []);
 
-  // Sort results based on sortBy option
-  const sortResults = (results, sortOption) => {
-    if (!results || results.length === 0) return results;
-
-    const sortedResults = [...results];
-
-    switch (sortOption) {
-      case 'price-high':
-        return sortedResults.sort((a, b) => (b.marketValue || 0) - (a.marketValue || 0));
-      case 'price-low':
-        return sortedResults.sort((a, b) => (a.marketValue || 0) - (b.marketValue || 0));
-      case 'alphabetical':
-        return sortedResults.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      case 'recent':
-        // For now, just return as-is since we don't have date data
-        return sortedResults;
-      case 'relevance':
-      default:
-        // Default relevance sorting (API already provides this)
-        return sortedResults;
-    }
-  };
-
   const handleSearch = async () => {
     // This function is now mainly for manual search triggers
     // The live search useEffect handles most of the functionality
@@ -523,43 +622,159 @@ const Search = () => {
   };
 
   // Load more results function
-  const loadMoreResults = () => {
-    if (isLoadingMore || !hasMoreResults) return;
+  const loadMoreResults = useCallback(() => {
+    console.log(`🔄 loadMoreResults called - isLoadingMore: ${isLoadingMore}, hasMoreResults: ${hasMoreResults}`);
+    if (isLoadingMore || !hasMoreResults) {
+      console.log(`❌ loadMoreResults blocked - isLoadingMore: ${isLoadingMore}, hasMoreResults: ${hasMoreResults}`);
+      return;
+    }
 
+    console.log(`🚀 Starting to load more results...`);
     setIsLoadingMore(true);
     
-    // Calculate next page results
-    const nextPage = currentPage + 1;
-    const startIndex = currentPage * resultsPerPage;
-    const endIndex = startIndex + resultsPerPage;
+    try {
+      const nextPage = currentPage + 1;
+      const startIndex = nextPage * resultsPerPage;
+      const endIndex = startIndex + resultsPerPage;
+      
+      console.log(`📊 Loading more results - nextPage: ${nextPage}, startIndex: ${startIndex}, endIndex: ${endIndex}, allResults.length: ${allResults.length}`);
+      
+      // Get next batch of results from allResults
+      const nextBatch = allResults.slice(startIndex, endIndex);
+      console.log(`📦 Next batch: ${nextBatch.length} items`);
+      
+      if (nextBatch && nextBatch.length > 0) {
+        // Add to displayed results
+        setDisplayedResults(prev => {
+          const newDisplayed = [...prev, ...nextBatch];
+          console.log(`📈 Updated displayed results: ${prev.length} -> ${newDisplayed.length}`);
+          return newDisplayed;
+        });
+        setSearchResults(prev => {
+          const newSearch = [...prev, ...nextBatch];
+          console.log(`📈 Updated search results: ${prev.length} -> ${newSearch.length}`);
+          return newSearch;
+        });
+        setCurrentPage(nextPage);
+        
+        // Total results count stays the same (it's the total available)
+        // setTotalResults remains unchanged
+        
+        // Check if there are more results
+        const hasMore = endIndex < allResults.length;
+        console.log(`🔍 Has more results: ${hasMore} (endIndex: ${endIndex}, allResults.length: ${allResults.length})`);
+        setHasMoreResults(hasMore);
+      } else {
+        // No more results
+        console.log(`❌ No more results to load, setting hasMoreResults to false`);
+        setHasMoreResults(false);
+      }
+    } catch (error) {
+      console.error('Error loading more results:', error);
+      setHasMoreResults(false);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, hasMoreResults, currentPage, allResults, displayedResults, resultsPerPage, totalAvailableResults]);
+
+  // Debounced load more results function
+  const debouncedLoadMore = useCallback(() => {
+    // Clear any existing timeout
+    if (loadMoreTimeoutRef.current) {
+      clearTimeout(loadMoreTimeoutRef.current);
+    }
     
-    // Get next batch of results
-    const nextBatch = allResults.slice(startIndex, endIndex);
-    
-    // Add to displayed results
-    setDisplayedResults(prev => [...prev, ...nextBatch]);
-    setSearchResults(prev => [...prev, ...nextBatch]);
-    setCurrentPage(nextPage);
-    
-    // Check if there are more results
-    setHasMoreResults(endIndex < allResults.length);
-    
-    setIsLoadingMore(false);
-    
-    console.log(`📄 Loaded page ${nextPage}: ${nextBatch.length} more results (${displayedResults.length + nextBatch.length}/${allResults.length} total)`);
-  };
+    // Set a new timeout
+    loadMoreTimeoutRef.current = setTimeout(() => {
+      loadMoreResults();
+    }, 100); // 100ms debounce
+  }, [loadMoreResults]);
 
   // Infinite scroll handler
   useEffect(() => {
+
     const handleScroll = () => {
-      if (window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 1000) {
-        loadMoreResults();
+      const scrollTop = document.documentElement.scrollTop;
+      const windowHeight = window.innerHeight;
+      const documentHeight = document.documentElement.offsetHeight;
+      const scrollThreshold = documentHeight - 200;
+      
+      const scrollPercentage = (scrollTop + windowHeight) / documentHeight;
+      
+      console.log(`📜 Scroll event - scrollTop: ${scrollTop}, windowHeight: ${windowHeight}, documentHeight: ${documentHeight}, scrollPercentage: ${scrollPercentage.toFixed(2)}`);
+      
+      // More aggressive scroll detection - trigger when within 200px of bottom
+      if (scrollTop + windowHeight >= scrollThreshold) {
+        console.log(`🎯 Scroll threshold reached (200px from bottom)`);
+        debouncedLoadMore();
+      }
+      
+      // Alternative detection - trigger when scrolled to 80% of content
+      if (scrollPercentage >= 0.8) {
+        console.log(`🎯 Scroll percentage reached (80%)`);
+        debouncedLoadMore();
       }
     };
 
+    // Try multiple scroll targets
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [currentPage, hasMoreResults, isLoadingMore, allResults, displayedResults]);
+    document.addEventListener('scroll', handleScroll);
+    document.documentElement.addEventListener('scroll', handleScroll);
+    document.body.addEventListener('scroll', handleScroll);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('scroll', handleScroll);
+      document.documentElement.removeEventListener('scroll', handleScroll);
+      document.body.removeEventListener('scroll', handleScroll);
+      
+      // Clear any pending timeout
+      if (loadMoreTimeoutRef.current) {
+        clearTimeout(loadMoreTimeoutRef.current);
+      }
+    };
+  }, [debouncedLoadMore, hasMoreResults, isLoadingMore, allResults, displayedResults]);
+
+  // Alternative approach: IntersectionObserver for infinite scroll
+  useEffect(() => {
+    if (!hasMoreResults || isLoadingMore) return;
+
+    // Create a sentinel element at the bottom of the results
+    const sentinel = document.createElement('div');
+    sentinel.style.height = '1px';
+    sentinel.style.width = '100%';
+    sentinel.id = 'infinite-scroll-sentinel';
+    
+    // Add it to the end of the results container
+    const resultsContainer = document.querySelector('.search-results') || document.body;
+    resultsContainer.appendChild(sentinel);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            console.log(`👁️ IntersectionObserver triggered`);
+            debouncedLoadMore();
+          }
+        });
+      },
+      {
+        root: null,
+        rootMargin: '100px',
+        threshold: 0.1
+      }
+    );
+
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+      const existingSentinel = document.getElementById('infinite-scroll-sentinel');
+      if (existingSentinel) {
+        existingSentinel.remove();
+      }
+    };
+  }, [hasMoreResults, isLoadingMore, debouncedLoadMore]);
 
 
   const formatPrice = (value) => {
@@ -573,6 +788,20 @@ const Search = () => {
     setSearchResults([]);
     setTotalResults(0);
     console.log('🗑️ Cache cleared, try searching again');
+  };
+
+  const clearAllCache = () => {
+    // Clear all caches including localStorage
+    tcgGoApiService.clearCache();
+    localStorage.clear();
+    setSearchResults([]);
+    setTotalResults(0);
+    setAllResults([]);
+    setDisplayedResults([]);
+    setTotalAvailableResults(0);
+    setHasMoreResults(false);
+    setCurrentPage(1);
+    console.log('🗑️ All caches cleared, try searching again');
   };
 
   // Debug function to check price accuracy for a specific item
@@ -589,6 +818,10 @@ const Search = () => {
   };
 
   const handleProductClick = (product) => {
+    console.log(`🔍 Opening modal for product: "${product.name}"`);
+    console.log(`🔍 Product marketValue: $${product.marketValue}`);
+    console.log(`🔍 Product prices source: ${product.prices?.source}`);
+    console.log(`🔍 Product prices data:`, product.prices);
     setSelectedProduct(product);
     setIsPreviewOpen(true);
   };
@@ -679,6 +912,15 @@ const Search = () => {
             )}
           </div>
 
+          {/* Clear Cache Button - Temporary for testing */}
+          <div className="mb-3">
+            <button
+              onClick={clearAllCache}
+              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg transition-colors"
+            >
+              Clear All Cache (Test PriceCharting)
+            </button>
+          </div>
 
           {/* Filter Buttons */}
           <div className="flex gap-2 mb-3">
@@ -853,38 +1095,58 @@ const Search = () => {
                       {/* Header Section */}
                       <div className="space-y-1">
                         <h3 className="text-white font-semibold leading-tight" style={{fontSize: '11px'}}>
-                          {getCleanItemName(card?.name, card?.set) || 'Unknown Card'}
+                          {(() => {
+                            const displayName = getCardDisplayName(card) || 'Unknown Card';
+                            const cleanName = getCleanItemName(card?.name, card?.set) || 'Unknown Card';
+                            
+                            // Check if it's a single card with a number
+                            if (card?.type !== 'product' && card?.details?.cardNumber) {
+                              return (
+                                <>
+                                  {cleanName} <span className="text-indigo-400">#{card.details.cardNumber}</span>
+                                </>
+                              );
+                            }
+                            
+                            // For sealed products or cards without numbers
+                            return displayName;
+                          })()}
                         </h3>
                         <p className="text-gray-400" style={{fontSize: '9px'}}>
                           {card?.set || 'Unknown Set'}
                         </p>
                       </div>
                       
-                        <p className="text-gray-300" style={{fontSize: '8px'}}>
-                          {card?.type === 'product' ? 'Sealed' : (card?.rarity || 'Card')}
-                        </p>
+                        <div className="flex justify-start mb-1">
+                          <span className="bg-indigo-600/70 text-white px-0.5 py-0.5 rounded text-xs font-medium" style={{fontSize: '9px'}}>
+                            {card?.type === 'product' ? 'Sealed' : (card?.rarity || 'Card')}
+                          </span>
+                        </div>
                       
-                      {/* Financial Section */}
+                      {/* Financial Section - Simplified */}
                       <div className="space-y-1">
-                        {/* Price */}
+                        {/* Market Value */}
                         <div className="flex items-center space-x-2">
                             <span className="text-white font-semibold" style={{fontSize: '12px'}}>
                               {card?.marketValue ? formatPrice(card.marketValue) : 'N/A'} Value
+                              {card?.prices?.source === 'pricecharting' && card?.prices?.priceCharting?.loose > 0 && (
+                                <span className="ml-1 text-indigo-400" style={{fontSize: '8px'}}>(L)</span>
+                              )}
                             </span>
                         </div>
                         
                         {/* Trend Data */}
                         <div className="text-gray-400" style={{fontSize: '9px'}}>
                           {(() => {
-                            
-                            if (card.trend && card.trend !== 0 && card.dollarChange !== 0) {
+                            // Show trend data if we have valid trend or dollar change values
+                            if (card.trend !== undefined && card.trend !== null && card.dollarChange !== undefined && card.dollarChange !== null) {
                               return (
-                                <span className={card.trend > 0 ? 'text-green-400' : 'text-red-400'}>
-                                  {card.dollarChange > 0 ? '+' : ''}${Math.abs(card.dollarChange).toFixed(2)} ({card.trend > 0 ? '+' : ''}{card.trend}%)
+                                <span className={card.trend > 0 ? 'text-green-400' : card.trend < 0 ? 'text-red-400' : 'text-gray-400'}>
+                                  {card.dollarChange > 0 ? '+' : ''}${card.dollarChange.toFixed(2)} ({card.trend > 0 ? '+' : ''}{card.trend}%)
                                 </span>
                               );
                             } else {
-                              return <span className="text-gray-500">$0.00 (0.00%)</span>;
+                              return <span className="text-gray-500">No trend data</span>;
                             }
                           })()}
                         </div>
@@ -897,10 +1159,13 @@ const Search = () => {
 
           {/* Load More Indicator */}
           {isLoadingMore && (
-            <div className="flex justify-center py-4">
-              <div className="flex items-center gap-2 text-gray-400">
-                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-xs">Loading more results...</span>
+            <div className="flex justify-center py-6">
+              <div className="flex items-center gap-3 text-gray-400">
+                <div className="relative">
+                  <div className="w-5 h-5 border-2 border-gray-400 border-t-indigo-600 rounded-full animate-spin"></div>
+                  <div className="absolute top-0.5 left-0.5 w-4 h-4 border border-transparent border-t-indigo-400 rounded-full animate-spin" style={{animationDirection: 'reverse', animationDuration: '0.8s'}}></div>
+                </div>
+                <span className="text-sm">Loading more results...</span>
               </div>
             </div>
           )}
@@ -918,10 +1183,16 @@ const Search = () => {
 
       {/* Loading State */}
       {isLoading && (
-        <div className="px-4 py-8">
-          <div className="text-center">
-            <div className="text-gray-400 mb-2">Searching for "{searchQuery}"...</div>
-            <div className="text-sm text-gray-500">This may take a few seconds</div>
+        <div className="flex flex-col items-center justify-center py-16 px-4">
+          <div className="relative">
+            {/* iPhone-style spinner */}
+            <div className="w-12 h-12 border-4 border-gray-200 border-t-indigo-600 rounded-full animate-spin"></div>
+            {/* Inner ring for extra visual appeal */}
+            <div className="absolute top-1 left-1 w-10 h-10 border-2 border-transparent border-t-indigo-400 rounded-full animate-spin" style={{animationDirection: 'reverse', animationDuration: '0.8s'}}></div>
+          </div>
+          <div className="mt-4 text-center">
+            <div className="text-white font-medium mb-1">Searching...</div>
+            <div className="text-gray-400 text-sm">Finding the best results for you</div>
           </div>
         </div>
       )}
@@ -941,22 +1212,16 @@ const Search = () => {
         <div className="px-4 py-8">
           {/* Loading State */}
           {isLoadingTrending && (
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-white">Expansions</h2>
-                <div className="text-xs text-gray-400">Loading...</div>
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="relative">
+                {/* iPhone-style spinner */}
+                <div className="w-10 h-10 border-3 border-gray-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                {/* Inner ring for extra visual appeal */}
+                <div className="absolute top-0.5 left-0.5 w-9 h-9 border-2 border-transparent border-t-indigo-400 rounded-full animate-spin" style={{animationDirection: 'reverse', animationDuration: '0.8s'}}></div>
               </div>
-              <div className="grid grid-cols-2 gap-3 pb-20">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="border border-gray-700 rounded-lg overflow-hidden">
-                    <div className="aspect-[4/3] bg-gray-800 animate-pulse"></div>
-                    <div className="p-2 space-y-2">
-                      <div className="h-3 bg-gray-700 rounded animate-pulse"></div>
-                      <div className="h-2 bg-gray-700 rounded animate-pulse w-2/3"></div>
-                      <div className="h-2 bg-gray-700 rounded animate-pulse w-1/2"></div>
-                    </div>
-                  </div>
-                ))}
+              <div className="mt-4 text-center">
+                <div className="text-white font-medium mb-1">Loading Expansions...</div>
+                <div className="text-gray-400 text-sm">Getting the latest sets</div>
               </div>
             </div>
           )}

@@ -53,3 +53,23 @@ export const getItemSetName = (item) => {
   if (!item) return '';
   return item.set || item.set_name || '';
 };
+
+/**
+ * Gets the display name for a card with number suffix
+ * @param {Object} card - Card object
+ * @returns {string} - Display name with card number if available
+ */
+export const getCardDisplayName = (card) => {
+  if (!card) return '';
+  
+  // Get the clean name
+  const cleanName = getItemDisplayName(card);
+  
+  // Check if it's a single card (not a sealed product) and has a card number
+  if (card.type !== 'product' && card.details?.cardNumber) {
+    return `${cleanName} #${card.details.cardNumber}`;
+  }
+  
+  // For sealed products or cards without numbers, return clean name
+  return cleanName;
+};

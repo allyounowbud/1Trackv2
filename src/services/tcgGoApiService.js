@@ -93,6 +93,7 @@ class TCGGoApiService {
     }
   }
 
+
   getFromPersistentCache(key) {
     try {
       const cacheData = localStorage.getItem('tcgGoApiCache');
@@ -283,7 +284,27 @@ class TCGGoApiService {
       } while (currentPage <= totalPages && (!maxResults || allCards.length < maxResults));
       
       // Format all cards data
-      const formattedCards = (await Promise.all(allCards.map(card => this.formatCard(card)))).filter(card => card !== null);
+      const formattedCards = [];
+      const failedCards = [];
+      
+      for (const card of allCards) {
+        try {
+          const formatted = await this.formatCard(card);
+          if (formatted) {
+            formattedCards.push(formatted);
+          } else {
+            failedCards.push(card);
+            console.log(`❌ Failed to format card: ${card.name || 'Unknown'} (ID: ${card.id || 'Unknown'})`);
+          }
+        } catch (error) {
+          failedCards.push(card);
+          console.log(`❌ Error formatting card: ${card.name || 'Unknown'} (ID: ${card.id || 'Unknown'})`, error);
+        }
+      }
+      
+      if (failedCards.length > 0) {
+        console.log(`⚠️ ${failedCards.length} cards failed to format out of ${allCards.length} total cards`);
+      }
 
       this.setCache(cacheKey, formattedCards);
       console.log(`✅ Fetched all ${formattedCards.length} cards from expansion ${expansionId}`);
@@ -347,10 +368,29 @@ class TCGGoApiService {
       } while (currentPage <= totalPages && (!maxResults || allProducts.length < maxResults));
       
       // Format all products data
-      const formattedProducts = (await Promise.all(allProducts.map(product => this.formatProduct(product)))).filter(product => product !== null);
+      const formattedProducts = [];
+      const failedProducts = [];
+      
+      for (const product of allProducts) {
+        try {
+          const formatted = await this.formatProduct(product);
+          if (formatted) {
+            formattedProducts.push(formatted);
+          } else {
+            failedProducts.push(product);
+            console.log(`❌ Failed to format product: ${product.name || 'Unknown'} (ID: ${product.id || 'Unknown'})`);
+          }
+        } catch (error) {
+          failedProducts.push(product);
+          console.log(`❌ Error formatting product: ${product.name || 'Unknown'} (ID: ${product.id || 'Unknown'})`, error);
+        }
+      }
+      
+      if (failedProducts.length > 0) {
+        console.log(`⚠️ ${failedProducts.length} products failed to format out of ${allProducts.length} total products`);
+      }
 
       this.setCache(cacheKey, formattedProducts);
-      console.log(`✅ Fetched all ${formattedProducts.length} products from expansion ${expansionId}`);
       return formattedProducts;
     } catch (error) {
       console.error('❌ Error fetching expansion products:', error);
@@ -604,6 +644,16 @@ class TCGGoApiService {
       do {
         const responseData = await this.makeRequest(`/pokemon/products/search?search=${encodedQuery}&sort=${sort}&page=${currentPage}`);
         console.log(`🔍 Raw search products API response (page ${currentPage}):`, responseData);
+        
+        // Debug: Log the first product's price structure to understand the API response format
+        if (responseData && responseData.length > 0) {
+          console.log(`🔍 First product price structure:`, {
+            name: responseData[0].name,
+            hasPrices: !!responseData[0].prices,
+            priceKeys: responseData[0].prices ? Object.keys(responseData[0].prices) : [],
+            prices: responseData[0].prices
+          });
+        }
         
         // Handle different response structures
         let data;
@@ -907,34 +957,13 @@ class TCGGoApiService {
       // Use TCGPlayer as primary (US market), Card Market as fallback (EU market)
       const marketValue = tcgPlayerMarketPrice || cardMarketPrice;
       
-      // Debug: Log price selection for accuracy (only for specific cards to reduce spam)
-      if (card.name && (card.name.includes('Umbreon') || card.name.includes('Charizard'))) {
-        console.log(`🔍 Price selection for ${card.name}:`, {
-          tcgPlayerMarket: tcgPlayerMarketPrice,
-          cardMarketPrice: cardMarketPrice,
-          selectedValue: marketValue,
-          source: tcgPlayerMarketPrice ? 'TCGPlayer' : 'CardMarket'
-        });
-      }
-
       // Calculate trend from available 7d/30d averages (no individual API calls)
       const cardMarket7d = cardMarketPrices['7d_average'];
       const cardMarket30d = cardMarketPrices['30d_average'];
+      // Use 7d as current and 30d as previous for trend calculation
       const trend = this.calculateTrend(cardMarket7d, cardMarket30d);
       const dollarChange = cardMarket7d && cardMarket30d ? cardMarket7d - cardMarket30d : 0;
 
-      // Debug logging for trend data - expanded for all cards
-      console.log('🔍 TCG Go API Debug - Card:', {
-        name: card.name,
-        id: card.id,
-        tcgPlayerPrices,
-        cardMarketPrices,
-        trend,
-        dollarChange,
-        hasHistoryData: trend !== 0 || dollarChange !== 0,
-        cardMarket7d: cardMarketPrices['7d_average'],
-        cardMarket30d: cardMarketPrices['30d_average']
-      });
 
       return {
         name: card.name,
@@ -982,20 +1011,47 @@ class TCGGoApiService {
    */
   async formatProduct(product) {
     try {
+      console.log(`🔄 Formatting product: "${product.name}"`);
       // For sealed products, try PriceCharting API first
       let priceChartingData = null;
-      if (product.name && this.isSealedProduct(product.name)) {
+      const isSealed = product.name && this.isSealedProduct(product.name);
+      console.log(`🔍 Product "${product.name}" - Is sealed: ${isSealed}`);
+      
+      if (isSealed) {
         try {
+          console.log(`📞 Calling PriceCharting API for sealed product: ${product.name}`);
           priceChartingData = await this.getPriceChartingData(product.name);
+          console.log(`✅ PriceCharting API response for ${product.name}:`, priceChartingData);
         } catch (error) {
-          console.log(`PriceCharting API failed for ${product.name}, using TCG Go API:`, error.message);
+          console.log(`❌ PriceCharting API failed for ${product.name}:`, error.message);
+          // Silently fall back to TCG Go API
         }
       }
 
       // Handle the actual API response structure
       // The API sometimes returns empty price objects, so we need to handle that
       const cardMarketPrices = product.prices?.cardmarket || {};
-      const tcgPlayerPrices = product.prices?.tcgplayer || {};
+      // Try different possible field names for TCGPlayer data
+      const tcgPlayerPrices = product.prices?.tcgplayer || product.prices?.tcg_player || product.prices?.tcgPlayer || {};
+      
+      // Debug: Log the actual price structure for this product
+      console.log(`🔍 Price structure for ${product.name}:`, {
+        hasPrices: !!product.prices,
+        priceKeys: product.prices ? Object.keys(product.prices) : [],
+        cardMarket: cardMarketPrices,
+        tcgPlayer: tcgPlayerPrices,
+        allPrices: product.prices
+      });
+      
+      // Debug: Check if TCGPlayer data exists with different field names
+      if (product.prices) {
+        const possibleTcgFields = ['tcgplayer', 'tcg_player', 'tcgPlayer', 'tcg', 'tcgplayer_prices'];
+        possibleTcgFields.forEach(field => {
+          if (product.prices[field]) {
+            console.log(`🔍 Found TCGPlayer data under field "${field}":`, product.prices[field]);
+          }
+        });
+      }
       
       // Get market value - API returns all prices in USD
       // TCGPlayer: Use market_price (most accurate) or mid_price as fallback
@@ -1008,42 +1064,52 @@ class TCGGoApiService {
       let marketValue;
       let priceSource;
       
-      if (priceChartingData && priceChartingData.new_price) {
-        marketValue = priceChartingData.new_price;
-        priceSource = 'pricecharting';
+      // Debug logging for market value selection
+      console.log(`🎯 Market value selection for ${product.name}:`, {
+        priceChartingData: priceChartingData ? {
+          loose_price: priceChartingData.loose_price,
+          new_price: priceChartingData.new_price,
+          cib_price: priceChartingData.cib_price,
+          found_but_no_price: priceChartingData.found_but_no_price
+        } : null,
+        tcgPlayerMarketPrice,
+        cardMarketPrice
+      });
+
+      if (priceChartingData && !priceChartingData.found_but_no_price) {
+        // For sealed products, prioritize PriceCharting data
+        // Use loose_price as primary (most accurate for sealed), fallback to new_price, then cib_price
+        if (priceChartingData.loose_price && priceChartingData.loose_price > 0) {
+          marketValue = priceChartingData.loose_price;
+          priceSource = 'pricecharting';
+          console.log(`✅ PRIMARY: Using PriceCharting loose price for ${product.name}: $${marketValue} (LOOSE PRICE PRIORITIZED)`);
+        } else if (priceChartingData.new_price && priceChartingData.new_price > 0) {
+          marketValue = priceChartingData.new_price;
+          priceSource = 'pricecharting';
+          console.log(`✅ FALLBACK: Using PriceCharting new price for ${product.name}: $${marketValue} (loose price was ${priceChartingData.loose_price})`);
+        } else if (priceChartingData.cib_price && priceChartingData.cib_price > 0) {
+          marketValue = priceChartingData.cib_price;
+          priceSource = 'pricecharting';
+          console.log(`✅ FALLBACK: Using PriceCharting CIB price for ${product.name}: $${marketValue}`);
+        } else {
+          // PriceCharting found product but no valid prices, fallback to TCG APIs
+          marketValue = tcgPlayerMarketPrice || cardMarketPrice;
+          priceSource = tcgPlayerMarketPrice ? 'tcgplayer' : 'cardmarket';
+          console.log(`⚠️ PriceCharting found ${product.name} but no valid prices, using ${priceSource}: $${marketValue}`);
+        }
       } else {
+        // No PriceCharting data available, use TCG APIs
         marketValue = tcgPlayerMarketPrice || cardMarketPrice;
         priceSource = tcgPlayerMarketPrice ? 'tcgplayer' : 'cardmarket';
-      }
-      
-      // Debug: Log price selection for accuracy (only for specific products to reduce spam)
-      if (product.name && (product.name.includes('Booster') || product.name.includes('Box'))) {
-        console.log(`🔍 Price selection for product ${product.name}:`, {
-          priceChartingData: priceChartingData?.new_price,
-          tcgPlayerMarket: tcgPlayerMarketPrice,
-          cardMarketPrice: cardMarketPrice,
-          selectedValue: marketValue,
-          source: priceSource
-        });
+        console.log(`📊 Using ${priceSource} for ${product.name}: $${marketValue}`);
       }
 
       // Calculate trend from available 7d/30d averages (no individual API calls)
       const cardMarket7d = cardMarketPrices['7d_average'];
       const cardMarket30d = cardMarketPrices['30d_average'];
+      // Use 7d as current and 30d as previous for trend calculation
       const trend = this.calculateTrend(cardMarket7d, cardMarket30d);
       const dollarChange = cardMarket7d && cardMarket30d ? cardMarket7d - cardMarket30d : 0;
-      
-      console.log(`🔍 Product trend calculation for ${product.name}:`, { 
-        id: product.id,
-        name: product.name,
-        trend, 
-        dollarChange,
-        usedHistoryPrices: trend !== 0 || dollarChange !== 0,
-        cardMarket7d: cardMarketPrices['7d_average'],
-        cardMarket30d: cardMarketPrices['30d_average'],
-        tcgPlayerPrices,
-        cardMarketPrices
-      });
 
       return {
         name: product.name,
@@ -1063,6 +1129,8 @@ class TCGGoApiService {
             new: priceChartingData.new_price || 0,
             cib: priceChartingData.cib_price || 0,
             loose: priceChartingData.loose_price || 0,
+            used: priceChartingData.used_price || 0,
+            complete: priceChartingData.complete_price || 0,
             currency: 'USD'
           } : null,
           tcgPlayer: {
@@ -1403,7 +1471,7 @@ class TCGGoApiService {
     const sealedKeywords = [
       'booster', 'box', 'pack', 'bundle', 'collection', 'elite trainer',
       'premium', 'theme deck', 'starter deck', 'deck', 'tin', 'case',
-      'display', 'sealed', 'unopened', 'factory sealed'
+      'display', 'sealed', 'unopened', 'factory sealed', 'etb'
     ];
     
     const lowerName = productName.toLowerCase();
@@ -1415,6 +1483,8 @@ class TCGGoApiService {
    */
   async getPriceChartingData(productName) {
     const priceChartingApiKey = import.meta.env.VITE_PRICECHARTING_API_KEY;
+    console.log(`🔑 PriceCharting API key configured: ${priceChartingApiKey ? 'YES' : 'NO'}`);
+    console.log(`🔑 API key value: ${priceChartingApiKey ? priceChartingApiKey.substring(0, 10) + '...' : 'NOT FOUND'}`);
     if (!priceChartingApiKey) {
       throw new Error('PriceCharting API key not configured');
     }
@@ -1424,46 +1494,168 @@ class TCGGoApiService {
     if (cached) return cached;
 
     try {
-      const response = await fetch(`https://www.pricecharting.com/api/products?q=${encodeURIComponent(productName)}&t=${priceChartingApiKey}`);
+      // Try multiple search strategies
+      const searchStrategies = [
+        // Strategy 1: Original name
+        productName,
+        // Strategy 2: Replace "Elite Trainer Box" with "ETB"
+        productName.replace(/Elite Trainer Box/gi, 'ETB'),
+        // Strategy 3: Remove "Pokemon TCG" prefix
+        productName.replace(/Pokemon TCG/gi, '').trim(),
+        // Strategy 4: Extract just the set name and product type
+        productName.replace(/Pokemon TCG/gi, '').replace(/Elite Trainer Box/gi, 'ETB').trim(),
+        // Strategy 5: Just the set name
+        productName.split(' ').slice(-2).join(' ') // Last 2 words (e.g., "Prismatic Evolutions")
+      ];
       
-      if (!response.ok) {
-        throw new Error(`PriceCharting API error: ${response.status} ${response.statusText}`);
+      let data = null;
+      let successfulQuery = null;
+      
+      for (let i = 0; i < searchStrategies.length; i++) {
+        const searchQuery = searchStrategies[i];
+        if (!searchQuery) continue;
+        
+        const url = `https://www.pricecharting.com/api/products?q=${encodeURIComponent(searchQuery)}&t=${priceChartingApiKey}`;
+        
+        try {
+          const response = await fetch(url);
+          
+          if (!response.ok) {
+            continue;
+          }
+          
+          const responseData = await response.json();
+          
+          // Check if we got meaningful results
+          let products = null;
+          if (Array.isArray(responseData)) {
+            products = responseData;
+          } else if (responseData && Array.isArray(responseData.products)) {
+            products = responseData.products;
+          } else if (responseData && responseData.data && Array.isArray(responseData.data)) {
+            products = responseData.data;
+          }
+          
+          if (products && products.length > 0) {
+            data = responseData;
+            successfulQuery = searchQuery;
+            break;
+          }
+        } catch (error) {
+          continue;
+        }
       }
       
-      const data = await response.json();
+      if (!data) {
+        throw new Error(`No results found with any search strategy for "${productName}"`);
+      }
       
       // Find the best match product
       let bestMatch = null;
-      if (Array.isArray(data) && data.length > 0) {
-        // Look for exact name match first
-        bestMatch = data.find(item => 
-          item['product-name'] && 
-          item['product-name'].toLowerCase() === productName.toLowerCase()
-        );
+      let products = null;
+      
+      // Handle different possible response formats
+      if (Array.isArray(data)) {
+        products = data;
+      } else if (data && Array.isArray(data.products)) {
+        products = data.products;
+      } else if (data && data.data && Array.isArray(data.data)) {
+        products = data.data;
+      }
+      
+      if (products && products.length > 0) {
+        // Normalize names for better matching
+        const normalizeName = (name) => {
+          return name.toLowerCase()
+            .replace(/elite trainer box/gi, 'etb')
+            .replace(/pokemon tcg/gi, 'pokemon')
+            .replace(/pokémon/gi, 'pokemon')
+            .replace(/[^\w\s]/g, '') // Remove special characters
+            .replace(/\s+/g, ' ') // Normalize whitespace
+            .trim();
+        };
         
-        // If no exact match, use the first result
+        const normalizedProductName = normalizeName(productName);
+        
+        // Look for exact name match first
+        bestMatch = products.find(item => {
+          const itemName = item['product-name'] || item.name || item.title;
+          const normalizedItemName = normalizeName(itemName);
+          return itemName && normalizedItemName === normalizedProductName;
+        });
+        
+        // If no exact match, look for partial match
         if (!bestMatch) {
-          bestMatch = data[0];
+          bestMatch = products.find(item => {
+            const itemName = item['product-name'] || item.name || item.title;
+            const normalizedItemName = normalizeName(itemName);
+            return itemName && (
+              normalizedItemName.includes(normalizedProductName) ||
+              normalizedProductName.includes(normalizedItemName)
+            );
+          });
+        }
+        
+        // If still no match, use the first result
+        if (!bestMatch) {
+          bestMatch = products[0];
         }
       }
       
       if (bestMatch) {
-        const priceData = {
-          new_price: bestMatch['new-price'] ? parseFloat(bestMatch['new-price']) / 100 : null,
-          cib_price: bestMatch['cib-price'] ? parseFloat(bestMatch['cib-price']) / 100 : null,
-          loose_price: bestMatch['loose-price'] ? parseFloat(bestMatch['loose-price']) / 100 : null,
-          product_name: bestMatch['product-name'],
-          console_name: bestMatch['console-name']
+        // PriceCharting API returns prices in cents, so we need to convert to dollars
+        const parsePrice = (price) => {
+          if (!price) return null;
+          const numPrice = parseFloat(price);
+          return isNaN(numPrice) ? null : numPrice / 100; // Convert cents to dollars
         };
+
+        const priceData = {
+          new_price: parsePrice(bestMatch['new-price'] || bestMatch['new_price'] || bestMatch.price || bestMatch['new']),
+          cib_price: parsePrice(bestMatch['cib-price'] || bestMatch['cib_price'] || bestMatch.cib),
+          loose_price: parsePrice(bestMatch['loose-price'] || bestMatch['loose_price'] || bestMatch.loose),
+          product_name: bestMatch['product-name'] || bestMatch.name || bestMatch.title,
+          console_name: bestMatch['console-name'] || bestMatch.console || bestMatch.platform,
+          // Add additional fields for better market value determination
+          used_price: parsePrice(bestMatch['used-price'] || bestMatch['used_price'] || bestMatch.used),
+          complete_price: parsePrice(bestMatch['complete-price'] || bestMatch['complete_price'] || bestMatch.complete)
+        };
+
+        // Debug logging to see what prices we're getting
+        console.log(`🔍 PriceCharting debug for ${productName}:`, {
+          rawData: {
+            'new-price': bestMatch['new-price'],
+            'loose-price': bestMatch['loose-price'],
+            'cib-price': bestMatch['cib-price']
+          },
+          parsedData: {
+            new_price: priceData.new_price,
+            loose_price: priceData.loose_price,
+            cib_price: priceData.cib_price
+          }
+        });
         
-        this.setCache(cacheKey, priceData);
-        console.log(`✅ Found PriceCharting data for ${productName}:`, priceData);
-        return priceData;
+        // Even if no price data is found, return the product info
+        if (priceData.new_price || priceData.cib_price || priceData.loose_price) {
+          this.setCache(cacheKey, priceData);
+          return priceData;
+        } else {
+          // Return a minimal data structure to indicate the product was found
+          const minimalData = {
+            new_price: null,
+            cib_price: null,
+            loose_price: null,
+            product_name: priceData.product_name,
+            console_name: priceData.console_name,
+            found_but_no_price: true
+          };
+          this.setCache(cacheKey, minimalData);
+          return minimalData;
+        }
       }
       
       throw new Error('No matching product found in PriceCharting');
     } catch (error) {
-      console.error(`❌ Error fetching PriceCharting data for ${productName}:`, error);
       throw error;
     }
   }
