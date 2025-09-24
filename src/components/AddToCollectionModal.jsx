@@ -332,7 +332,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 value={formData.buyDate}
                 onChange={handleInputChange}
                 required
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
 
@@ -373,7 +373,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                     setTimeout(() => setIsRetailerFocused(false), 150);
                   }}
                   placeholder="Type to search retailers..."
-                  className="w-full px-3 py-2 pr-8 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 pr-8 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   style={{ backgroundColor: '#1f2937', color: 'white' }}
                   autoComplete="off"
                   autoCorrect="off"
@@ -432,7 +432,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                                 setRetailerSearchQuery('');
                                 setIsRetailerFocused(false);
                               }}
-                              className="w-full px-3 py-2 text-left text-emerald-400 hover:bg-gray-700 text-sm border-t border-gray-700"
+                              className="w-full px-3 py-2 text-left text-indigo-400 hover:bg-gray-700 text-sm border-t border-gray-700"
                             >
                               + Add "{formData.buyLocation}" as new retailer
                             </button>
@@ -458,7 +458,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 min="1"
                 required
                 placeholder="e.g. 3"
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <p className="text-xs text-gray-400 mt-1">We'll insert that many rows and split totals equally.</p>
             </div>
@@ -476,7 +476,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 step="0.01"
                 min="0"
                 placeholder="e.g. 38.00"
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <p className="text-xs text-gray-400 mt-1">Enter the price you paid for each individual item.</p>
             </div>
@@ -494,7 +494,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 step="0.01"
                 min="0"
                 placeholder="e.g. 380.00"
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <p className="text-xs text-gray-400 mt-1">Total amount paid for all items (auto-calculated from price per item).</p>
             </div>
@@ -531,7 +531,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                     name="sellDate"
                     value={formData.sellDate}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
@@ -548,7 +548,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                     step="0.01"
                     min="0"
                     placeholder="0"
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                   <p className="text-xs text-gray-400 mt-1">If qty &gt; 1 we'll split this total across rows.</p>
                 </div>
@@ -577,7 +577,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                         setTimeout(() => setIsSellMarketplaceFocused(false), 150);
                       }}
                       placeholder="Type to search marketplaces..."
-                      className="w-full px-3 py-2 pr-8 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full px-3 py-2 pr-8 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       style={{ backgroundColor: '#1f2937', color: 'white' }}
                       autoComplete="off"
                       autoCorrect="off"
@@ -649,7 +649,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                                   setShowCustomFeeInput(true);
                                   setCustomFeePercentage('');
                                 }}
-                                className="w-full px-3 py-2 text-left text-emerald-400 hover:bg-gray-700 text-sm border-t border-gray-700"
+                                className="w-full px-3 py-2 text-left text-indigo-400 hover:bg-gray-700 text-sm border-t border-gray-700"
                               >
                                 Other (Custom Fee)
                               </button>
@@ -683,9 +683,9 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                         min="0"
                         max="100"
                         placeholder="Enter fee percentage"
-                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
-                      <p className="text-xs text-emerald-400">Custom fee for "Other" marketplace</p>
+                      <p className="text-xs text-indigo-400">Custom fee for "Other" marketplace</p>
                     </div>
                   ) : (
                     <div>
@@ -697,7 +697,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                         step="0.01"
                         min="0"
                         placeholder="0"
-                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         readOnly
                       />
                       <p className="text-xs text-gray-400 mt-1">Auto filled once a marketplace is selected.</p>
@@ -718,7 +718,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                     step="0.01"
                     min="0"
                     placeholder="0"
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                   <p className="text-xs text-gray-400 mt-1">If qty &gt; 1 we'll split shipping across rows.</p>
                 </div>
@@ -727,12 +727,12 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
           </div>
         </div>
 
-        {/* Submit Button */}
+        {/* Submit Button - Updated to indigo */}
         <div className="p-4 border-t border-gray-800">
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
           >
             {isSubmitting ? 'Adding...' : 'Add Order'}
           </button>

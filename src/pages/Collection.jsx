@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { getItemDisplayName, getItemSetName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
 import { queryKeys } from '../lib/queryClient';
+import { forceCacheUpdate } from '../utils/pwa';
 
 
 // Simple data fetching - just one table!
@@ -532,17 +533,24 @@ const Collection = () => {
 
   return (
     <div>
-      {/* Header */}
-      <div className="px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold text-white">OneTrack</h1>
-            {(ordersFetching || summaryFetching) && (
-              <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
-            )}
+          {/* Header */}
+          <div className="px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold text-white">OneTrack</h1>
+                {(ordersFetching || summaryFetching) && (
+                  <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                )}
+              </div>
+              {/* Temporary cache update button */}
+              <button
+                onClick={forceCacheUpdate}
+                className="px-3 py-1 bg-red-600 text-white text-xs rounded-lg"
+              >
+                Force Update
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
 
       {/* Collection Value Section */}
       <div className="px-4 py-3">

@@ -138,11 +138,43 @@ const hideOfflineNotification = () => {
   console.log('App is online');
 };
 
+// Force cache clear and update
+export const forceCacheUpdate = async () => {
+  if ('serviceWorker' in navigator) {
+    try {
+      // Clear all caches
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames.map(cacheName => caches.delete(cacheName))
+      );
+      
+      // Unregister current service worker
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(
+        registrations.map(registration => registration.unregister())
+      );
+      
+      // Force reload
+      window.location.reload(true);
+    } catch (error) {
+      console.error('Force cache update failed:', error);
+    }
+  }
+};
+
 // Initialize PWA features
 export const initializePWA = async () => {
   try {
-    // Register service worker
-    await registerServiceWorker();
+    // Register service worker with cache busting
+    const registration = await navigator.serviceWorker.register('/sw.js?v=' + Date.now(), {
+      scope: '/'
+    });
+    
+    // Force immediate update if new service worker is available
+    if (registration.waiting) {
+      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      window.location.reload();
+    }
     
     // Setup install prompt
     setupInstallPrompt();
