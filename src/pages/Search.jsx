@@ -611,10 +611,14 @@ const Search = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary });
     queryClient.invalidateQueries({ queryKey: queryKeys.collectionData });
     
-    // Navigate to collection page after a short delay to allow success modal to show
-    setTimeout(() => {
-      navigate('/');
-    }, 2000); // 2 second delay to show success modal
+    // Navigate to collection page with success data as URL parameters
+    const params = new URLSearchParams({
+      successItem: result.item,
+      successQuantity: result.quantity,
+      successPrice: result.price,
+      ...(result.set && { successSet: result.set })
+    });
+    navigate(`/?${params.toString()}`);
     
     setIsAddModalOpen(false);
     closeModal();

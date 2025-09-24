@@ -224,7 +224,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
 
       if (orderError) throw orderError;
 
-      // Success! Show confirmation modal
+      // Success! Pass data to parent and close modal
       const successInfo = {
         item: product.name,
         quantity: formData.quantity,
@@ -232,11 +232,12 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         set: product.set
       };
       
-      setSuccessData(successInfo);
-      setShowSuccess(true);
-      
-      // Call onSuccess to trigger collection refresh
+      // Call onSuccess to trigger collection refresh and navigation
       onSuccess?.(successInfo);
+      
+      // Close modal immediately
+      onClose();
+      closeModal();
     } catch (err) {
       console.error('Error adding to collection:', err);
       setError(err.message || 'Failed to add item to collection');

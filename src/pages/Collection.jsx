@@ -42,6 +42,8 @@ const Collection = () => {
   const [showBulkActionsMenu, setShowBulkActionsMenu] = useState(false);
   const [showItemMenu, setShowItemMenu] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState(null);
+  const [showSuccessNotification, setShowSuccessNotification] = useState(false);
+  const [successData, setSuccessData] = useState(null);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -96,6 +98,35 @@ const Collection = () => {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Check for success data from navigation
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const successItem = urlParams.get('successItem');
+    const successQuantity = urlParams.get('successQuantity');
+    const successPrice = urlParams.get('successPrice');
+    const successSet = urlParams.get('successSet');
+
+    if (successItem && successQuantity && successPrice) {
+      setSuccessData({
+        item: successItem,
+        quantity: successQuantity,
+        price: successPrice,
+        set: successSet
+      });
+      setShowSuccessNotification(true);
+      
+      // Clean up URL parameters
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+      
+      // Auto-hide notification after 4 seconds
+      setTimeout(() => {
+        setShowSuccessNotification(false);
+        setSuccessData(null);
+      }, 4000);
+    }
   }, []);
 
   // Fetch data
@@ -1414,6 +1445,40 @@ const Collection = () => {
                   Delete {ordersToConfirmDelete.length} Order{ordersToConfirmDelete.length > 1 ? 's' : ''}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Notification */}
+      {showSuccessNotification && successData && (
+        <div className="fixed top-4 left-4 right-4 z-50">
+          <div className="bg-green-500 border border-green-400 rounded-lg p-4 shadow-lg">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-medium text-white">
+                  Order Added Successfully!
+                </p>
+                <p className="text-sm text-green-100">
+                  {successData.quantity}x {successData.item} - ${parseFloat(successData.price).toFixed(2)}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSuccessNotification(false);
+                  setSuccessData(null);
+                }}
+                className="ml-3 flex-shrink-0 text-white hover:text-green-200"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
