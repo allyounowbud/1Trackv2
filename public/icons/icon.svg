@@ -1,26 +1,7 @@
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <!-- Chromatic aberration effect filters -->
-    <filter id="chromaticAberration" x="-50%" y="-50%" width="200%" height="200%">
-      <feOffset in="SourceGraphic" dx="2" dy="0" result="red">
-        <feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/>
-      </feOffset>
-      <feOffset in="SourceGraphic" dx="-2" dy="0" result="blue">
-        <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"/>
-      </feOffset>
-      <feOffset in="SourceGraphic" dx="0" dy="0" result="green">
-        <feColorMatrix type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"/>
-      </feOffset>
-      <feComposite in="red" in2="blue" operator="screen"/>
-      <feComposite in="SourceGraphic" in2="green" operator="screen"/>
-    </filter>
-  </defs>
+  <!-- Background with rounded corners matching login page -->
+  <rect width="512" height="512" rx="128" fill="#6366f1"/>
   
-  <!-- Background with rounded corners (squircle) -->
-  <rect width="512" height="512" rx="80" fill="#4f46e5"/>
-  
-  <!-- Main "1T" text with chromatic aberration effect -->
-  <g transform="translate(256, 256)">
-    <text x="0" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="200" font-weight="bold" fill="white" filter="url(#chromaticAberration)">1T</text>
-  </g>
+  <!-- "1T" text matching login page styling -->
+  <text x="256" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="240" font-weight="bold" fill="white">1T</text>
 </svg>
