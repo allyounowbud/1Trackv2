@@ -46,12 +46,12 @@ const BottomNavigation = ({ currentPath }) => {
 
   return (
     <div className="bottom-nav-fixed bg-gray-950 border-t border-gray-800 safe-bottom">
-      <div className="flex items-center justify-around py-2">
+      <div className="flex items-center w-full py-2">
         {navItems.map((item) => (
           <button
             key={item.id}
             onClick={() => navigate(item.path)}
-            className={`flex flex-col items-center gap-1 px-3 py-2 transition-colors relative ${
+            className={`flex flex-col items-center gap-1 flex-1 py-2 transition-colors relative ${
               isActive(item.path)
                 ? 'text-indigo-500'
                 : 'text-gray-400 hover:text-gray-300'

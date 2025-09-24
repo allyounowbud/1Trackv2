@@ -7,41 +7,19 @@
   html {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
     font-weight: 200;
-    /* Ensure background extends to cover entire viewport on mobile browsers */
     background-color: #111827;
-    min-height: 100vh;
-    min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent html scroll - app container handles it */
   }
   
   body {
     @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white;
     font-weight: 200;
-    /* Ensure background extends to cover entire viewport on mobile browsers */
     background-color: #111827;
-    min-height: 100vh;
-    min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
-    /* Prevent scroll issues on mobile */
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    position: relative;
-    /* Hide scrollbars for mobile app-like experience */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* Internet Explorer 10+ */
-  }
-  
-  /* Hide scrollbars for webkit browsers (Chrome, Safari, Edge) */
-  body::-webkit-scrollbar {
-    display: none;
-  }
-  
-  /* Hide scrollbars on all scrollable elements */
-  * {
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* Internet Explorer 10+ */
-  }
-  
-  *::-webkit-scrollbar {
-    display: none; /* Webkit browsers */
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent body scroll - app container handles it */
   }
   
   /* Make all text elements use thin font by default */
@@ -64,316 +42,88 @@
 }
 
 @layer components {
-  /* Card Components */
-  .card {
-    @apply bg-gray-800 rounded-2xl border border-gray-700 shadow-sm;
-  }
-  
-  .card-hover {
-    @apply transition-all duration-200 hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600;
-  }
-  
-  /* Button Components */
-  .btn {
-    @apply px-4 py-2 rounded-xl font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
-  }
-  
-  .btn-primary {
-    @apply bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500;
-  }
-  
-  .btn-secondary {
-    @apply bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 focus:ring-gray-500;
-  }
-  
-  .btn-success {
-    @apply bg-success-500 text-white hover:bg-success-600 focus:ring-success-500;
-  }
-  
-  .btn-accent {
-    @apply bg-accent-500 text-white hover:bg-accent-600 focus:ring-accent-500;
-  }
-  
-  .btn-warning {
-    @apply bg-warning-500 text-white hover:bg-warning-600 focus:ring-warning-500;
-  }
-  
-  /* Input Components */
-  .input {
-    @apply w-full px-4 py-3 rounded-xl border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
-  }
-  
-  /* Status Indicators */
-  .status-ordered {
-    @apply bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200;
-  }
-  
-  .status-sold {
-    @apply bg-success-100 dark:bg-success-900 text-success-800 dark:text-success-200;
-  }
-  
-  .status-pending {
-    @apply bg-warning-100 dark:bg-warning-900 text-warning-800 dark:text-warning-200;
-  }
-  
-  .status-cancelled {
-    @apply bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200;
-  }
-}
-
-@layer utilities {
-  /* Custom scrollbar */
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: rgb(156 163 175) transparent;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: rgb(156 163 175);
-    border-radius: 3px;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(107 114 128);
-  }
-  
-  /* Safe area for mobile */
-  .safe-top {
-    padding-top: env(safe-area-inset-top);
-  }
-  
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  
-  /* Mobile browser background fixes */
-  .mobile-bg-fix {
-    background-color: #111827;
-    min-height: 100vh;
-    min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
-    min-height: 100svh; /* Small viewport height for mobile browsers */
-  }
-  
-  /* Ensure background covers browser UI areas on mobile */
-  .mobile-full-bg {
-    background-color: #111827;
+  /* iPhone-style app container */
+  .app-container {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: -1;
+    display: flex;
+    flex-direction: column;
+    background-color: #111827;
+    overflow: hidden;
   }
-  
-  /* Mobile web app specific fixes */
-  .mobile-web-app {
-    /* Fix for mobile web app status bar area */
-    padding-top: env(safe-area-inset-top);
-    /* Ensure content doesn't go behind bottom navigation */
-    padding-bottom: calc(80px + env(safe-area-inset-bottom)); /* Height of bottom navigation + safe area */
+
+  /* Main content area - takes up space above bottom nav */
+  .main-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 80px; /* Space for bottom navigation */
+    background-color: #111827;
   }
-  
-  /* FOOLPROOF BOTTOM NAVIGATION - ABSOLUTELY LOCKED TO VIEWPORT */
+
+  /* iPhone-style bottom navigation */
   .bottom-nav-fixed {
-    /* CRITICAL: Force absolute positioning to viewport */
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    z-index: 999999 !important;
-    
-    /* CRITICAL: Lock exact dimensions */
-    height: 80px !important;
-    width: 100vw !important;
-    max-width: 100vw !important;
-    min-height: 80px !important;
-    max-height: 80px !important;
-    
-    /* CRITICAL: Remove ALL transforms and movement */
-    transform: none !important;
-    -webkit-transform: none !important;
-    will-change: auto !important;
-    
-    /* CRITICAL: Prevent any browser interference */
-    -webkit-backface-visibility: hidden !important;
-    backface-visibility: hidden !important;
-    -webkit-perspective: 1000 !important;
-    perspective: 1000 !important;
-    
-    /* CRITICAL: Override ALL browser defaults */
-    top: auto !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    outline: none !important;
-    
-    /* CRITICAL: Force it to stay at viewport bottom */
-    position: -webkit-sticky !important;
-    position: sticky !important;
-    
-    /* CRITICAL: Prevent any scroll interference */
-    overscroll-behavior: none !important;
-    -webkit-overscroll-behavior: none !important;
-    
-    /* CRITICAL: Create new stacking context */
-    isolation: isolate !important;
-    contain: layout style paint !important;
-    
-    /* CRITICAL: Force hardware acceleration without transforms */
-    -webkit-transform: translateZ(0) !important;
-    transform: translateZ(0) !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
+    background-color: #030712;
+    border-top: 1px solid #374151;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    /* Ensure it never moves */
+    transform: none;
+    -webkit-transform: none;
   }
 
   /* Modal overlay fixes - must be higher than bottom navigation */
   .modal-overlay {
     z-index: 10000 !important;
   }
-  
-  /* Content spacing for bottom navigation */
-  .content-with-bottom-nav {
-    padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
-    min-height: calc(100vh - 80px - env(safe-area-inset-bottom)) !important;
-  }
 
-  /* Content spacing without bottom navigation (when modal is open) */
-  .content-without-bottom-nav {
-    padding-bottom: env(safe-area-inset-bottom) !important;
-    min-height: calc(100vh - env(safe-area-inset-bottom)) !important;
-  }
-  
-  /* Fix for mobile web app viewport issues */
-  @supports (-webkit-touch-callout: none) {
-    .mobile-web-app {
-      /* iOS Safari specific fixes */
-      min-height: -webkit-fill-available;
-    }
-  }
-  
-  /* Allow normal scrolling */
-  body {
-    overflow-x: hidden;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  
-  html {
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-  
-  /* PWA-specific fixes for bottom navigation */
+  /* PWA-specific fixes */
   @media (display-mode: standalone) {
+    .app-container {
+      /* PWA mode - ensure full viewport coverage */
+      height: 100vh;
+      height: 100dvh; /* Dynamic viewport height for mobile */
+    }
+    
     .bottom-nav-fixed {
-      /* PWA mode - ensure absolute positioning */
-      position: fixed !important;
-      bottom: 0 !important;
-      left: 0 !important;
-      right: 0 !important;
-      z-index: 9999 !important;
-      /* No transforms in PWA mode */
-      transform: none !important;
-      -webkit-transform: none !important;
-      /* Lock to viewport bottom */
-      top: auto !important;
-      height: 80px !important;
-      /* Prevent any movement */
-      will-change: auto !important;
+      /* PWA mode - ensure safe area support */
+      padding-bottom: env(safe-area-inset-bottom);
     }
   }
   
   /* Mobile-specific fixes */
   @media (max-width: 768px) {
-    .bottom-nav-fixed {
-      /* Force fixed positioning on mobile */
-      position: fixed !important;
-      bottom: 0 !important;
-      left: 0 !important;
-      right: 0 !important;
-      z-index: 9999 !important;
-      /* No transforms */
-      transform: none !important;
-      -webkit-transform: none !important;
-      /* Lock dimensions */
-      height: 80px !important;
-      width: 100% !important;
-      /* Prevent any browser interference */
-      -webkit-backface-visibility: hidden !important;
-      backface-visibility: hidden !important;
-    }
-  }
-  
-  /* iOS Safari specific fixes */
-  @supports (-webkit-touch-callout: none) {
-    .bottom-nav-fixed {
-      /* iOS Safari - force fixed positioning */
-      position: fixed !important;
-      bottom: 0 !important;
-      /* Remove any iOS-specific transforms */
-      -webkit-transform: none !important;
-      transform: none !important;
-      /* Lock to safe area */
-      bottom: env(safe-area-inset-bottom) !important;
-      bottom: 0 !important; /* Fallback */
-      /* Force isolation from content */
-      isolation: isolate !important;
-      contain: layout style paint !important;
-    }
-  }
-  
-  /* FOOLPROOF: Force bottom navigation to be completely isolated from content */
-  .bottom-nav-fixed {
-    /* CRITICAL: Create new stacking context */
-    isolation: isolate !important;
-    contain: layout style paint !important;
-    /* CRITICAL: Force it to be completely separate */
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    z-index: 999999 !important;
-    /* CRITICAL: Lock to viewport */
-    height: 80px !important;
-    width: 100vw !important;
-    /* CRITICAL: No transforms or movement */
-    transform: none !important;
-    -webkit-transform: none !important;
-    will-change: auto !important;
-    /* CRITICAL: Force it to stay at bottom */
-    top: auto !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-  
-  /* Mobile scrolling */
-  @media (max-width: 768px) {
-    body {
-      overflow-x: hidden;
-      overflow-y: auto;
+    .app-container {
+      /* Mobile - ensure proper height */
+      height: 100vh;
+      height: 100dvh;
     }
     
-    html {
-      overflow-x: hidden;
-      overflow-y: auto;
+    .main-content {
+      /* Mobile - ensure proper scrolling */
+      -webkit-overflow-scrolling: touch;
     }
   }
+
+  /* Hide scrollbars for mobile app-like experience */
+  * {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* Internet Explorer 10+ */
+  }
   
-  /* Fix for iOS Safari bottom bar issues */
-  @supports (padding: max(0px)) {
-    .mobile-web-app {
-      padding-bottom: max(80px, env(safe-area-inset-bottom));
-    }
-    
-    .content-with-bottom-nav {
-      padding-bottom: max(80px, env(safe-area-inset-bottom)) !important;
-    }
+  *::-webkit-scrollbar {
+    display: none; /* Webkit browsers */
   }
 
   /* Line clamp utilities */
