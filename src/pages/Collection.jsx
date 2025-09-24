@@ -121,11 +121,11 @@ const Collection = () => {
       const newUrl = window.location.pathname;
       window.history.replaceState({}, document.title, newUrl);
       
-      // Auto-hide notification after 4 seconds
+      // Auto-hide notification after 5 seconds
       setTimeout(() => {
         setShowSuccessNotification(false);
         setSuccessData(null);
-      }, 4000);
+      }, 5000);
     }
   }, []);
 

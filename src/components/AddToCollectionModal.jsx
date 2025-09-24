@@ -232,12 +232,15 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         set: product.set
       };
       
-      // Call onSuccess to trigger collection refresh and navigation
-      onSuccess?.(successInfo);
-      
-      // Close modal immediately
+      // Close modal first
       onClose();
       closeModal();
+      
+      // Call onSuccess after modal is closed to trigger collection refresh and navigation
+      // This ensures the database operation is complete before navigation
+      setTimeout(() => {
+        onSuccess?.(successInfo);
+      }, 100); // Small delay to ensure modal is fully closed
     } catch (err) {
       console.error('Error adding to collection:', err);
       setError(err.message || 'Failed to add item to collection');
