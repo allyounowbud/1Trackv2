@@ -333,6 +333,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 onChange={handleInputChange}
                 required
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ backgroundColor: '#1f2937' }}
               />
             </div>
 
@@ -459,6 +460,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 required
                 placeholder="e.g. 3"
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ backgroundColor: '#1f2937' }}
               />
               <p className="text-xs text-gray-400 mt-1">We'll insert that many rows and split totals equally.</p>
             </div>
@@ -477,6 +479,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 min="0"
                 placeholder="e.g. 38.00"
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ backgroundColor: '#1f2937' }}
               />
               <p className="text-xs text-gray-400 mt-1">Enter the price you paid for each individual item.</p>
             </div>
@@ -495,6 +498,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 min="0"
                 placeholder="e.g. 380.00"
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ backgroundColor: '#1f2937' }}
               />
               <p className="text-xs text-gray-400 mt-1">Total amount paid for all items (auto-calculated from price per item).</p>
             </div>
@@ -532,6 +536,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                     value={formData.sellDate}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ backgroundColor: '#1f2937' }}
                   />
                 </div>
 
@@ -549,6 +554,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                     min="0"
                     placeholder="0"
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ backgroundColor: '#1f2937' }}
                   />
                   <p className="text-xs text-gray-400 mt-1">If qty &gt; 1 we'll split this total across rows.</p>
                 </div>
@@ -684,6 +690,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                         max="100"
                         placeholder="Enter fee percentage"
                         className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ backgroundColor: '#1f2937' }}
                       />
                       <p className="text-xs text-indigo-400">Custom fee for "Other" marketplace</p>
                     </div>
@@ -698,6 +705,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                         min="0"
                         placeholder="0"
                         className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ backgroundColor: '#1f2937' }}
                         readOnly
                       />
                       <p className="text-xs text-gray-400 mt-1">Auto filled once a marketplace is selected.</p>
@@ -719,6 +727,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                     min="0"
                     placeholder="0"
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ backgroundColor: '#1f2937' }}
                   />
                   <p className="text-xs text-gray-400 mt-1">If qty &gt; 1 we'll split shipping across rows.</p>
                 </div>
@@ -733,6 +742,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
             type="submit"
             disabled={isSubmitting}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
+            style={{ backgroundColor: '#4f46e5' }}
           >
             {isSubmitting ? 'Adding...' : 'Add Order'}
           </button>
