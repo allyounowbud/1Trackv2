@@ -100,6 +100,25 @@ const Collection = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Fetch data with cache-busting for PWA
+  const { data: orders = [], isLoading: ordersLoading, isFetching: ordersFetching, refetch: refetchOrders } = useQuery({
+    queryKey: queryKeys.orders,
+    queryFn: getOrders,
+    staleTime: 0, // Always consider data stale
+    cacheTime: 0, // Don't cache data
+    refetchOnMount: true, // Always refetch on mount
+    refetchOnWindowFocus: true, // Refetch when window gains focus
+  });
+
+  const { data: collectionSummary = [], isLoading: summaryLoading, isFetching: summaryFetching, refetch: refetchSummary } = useQuery({
+    queryKey: queryKeys.collectionSummary,
+    queryFn: getCollectionSummary,
+    staleTime: 0, // Always consider data stale
+    cacheTime: 0, // Don't cache data
+    refetchOnMount: true, // Always refetch on mount
+    refetchOnWindowFocus: true, // Refetch when window gains focus
+  });
+
   // Check for success data from navigation
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -132,25 +151,6 @@ const Collection = () => {
       }, 5000);
     }
   }, [refetchOrders, refetchSummary]);
-
-  // Fetch data with cache-busting for PWA
-  const { data: orders = [], isLoading: ordersLoading, isFetching: ordersFetching, refetch: refetchOrders } = useQuery({
-    queryKey: queryKeys.orders,
-    queryFn: getOrders,
-    staleTime: 0, // Always consider data stale
-    cacheTime: 0, // Don't cache data
-    refetchOnMount: true, // Always refetch on mount
-    refetchOnWindowFocus: true, // Refetch when window gains focus
-  });
-
-  const { data: collectionSummary = [], isLoading: summaryLoading, isFetching: summaryFetching, refetch: refetchSummary } = useQuery({
-    queryKey: queryKeys.collectionSummary,
-    queryFn: getCollectionSummary,
-    staleTime: 0, // Always consider data stale
-    cacheTime: 0, // Don't cache data
-    refetchOnMount: true, // Always refetch on mount
-    refetchOnWindowFocus: true, // Refetch when window gains focus
-  });
 
   // Delete order - SIMPLE!
   const deleteOrder = async (orderId) => {
