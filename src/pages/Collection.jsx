@@ -548,27 +548,27 @@ const Collection = () => {
       <div className="px-4 py-3">
         <div className="text-center mb-3 pt-4">
           <div className="text-xs text-gray-300 mb-0.5">Your collection is worth</div>
-          <div className="text-3xl font-bold text-indigo-500 mb-0.5">
+          <div className="text-5xl font-bold text-indigo-500 mb-0.5">
             {formatPrice(collectionData.totalValue)}
           </div>
-          <div className="text-xs text-gray-300">Total Paid • {formatPrice(collectionData.totalPaid)} <span className={collectionData.profitPercentage >= 0 ? 'text-green-400' : 'text-red-400'}>({collectionData.profitPercentage >= 0 ? '+' : ''}{collectionData.profitPercentage.toFixed(1)}%)</span></div>
+          <div className="text-xs text-gray-300">You Paid • {formatPrice(collectionData.totalPaid)} <span className={collectionData.profitPercentage >= 0 ? 'text-green-400' : 'text-red-400'}>({collectionData.profitPercentage >= 0 ? '+' : ''}{collectionData.profitPercentage.toFixed(1)}%)</span></div>
         </div>
 
         {/* Item Status Breakdown */}
         <div className="grid grid-cols-3 gap-3 mb-4 pt-2">
-          <div className="text-center">
+          <div className="text-center bg-gray-900 border border-gray-800 rounded-lg p-3">
             <div className="text-xs text-gray-400 mb-1">Ungraded</div>
             <div className="text-xs text-indigo-500">
               {collectionData.ungradedCount}
             </div>
           </div>
-          <div className="text-center">
+          <div className="text-center bg-gray-900 border border-gray-800 rounded-lg p-3">
             <div className="text-xs text-gray-400 mb-1">Graded</div>
             <div className="text-xs text-indigo-500">
               {collectionData.gradedCount}
             </div>
           </div>
-          <div className="text-center">
+          <div className="text-center bg-gray-900 border border-gray-800 rounded-lg p-3">
             <div className="text-xs text-gray-400 mb-1">Sealed</div>
             <div className="text-xs text-indigo-500">
               {collectionData.sealedCount}
@@ -847,10 +847,10 @@ const Collection = () => {
             return (
                    <div 
                      key={item.id} 
-                     className={`relative border rounded-lg overflow-hidden transition-all duration-200 ${
+                     className={`relative bg-gray-900 border border-gray-800 rounded-lg overflow-hidden transition-all duration-200 ${
                        isSelected 
                          ? 'border-indigo-500 bg-indigo-900/20' 
-                         : 'border-gray-700 hover:border-gray-600'
+                         : 'hover:border-gray-700'
                      }`}
                      onTouchStart={(e) => {
                        longPressTriggeredRef.current = false;
@@ -935,12 +935,7 @@ const Collection = () => {
                 </div>
                   
                   {/* Status Text */}
-                  <div className={`text-xs italic opacity-60 ${
-                    item.status === 'Ungraded' ? 'text-yellow-400' :
-                    item.status === 'Graded' ? 'text-purple-400' :
-                    item.status === 'Sealed' ? 'text-blue-400' :
-                    'text-gray-400'
-                  }`}>
+                  <div className="text-xs text-indigo-500">
                     {item.status}
                   </div>
                 
