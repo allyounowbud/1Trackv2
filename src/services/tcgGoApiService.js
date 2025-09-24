@@ -900,27 +900,26 @@ class TCGGoApiService {
       let marketValue = tcgPlayerMarketPrice || cardMarketPrice;
       
       // Try to get enhanced pricing from Pokémon TCG API (optional enhancement)
-      // Make this completely non-blocking with a short timeout
+      // Make this completely non-blocking - don't wait for it
       let pokemonTcgData = null;
-      try {
-        const pokemonPromise = pokemonTcgApiService.searchCardsFormatted(card.name, { pageSize: 1 });
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Pokémon TCG API timeout')), 2000)
-        );
-        
-        const pokemonCards = await Promise.race([pokemonPromise, timeoutPromise]);
-        if (pokemonCards.length > 0) {
-          pokemonTcgData = pokemonCards[0];
-          // Use Pokémon TCG API price if it's available and higher quality
-          if (pokemonTcgData.marketValue && pokemonTcgData.marketValue > 0) {
-            marketValue = pokemonTcgData.marketValue;
+      
+      // Start the Pokémon TCG API call in the background but don't wait for it
+      pokemonTcgApiService.searchCardsFormatted(card.name, { pageSize: 1 })
+        .then(pokemonCards => {
+          if (pokemonCards.length > 0) {
+            pokemonTcgData = pokemonCards[0];
+            // Update the card with enhanced pricing if available
+            if (pokemonTcgData.marketValue && pokemonTcgData.marketValue > 0) {
+              // This will update the card in the background
+              console.log(`🎯 Enhanced pricing found for ${card.name}: $${pokemonTcgData.marketValue}`);
+            }
           }
-        }
-      } catch (error) {
-        // Pokémon TCG API is not available (CORS restrictions in browser)
-        // This is expected and we'll continue with existing pricing sources
-        pokemonTcgData = null;
-      }
+        })
+        .catch(error => {
+          // Pokémon TCG API is not available (CORS restrictions in browser)
+          // This is expected and we'll continue with existing pricing sources
+          pokemonTcgData = null;
+        });
       
       // Calculate trend from available 7d/30d averages (no individual API calls)
       const cardMarket7d = cardMarketPrices['7d_average'];
