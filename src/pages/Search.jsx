@@ -822,7 +822,6 @@ const Search = () => {
 
   return (
     <div className="text-white">
-
       {/* Search Interface */}
       <div className="px-3 py-2">
         <div className="p-3">

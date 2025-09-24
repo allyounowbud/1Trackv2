@@ -1,7 +1,10 @@
 /**
  * TCG Go API Service - Complete implementation matching TCG Go website
  * Based on Card Market API documentation
+ * Enhanced with Pokémon TCG API integration for better card values
  */
+
+import pokemonTcgApiService from './pokemonTcgApiService.js';
 
 class TCGGoApiService {
   constructor() {
@@ -877,7 +880,7 @@ class TCGGoApiService {
   }
 
   /**
-   * Format card data
+   * Format card data with Pokémon TCG API enhancement
    */
   async formatCard(card) {
     try {
@@ -894,7 +897,30 @@ class TCGGoApiService {
       const cardMarketPrice = cardMarketPrices.trend || cardMarketPrices.lowest_near_mint || cardMarketPrices.average;
       
       // Use TCGPlayer as primary (US market), Card Market as fallback (EU market)
-      const marketValue = tcgPlayerMarketPrice || cardMarketPrice;
+      let marketValue = tcgPlayerMarketPrice || cardMarketPrice;
+      
+      // Try to get enhanced pricing from Pokémon TCG API (optional enhancement)
+      // Make this completely non-blocking with a short timeout
+      let pokemonTcgData = null;
+      try {
+        const pokemonPromise = pokemonTcgApiService.searchCardsFormatted(card.name, { pageSize: 1 });
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Pokémon TCG API timeout')), 2000)
+        );
+        
+        const pokemonCards = await Promise.race([pokemonPromise, timeoutPromise]);
+        if (pokemonCards.length > 0) {
+          pokemonTcgData = pokemonCards[0];
+          // Use Pokémon TCG API price if it's available and higher quality
+          if (pokemonTcgData.marketValue && pokemonTcgData.marketValue > 0) {
+            marketValue = pokemonTcgData.marketValue;
+          }
+        }
+      } catch (error) {
+        // Pokémon TCG API is not available (CORS restrictions in browser)
+        // This is expected and we'll continue with existing pricing sources
+        pokemonTcgData = null;
+      }
       
       // Calculate trend from available 7d/30d averages (no individual API calls)
       const cardMarket7d = cardMarketPrices['7d_average'];
@@ -902,7 +928,6 @@ class TCGGoApiService {
       // Use 7d as current and 30d as previous for trend calculation
       const trend = this.calculateTrend(cardMarket7d, cardMarket30d);
       const dollarChange = cardMarket7d && cardMarket30d ? cardMarket7d - cardMarket30d : 0;
-
 
       return {
         name: card.name,
@@ -917,7 +942,7 @@ class TCGGoApiService {
         prices: {
           market: marketValue || 0,
           trend: trend || 0,
-          source: tcgPlayerMarketPrice ? 'tcgplayer' : 'cardmarket',
+          source: pokemonTcgData ? 'pokemon-tcg-api' : (tcgPlayerMarketPrice ? 'tcgplayer' : 'cardmarket'),
           tcgPlayer: {
             market: tcgPlayerPrices.market_price || 0,
             mid: tcgPlayerPrices.mid_price || 0,
@@ -928,7 +953,15 @@ class TCGGoApiService {
             average7d: cardMarketPrices['7d_average'] || 0,
             average30d: cardMarketPrices['30d_average'] || 0,
             currency: 'USD'
-          }
+          },
+          pokemonTcg: pokemonTcgData ? {
+            market: pokemonTcgData.prices?.market || 0,
+            low: pokemonTcgData.prices?.low || 0,
+            mid: pokemonTcgData.prices?.mid || 0,
+            high: pokemonTcgData.prices?.high || 0,
+            directLow: pokemonTcgData.prices?.directLow || 0,
+            lastUpdated: pokemonTcgData.prices?.lastUpdated
+          } : null
         },
         details: {
           cardNumber: card.card_number,
@@ -936,7 +969,21 @@ class TCGGoApiService {
           supertype: card.supertype,
           type: card.type,
           setCode: card.episode?.code,
-          releaseDate: card.episode?.released_at
+          releaseDate: card.episode?.released_at,
+          // Enhanced details from Pokémon TCG API
+          pokemonTcgDetails: pokemonTcgData ? {
+            types: pokemonTcgData.types,
+            subtypes: pokemonTcgData.subtypes,
+            supertype: pokemonTcgData.supertype,
+            attacks: pokemonTcgData.attacks,
+            weaknesses: pokemonTcgData.weaknesses,
+            resistances: pokemonTcgData.resistances,
+            retreatCost: pokemonTcgData.retreatCost,
+            convertedRetreatCost: pokemonTcgData.convertedRetreatCost,
+            nationalPokedexNumbers: pokemonTcgData.nationalPokedexNumbers,
+            legalities: pokemonTcgData.legalities,
+            regulationMark: pokemonTcgData.regulationMark
+          } : null
         }
       };
     } catch (error) {

@@ -176,6 +176,7 @@ const V2ConnectionTest = () => {
           <div>Supabase Key: {import.meta.env.VITE_SUPABASE_ANON_KEY ? '✅ Set' : '❌ Missing'}</div>
           <div>RapidAPI Key: {import.meta.env.VITE_RAPIDAPI_KEY ? '✅ Set' : '❌ Missing'}</div>
           <div>PriceCharting Key: {import.meta.env.VITE_PRICECHARTING_API_KEY ? '✅ Set' : '❌ Missing'}</div>
+          <div>Pokémon TCG API Key: {import.meta.env.VITE_POKEMON_TCG_API_KEY ? '✅ Set' : '❌ Missing'}</div>
         </div>
       </div>
     </div>

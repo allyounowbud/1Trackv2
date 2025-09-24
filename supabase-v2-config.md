@@ -96,6 +96,7 @@ VITE_SUPABASE_ANON_KEY="your-v2-anon-key"
 # API Keys (same as before)
 VITE_RAPIDAPI_KEY="your-rapidapi-key"
 VITE_PRICECHARTING_API_KEY="your-pricecharting-key"
+VITE_POKEMON_TCG_API_KEY="your-pokemon-tcg-api-key"
 
 # App Configuration
 VITE_USE_MOCK_DATA="false"
