@@ -219,10 +219,6 @@ export async function getSearchResultImages(searchResults, maxResults = 5) {
   return results;
 }
 
-// Clear the in-memory cache
-export function clearImageCache() {
-  imageCache.clear();
-}
 
 // Get cache statistics
 export function getCacheStats() {

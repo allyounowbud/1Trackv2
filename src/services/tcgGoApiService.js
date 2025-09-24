@@ -86,7 +86,6 @@ class TCGGoApiService {
           }
         });
         
-        console.log(`📦 Loaded ${this.cache.size} cached entries from localStorage`);
       }
     } catch (error) {
       console.warn('⚠️ Failed to load persistent cache:', error);
@@ -145,7 +144,6 @@ class TCGGoApiService {
 
     try {
       const responseData = await this.makeRequest('/pokemon/episodes');
-      console.log('🔍 Raw all expansions API response:', responseData);
       
       // Handle different response structures
       let data;
@@ -279,7 +277,6 @@ class TCGGoApiService {
           break; // No pagination info, assume single page
         }
         
-        console.log(`📄 Fetched page ${currentPage - 1}/${totalPages}, total cards so far: ${allCards.length}`);
         
       } while (currentPage <= totalPages && (!maxResults || allCards.length < maxResults));
       
@@ -307,7 +304,6 @@ class TCGGoApiService {
       }
 
       this.setCache(cacheKey, formattedCards);
-      console.log(`✅ Fetched all ${formattedCards.length} cards from expansion ${expansionId}`);
       return formattedCards;
     } catch (error) {
       console.error('❌ Error fetching expansion cards:', error);
@@ -363,7 +359,6 @@ class TCGGoApiService {
           break; // No pagination info, assume single page
         }
         
-        console.log(`📄 Fetched page ${currentPage - 1}/${totalPages}, total products so far: ${allProducts.length}`);
         
       } while (currentPage <= totalPages && (!maxResults || allProducts.length < maxResults));
       
@@ -449,7 +444,6 @@ class TCGGoApiService {
       
       do {
         const responseData = await this.makeRequest(`/pokemon/cards?sort=${sort}&page=${currentPage}`);
-        console.log(`🔍 Raw all cards API response (page ${currentPage}):`, responseData);
         
         // Handle different response structures
         let data;
@@ -481,7 +475,6 @@ class TCGGoApiService {
           break; // No pagination info, assume single page
         }
         
-        console.log(`📄 Fetched page ${currentPage - 1}/${totalPages}, total cards so far: ${allCards.length}`);
         
       } while (currentPage <= totalPages && allCards.length < maxResults);
       
@@ -489,7 +482,6 @@ class TCGGoApiService {
       const formattedCards = (await Promise.all(allCards.map(card => this.formatCard(card)))).filter(card => card !== null);
 
       this.setCache(cacheKey, formattedCards);
-      console.log(`✅ Fetched ${formattedCards.length} cards (sorted by ${sort})`);
       return formattedCards;
     } catch (error) {
       console.error('❌ Error fetching all cards:', error);
@@ -514,7 +506,6 @@ class TCGGoApiService {
       
       do {
         const responseData = await this.makeRequest(`/pokemon/cards/search?search=${encodedQuery}&sort=${sort}&page=${currentPage}`);
-        console.log(`🔍 Raw search cards API response (page ${currentPage}):`, responseData);
         
         // Handle different response structures
         let data;
@@ -546,7 +537,6 @@ class TCGGoApiService {
           break; // No pagination info, assume single page
         }
         
-        console.log(`📄 Fetched page ${currentPage - 1}/${totalPages}, total cards so far: ${allCards.length}`);
         
       } while (currentPage <= totalPages && allCards.length < maxResults);
       
@@ -554,7 +544,6 @@ class TCGGoApiService {
       const formattedCards = (await Promise.all(allCards.map(card => this.formatCard(card)))).filter(card => card !== null);
 
       this.setCache(cacheKey, formattedCards);
-      console.log(`✅ Fetched ${formattedCards.length} cards for search "${query}"`);
       return formattedCards;
     } catch (error) {
       console.error('❌ Error searching cards:', error);
@@ -578,7 +567,6 @@ class TCGGoApiService {
       
       do {
         const responseData = await this.makeRequest(`/pokemon/products?sort=${sort}&page=${currentPage}`);
-        console.log(`🔍 Raw all products API response (page ${currentPage}):`, responseData);
         
         // Handle different response structures
         let data;
@@ -610,7 +598,6 @@ class TCGGoApiService {
           break; // No pagination info, assume single page
         }
         
-        console.log(`📄 Fetched page ${currentPage - 1}/${totalPages}, total products so far: ${allProducts.length}`);
         
       } while (currentPage <= totalPages && allProducts.length < maxResults);
       
@@ -618,7 +605,6 @@ class TCGGoApiService {
       const formattedProducts = (await Promise.all(allProducts.map(product => this.formatProduct(product)))).filter(product => product !== null);
 
       this.setCache(cacheKey, formattedProducts);
-      console.log(`✅ Fetched ${formattedProducts.length} products (sorted by ${sort})`);
       return formattedProducts;
     } catch (error) {
       console.error('❌ Error fetching all products:', error);
@@ -643,17 +629,7 @@ class TCGGoApiService {
       
       do {
         const responseData = await this.makeRequest(`/pokemon/products/search?search=${encodedQuery}&sort=${sort}&page=${currentPage}`);
-        console.log(`🔍 Raw search products API response (page ${currentPage}):`, responseData);
         
-        // Debug: Log the first product's price structure to understand the API response format
-        if (responseData && responseData.length > 0) {
-          console.log(`🔍 First product price structure:`, {
-            name: responseData[0].name,
-            hasPrices: !!responseData[0].prices,
-            priceKeys: responseData[0].prices ? Object.keys(responseData[0].prices) : [],
-            prices: responseData[0].prices
-          });
-        }
         
         // Handle different response structures
         let data;
@@ -685,7 +661,6 @@ class TCGGoApiService {
           break; // No pagination info, assume single page
         }
         
-        console.log(`📄 Fetched page ${currentPage - 1}/${totalPages}, total products so far: ${allProducts.length}`);
         
       } while (currentPage <= totalPages && allProducts.length < maxResults);
       
@@ -693,7 +668,6 @@ class TCGGoApiService {
       const formattedProducts = (await Promise.all(allProducts.map(product => this.formatProduct(product)))).filter(product => product !== null);
 
       this.setCache(cacheKey, formattedProducts);
-      console.log(`✅ Fetched ${formattedProducts.length} products for search "${query}"`);
       return formattedProducts;
     } catch (error) {
       console.error('❌ Error searching products:', error);
@@ -736,37 +710,6 @@ class TCGGoApiService {
     }
   }
 
-  /**
-   * Test method to debug specific card data
-   */
-  async debugCardData(cardId) {
-    try {
-      console.log(`🔍 Debugging card data for ID: ${cardId}`);
-      const responseData = await this.makeRequest(`/pokemon/cards/${cardId}`);
-      console.log('🔍 Raw card API response:', responseData);
-      console.log('🔍 Card prices structure:', responseData.prices);
-      console.log('🔍 Card Market prices:', responseData.prices?.cardmarket);
-      console.log('🔍 TCGPlayer prices:', responseData.prices?.tcg_player);
-      
-      // Debug: Log all available price fields for accuracy check
-      if (responseData.prices?.cardmarket) {
-        console.log('🔍 Card Market price fields:', Object.keys(responseData.prices.cardmarket));
-        console.log('🔍 Card Market price values:', responseData.prices.cardmarket);
-      }
-      if (responseData.prices?.tcg_player) {
-        console.log('🔍 TCGPlayer price fields:', Object.keys(responseData.prices.tcg_player));
-        console.log('🔍 TCGPlayer price values:', responseData.prices.tcg_player);
-      }
-      
-      const formattedCard = await this.formatCard(responseData);
-      console.log('🔍 Formatted card result:', formattedCard);
-      
-      return { raw: responseData, formatted: formattedCard };
-    } catch (error) {
-      console.error(`❌ Error debugging card ${cardId}:`, error);
-      return null;
-    }
-  }
 
   /**
    * Get detailed information for a specific card by ID
@@ -776,22 +719,18 @@ class TCGGoApiService {
     const cacheKey = `card_details_${cardId}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) {
-      console.log(`📋 Using cached card details for card ${cardId}`);
       return cached;
     }
 
     try {
-      console.log(`🔍 Fetching detailed information for card ${cardId}`);
       
       const responseData = await this.makeRequest(`/pokemon/cards/${cardId}`);
-      console.log(`🔍 Raw card details API response:`, responseData);
       
       // Format the card data using our existing formatter
       const formattedCard = await this.formatCard(responseData);
       
       if (formattedCard) {
         this.setCache(cacheKey, formattedCard);
-        console.log(`✅ Fetched detailed information for card: ${formattedCard.name}`);
         return formattedCard;
       } else {
         console.error(`❌ Failed to format card details for card ${cardId}`);
@@ -1449,18 +1388,6 @@ class TCGGoApiService {
     return Math.round(percentage * 100) / 100;
   }
 
-  /**
-   * Clear cache
-   */
-  clearCache() {
-    this.cache.clear();
-    try {
-      localStorage.removeItem('tcgGoApiCache');
-      console.log('🗑️ Cleared all cache (in-memory and persistent)');
-    } catch (error) {
-      console.warn('⚠️ Failed to clear persistent cache:', error);
-    }
-  }
 
   /**
    * Check if a product name indicates it's a sealed product

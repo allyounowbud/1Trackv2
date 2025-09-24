@@ -6,7 +6,6 @@ export const registerServiceWorker = async () => {
         scope: '/'
       });
       
-      console.log('Service Worker registered successfully:', registration);
       
       // Handle updates
       registration.addEventListener('updatefound', () => {
@@ -26,7 +25,6 @@ export const registerServiceWorker = async () => {
       console.error('Service Worker registration failed:', error);
     }
   } else {
-    console.log('Service Worker not supported');
   }
 };
 
@@ -51,7 +49,6 @@ export const setupInstallPrompt = () => {
   });
   
   window.addEventListener('appinstalled', () => {
-    console.log('PWA was installed');
     deferredPrompt = null;
     hideInstallButton();
   });
@@ -60,7 +57,6 @@ export const setupInstallPrompt = () => {
 // Show install button
 const showInstallButton = () => {
   // You can customize this to show an install button in your UI
-  console.log('Install prompt available');
   
   // Example: Show a custom install button
   const installButton = document.createElement('button');
@@ -85,7 +81,6 @@ const installApp = async () => {
   if (deferredPrompt) {
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to the install prompt: ${outcome}`);
     deferredPrompt = null;
     hideInstallButton();
   }
@@ -110,7 +105,6 @@ export const getAppStatus = () => {
 export const setupOnlineStatus = () => {
   const updateOnlineStatus = () => {
     const status = navigator.onLine ? 'online' : 'offline';
-    console.log(`App is ${status}`);
     
     // You can show a notification or update UI based on online status
     if (status === 'offline') {
@@ -130,43 +124,18 @@ export const setupOnlineStatus = () => {
 // Show offline notification
 const showOfflineNotification = () => {
   // You can customize this to show an offline indicator
-  console.log('App is offline');
 };
 
 // Hide offline notification
 const hideOfflineNotification = () => {
-  console.log('App is online');
 };
 
-// Force cache clear and update
-export const forceCacheUpdate = async () => {
-  if ('serviceWorker' in navigator) {
-    try {
-      // Clear all caches
-      const cacheNames = await caches.keys();
-      await Promise.all(
-        cacheNames.map(cacheName => caches.delete(cacheName))
-      );
-      
-      // Unregister current service worker
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(
-        registrations.map(registration => registration.unregister())
-      );
-      
-      // Force reload
-      window.location.reload(true);
-    } catch (error) {
-      console.error('Force cache update failed:', error);
-    }
-  }
-};
 
 // Initialize PWA features
 export const initializePWA = async () => {
   try {
-    // Register service worker with cache busting
-    const registration = await navigator.serviceWorker.register('/sw.js?v=' + Date.now(), {
+    // Register service worker
+    const registration = await navigator.serviceWorker.register('/sw.js', {
       scope: '/'
     });
     
@@ -182,7 +151,6 @@ export const initializePWA = async () => {
     // Setup online status
     setupOnlineStatus();
     
-    console.log('PWA initialized successfully');
   } catch (error) {
     console.error('PWA initialization failed:', error);
   }
@@ -206,7 +174,6 @@ window.addEventListener('unhandledrejection', (event) => {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (event) => {
     // Handle service worker messages
-    console.log('Service Worker message:', event.data);
   });
   
   navigator.serviceWorker.addEventListener('error', (event) => {

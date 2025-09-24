@@ -30,10 +30,7 @@ self.addEventListener('install', (event) => {
         return self.skipWaiting();
       })
       .catch((error) => {
-        // Suppress common caching errors that don't affect functionality
-        if (!error.message.includes('Failed to fetch')) {
-          console.error('Service Worker: Failed to cache static files', error);
-        }
+        // Suppress caching errors that don't affect functionality
       })
   );
 });
@@ -45,8 +42,10 @@ self.addEventListener('activate', (event) => {
       .then((cacheNames) => {
         return Promise.all(
           cacheNames.map((cacheName) => {
-            // Delete ALL old caches to force fresh download
-            return caches.delete(cacheName);
+            // Only delete caches that don't match current version
+            if (cacheName !== CACHE_NAME && cacheName !== STATIC_CACHE_NAME && cacheName !== DYNAMIC_CACHE_NAME) {
+              return caches.delete(cacheName);
+            }
           })
         );
       })
@@ -161,7 +160,7 @@ async function doBackgroundSync() {
     // Handle any pending offline actions
     // Add your background sync logic here
   } catch (error) {
-    console.error('Service Worker: Background sync failed', error);
+    // Suppress background sync errors
   }
 }
 

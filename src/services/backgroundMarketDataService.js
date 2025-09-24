@@ -186,15 +186,12 @@ export function initializeBackgroundMarketData() {
         Object.entries(data).forEach(([key, value]) => {
           backgroundMarketDataCache.set(key, value);
         });
-        console.log(`📦 Restored ${Object.keys(data).length} cached market data entries from localStorage (${hoursOld}h old)`);
         return;
       } else {
-        console.log(`🕐 Background market data cache expired (${hoursOld}h old), will refresh`);
         // Clear expired cache
         localStorage.removeItem('backgroundMarketData');
       }
     } else {
-      console.log('📭 No background market data found in localStorage');
     }
   } catch (error) {
     console.error('Error loading background market data from localStorage:', error);

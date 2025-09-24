@@ -86,14 +86,12 @@ const Search = () => {
   // Fetch all expansion results and handle pagination
   const fetchAllExpansionResults = useCallback(async (expansionId, sort, filter) => {
     try {
-      console.log(`Fetching all results for expansion ${expansionId}`);
       
       // Check cache first
       const cacheKey = `expansion_all_${expansionId}_${sort}_${filter}`;
       const cached = localStorage.getItem(cacheKey);
       
       if (cached) {
-        console.log('Using cached expansion results');
         return JSON.parse(cached);
       }
 
@@ -121,7 +119,6 @@ const Search = () => {
       // Cache results
       localStorage.setItem(cacheKey, JSON.stringify(allItems));
       
-      console.log(`Fetched ${allItems.length} total results for expansion ${expansionId}`);
       return allItems;
     } catch (error) {
       console.error('Error fetching expansion results:', error);
@@ -163,7 +160,6 @@ const Search = () => {
       });
 
       const expansions = (await Promise.all(expansionPromises)).filter(Boolean);
-      console.log(`✅ Loaded ${expansions.length} popular expansions:`, expansions);
       
       
       if (expansions.length > 0) {
@@ -223,7 +219,6 @@ const Search = () => {
       return;
     }
 
-    console.log(`✅ Using expansion ID: ${expansionId} for ${expansion.name}`);
 
     setIsLoading(true);
     setSearchQuery(expansion.name);
@@ -241,7 +236,6 @@ const Search = () => {
       const allItems = await fetchAllExpansionResults(expansionId, sortBy, filterBy);
       
       if (allItems && allItems.length > 0) {
-        console.log(`✅ Found ${allItems.length} total items from ${expansion.name}`);
         
         // Store all results
         setAllResults(allItems);
@@ -257,10 +251,7 @@ const Search = () => {
         setCurrentPage(1);
         setHasMoreResults(allItems.length > resultsPerPage);
         
-        console.log(`✅ Expansion browse started: showing ${firstPageResults.length} of ${allItems.length} results`);
-        console.log(`📊 Pagination state - hasMoreResults: ${allItems.length > resultsPerPage}, allItems.length: ${allItems.length}, resultsPerPage: ${resultsPerPage}`);
       } else {
-        console.log(`❌ No items found for ${expansion.name}`);
         setSearchResults([]);
         setAllResults([]);
         setDisplayedResults([]);
@@ -283,8 +274,6 @@ const Search = () => {
   const loadAllExpansions = async () => {
     setIsLoadingTrending(true);
     try {
-      // Clear cache to ensure we get fresh data with updated images
-      tcgGoApiService.clearCache();
       const expansions = await tcgGoApiService.getAllExpansions();
       
       
@@ -623,13 +612,10 @@ const Search = () => {
 
   // Load more results function
   const loadMoreResults = useCallback(() => {
-    console.log(`🔄 loadMoreResults called - isLoadingMore: ${isLoadingMore}, hasMoreResults: ${hasMoreResults}`);
     if (isLoadingMore || !hasMoreResults) {
-      console.log(`❌ loadMoreResults blocked - isLoadingMore: ${isLoadingMore}, hasMoreResults: ${hasMoreResults}`);
       return;
     }
 
-    console.log(`🚀 Starting to load more results...`);
     setIsLoadingMore(true);
     
     try {
@@ -637,22 +623,18 @@ const Search = () => {
       const startIndex = nextPage * resultsPerPage;
       const endIndex = startIndex + resultsPerPage;
       
-      console.log(`📊 Loading more results - nextPage: ${nextPage}, startIndex: ${startIndex}, endIndex: ${endIndex}, allResults.length: ${allResults.length}`);
       
       // Get next batch of results from allResults
       const nextBatch = allResults.slice(startIndex, endIndex);
-      console.log(`📦 Next batch: ${nextBatch.length} items`);
       
       if (nextBatch && nextBatch.length > 0) {
         // Add to displayed results
         setDisplayedResults(prev => {
           const newDisplayed = [...prev, ...nextBatch];
-          console.log(`📈 Updated displayed results: ${prev.length} -> ${newDisplayed.length}`);
           return newDisplayed;
         });
         setSearchResults(prev => {
           const newSearch = [...prev, ...nextBatch];
-          console.log(`📈 Updated search results: ${prev.length} -> ${newSearch.length}`);
           return newSearch;
         });
         setCurrentPage(nextPage);
@@ -662,11 +644,9 @@ const Search = () => {
         
         // Check if there are more results
         const hasMore = endIndex < allResults.length;
-        console.log(`🔍 Has more results: ${hasMore} (endIndex: ${endIndex}, allResults.length: ${allResults.length})`);
         setHasMoreResults(hasMore);
       } else {
         // No more results
-        console.log(`❌ No more results to load, setting hasMoreResults to false`);
         setHasMoreResults(false);
       }
     } catch (error) {
@@ -701,17 +681,14 @@ const Search = () => {
       
       const scrollPercentage = (scrollTop + windowHeight) / documentHeight;
       
-      console.log(`📜 Scroll event - scrollTop: ${scrollTop}, windowHeight: ${windowHeight}, documentHeight: ${documentHeight}, scrollPercentage: ${scrollPercentage.toFixed(2)}`);
       
       // More aggressive scroll detection - trigger when within 200px of bottom
       if (scrollTop + windowHeight >= scrollThreshold) {
-        console.log(`🎯 Scroll threshold reached (200px from bottom)`);
         debouncedLoadMore();
       }
       
       // Alternative detection - trigger when scrolled to 80% of content
       if (scrollPercentage >= 0.8) {
-        console.log(`🎯 Scroll percentage reached (80%)`);
         debouncedLoadMore();
       }
     };
@@ -753,7 +730,6 @@ const Search = () => {
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            console.log(`👁️ IntersectionObserver triggered`);
             debouncedLoadMore();
           }
         });
@@ -783,45 +759,9 @@ const Search = () => {
     return `$${value.toFixed(2)}`;
   };
 
-  const clearCache = () => {
-    tcgGoApiService.clearCache();
-    setSearchResults([]);
-    setTotalResults(0);
-    console.log('🗑️ Cache cleared, try searching again');
-  };
 
-  const clearAllCache = () => {
-    // Clear all caches including localStorage
-    tcgGoApiService.clearCache();
-    localStorage.clear();
-    setSearchResults([]);
-    setTotalResults(0);
-    setAllResults([]);
-    setDisplayedResults([]);
-    setTotalAvailableResults(0);
-    setHasMoreResults(false);
-    setCurrentPage(1);
-    console.log('🗑️ All caches cleared, try searching again');
-  };
-
-  // Debug function to check price accuracy for a specific item
-  const debugItemPricing = async (itemId, itemType = 'card') => {
-    try {
-      if (itemType === 'card') {
-        await tcgGoApiService.debugCardData(itemId);
-      } else {
-        // For products, we'd need to implement debugProductData
-      }
-    } catch (error) {
-      console.error('Error debugging item pricing:', error);
-    }
-  };
 
   const handleProductClick = (product) => {
-    console.log(`🔍 Opening modal for product: "${product.name}"`);
-    console.log(`🔍 Product marketValue: $${product.marketValue}`);
-    console.log(`🔍 Product prices source: ${product.prices?.source}`);
-    console.log(`🔍 Product prices data:`, product.prices);
     setSelectedProduct(product);
     setIsPreviewOpen(true);
   };
@@ -912,15 +852,6 @@ const Search = () => {
             )}
           </div>
 
-          {/* Clear Cache Button - Temporary for testing */}
-          <div className="mb-3">
-            <button
-              onClick={clearAllCache}
-              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg transition-colors"
-            >
-              Clear All Cache (Test PriceCharting)
-            </button>
-          </div>
 
           {/* Filter Buttons */}
           <div className="flex gap-2 mb-3">

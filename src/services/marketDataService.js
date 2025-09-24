@@ -50,12 +50,6 @@ class MarketDataService {
     return response;
   }
 
-  // Clear cache for debugging
-  clearCache() {
-    this.cache.clear();
-    localStorage.removeItem('marketDataCache');
-    console.log('🗑️ Cache cleared');
-  }
 
   // =============================================
   // EXPANSION/EPISODE MANAGEMENT
