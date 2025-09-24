@@ -181,28 +181,43 @@
     padding-bottom: calc(80px + env(safe-area-inset-bottom)); /* Height of bottom navigation + safe area */
   }
   
-  /* Bottom navigation - absolutely locked to bottom */
+  /* Bottom navigation - absolutely locked to viewport bottom */
   .bottom-nav-fixed {
+    /* Force absolute positioning to viewport */
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
     z-index: 9999 !important;
-    /* Remove all transforms that could cause movement */
+    
+    /* Lock dimensions */
+    height: 80px !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    
+    /* Remove all transforms and movement */
     transform: none !important;
     -webkit-transform: none !important;
-    /* Force it to stay put */
     will-change: auto !important;
+    
     /* Prevent any browser interference */
     -webkit-backface-visibility: hidden !important;
     backface-visibility: hidden !important;
-    /* Lock to viewport */
-    position: -webkit-sticky !important;
-    position: sticky !important;
+    -webkit-perspective: 1000 !important;
+    perspective: 1000 !important;
+    
     /* Override any browser defaults */
     top: auto !important;
     margin: 0 !important;
     padding: 0 !important;
+    
+    /* Force it to stay at viewport bottom */
+    position: -webkit-sticky !important;
+    position: sticky !important;
+    
+    /* Prevent any scroll interference */
+    overscroll-behavior: none !important;
+    -webkit-overscroll-behavior: none !important;
   }
 
   /* Modal overlay fixes - must be higher than bottom navigation */
@@ -261,7 +276,32 @@
       /* Prevent elastic scrolling */
       overscroll-behavior-y: none !important;
       -webkit-overscroll-behavior-y: none !important;
+      /* Ensure body doesn't affect fixed elements */
+      position: relative !important;
+      overflow-x: hidden !important;
     }
+    
+    html {
+      /* Ensure html doesn't affect fixed elements */
+      position: relative !important;
+      overflow-x: hidden !important;
+    }
+  }
+  
+  /* Force bottom navigation to be completely separate from content */
+  body {
+    /* Prevent body from affecting fixed elements */
+    position: relative !important;
+    overflow-x: hidden !important;
+    /* Ensure no scroll interference */
+    overscroll-behavior: none !important;
+    -webkit-overscroll-behavior: none !important;
+  }
+  
+  html {
+    /* Ensure html doesn't affect fixed elements */
+    position: relative !important;
+    overflow-x: hidden !important;
   }
   
   /* PWA-specific fixes for bottom navigation */
@@ -317,7 +357,30 @@
       /* Lock to safe area */
       bottom: env(safe-area-inset-bottom) !important;
       bottom: 0 !important; /* Fallback */
+      /* Force isolation from content */
+      isolation: isolate !important;
+      contain: layout style paint !important;
     }
+  }
+  
+  /* Force bottom navigation to be completely isolated from content */
+  .bottom-nav-fixed {
+    /* Create new stacking context */
+    isolation: isolate !important;
+    contain: layout style paint !important;
+    /* Force it to be completely separate */
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 9999 !important;
+    /* Lock to viewport */
+    height: 80px !important;
+    width: 100vw !important;
+    /* No transforms or movement */
+    transform: none !important;
+    -webkit-transform: none !important;
+    will-change: auto !important;
   }
   
   /* Fix for iOS Safari bottom bar issues */
