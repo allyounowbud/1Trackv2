@@ -232,17 +232,13 @@ const Search = () => {
         filter: filterBy
       });
       
-      console.log(`🔄 Starting to fetch expansion results for ${expansion.name} (ID: ${expansionId})`);
-      
       // Fetch all results for this expansion with a timeout
       const fetchPromise = fetchAllExpansionResults(expansionId, sortBy, filterBy);
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Expansion fetch timeout')), 30000) // 30 second timeout
+        setTimeout(() => reject(new Error('Expansion fetch timeout')), 15000) // 15 second timeout
       );
       
       const allItems = await Promise.race([fetchPromise, timeoutPromise]);
-      
-      console.log(`✅ Finished fetching expansion results: ${allItems.length} items found`);
       
       if (allItems && allItems.length > 0) {
         
