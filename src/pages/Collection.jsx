@@ -881,7 +881,7 @@ const Collection = () => {
         </div>
 
         {/* Items Grid */}
-      <div className="px-3 pb-4">
+      <div className={`px-3 ${isSelectionMode ? 'pb-20' : 'pb-4'}`}>
         <div className="grid grid-cols-2 gap-3">
           {(collectionData.items || [])
             .filter(item => selectedFilter === 'All' || item.status === selectedFilter)
