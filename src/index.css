@@ -257,42 +257,14 @@
     }
   }
   
-  /* Prevent body scroll issues on mobile */
+  /* Allow normal scrolling */
   body {
     overflow-x: hidden;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
   
-  /* Ensure the main content area doesn't interfere with bottom nav */
-  html, body {
-    /* Allow normal scrolling */
-    overflow-y: auto;
-  }
-  
-  /* PWA-specific body fixes */
-  @media (display-mode: standalone) {
-    body {
-      /* PWA mode - allow normal scrolling */
-      overflow-x: hidden;
-      overflow-y: auto;
-    }
-    
-    html {
-      /* PWA mode - allow normal scrolling */
-      overflow-x: hidden;
-      overflow-y: auto;
-    }
-  }
-  
-  /* Allow normal scrolling */
-  body {
-    position: relative;
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-  
   html {
-    position: relative;
     overflow-x: hidden;
     overflow-y: auto;
   }
@@ -383,13 +355,11 @@
   /* Mobile scrolling */
   @media (max-width: 768px) {
     body {
-      position: relative;
       overflow-x: hidden;
       overflow-y: auto;
     }
     
     html {
-      position: relative;
       overflow-x: hidden;
       overflow-y: auto;
     }
