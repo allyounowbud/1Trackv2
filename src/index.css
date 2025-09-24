@@ -24,6 +24,24 @@
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     position: relative;
+    /* Hide scrollbars for mobile app-like experience */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* Internet Explorer 10+ */
+  }
+  
+  /* Hide scrollbars for webkit browsers (Chrome, Safari, Edge) */
+  body::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Hide scrollbars on all scrollable elements */
+  * {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* Internet Explorer 10+ */
+  }
+  
+  *::-webkit-scrollbar {
+    display: none; /* Webkit browsers */
   }
   
   /* Make all text elements use thin font by default */
