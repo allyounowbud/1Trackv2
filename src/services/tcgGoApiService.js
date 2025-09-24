@@ -978,10 +978,20 @@ class TCGGoApiService {
   }
 
   /**
-   * Format product data
+   * Format product data with PriceCharting fallback for sealed products
    */
   async formatProduct(product) {
     try {
+      // For sealed products, try PriceCharting API first
+      let priceChartingData = null;
+      if (product.name && this.isSealedProduct(product.name)) {
+        try {
+          priceChartingData = await this.getPriceChartingData(product.name);
+        } catch (error) {
+          console.log(`PriceCharting API failed for ${product.name}, using TCG Go API:`, error.message);
+        }
+      }
+
       // Handle the actual API response structure
       // The API sometimes returns empty price objects, so we need to handle that
       const cardMarketPrices = product.prices?.cardmarket || {};
@@ -994,16 +1004,26 @@ class TCGGoApiService {
       // Card Market: Use trend (most recent market value) or lowest as fallback
       const cardMarketPrice = cardMarketPrices.trend || cardMarketPrices.lowest || cardMarketPrices.average;
       
-      // Use TCGPlayer as primary (US market), Card Market as fallback (EU market)
-      const marketValue = tcgPlayerMarketPrice || cardMarketPrice;
+      // Use PriceCharting as primary for sealed products, then TCGPlayer, then Card Market
+      let marketValue;
+      let priceSource;
+      
+      if (priceChartingData && priceChartingData.new_price) {
+        marketValue = priceChartingData.new_price;
+        priceSource = 'pricecharting';
+      } else {
+        marketValue = tcgPlayerMarketPrice || cardMarketPrice;
+        priceSource = tcgPlayerMarketPrice ? 'tcgplayer' : 'cardmarket';
+      }
       
       // Debug: Log price selection for accuracy (only for specific products to reduce spam)
       if (product.name && (product.name.includes('Booster') || product.name.includes('Box'))) {
         console.log(`🔍 Price selection for product ${product.name}:`, {
+          priceChartingData: priceChartingData?.new_price,
           tcgPlayerMarket: tcgPlayerMarketPrice,
           cardMarketPrice: cardMarketPrice,
           selectedValue: marketValue,
-          source: tcgPlayerMarketPrice ? 'TCGPlayer' : 'CardMarket'
+          source: priceSource
         });
       }
 
@@ -1038,7 +1058,13 @@ class TCGGoApiService {
         prices: {
           market: marketValue || 0,
           trend: trend || 0,
-          source: tcgPlayerMarketPrice ? 'tcgplayer' : 'cardmarket',
+          source: priceSource,
+          priceCharting: priceChartingData ? {
+            new: priceChartingData.new_price || 0,
+            cib: priceChartingData.cib_price || 0,
+            loose: priceChartingData.loose_price || 0,
+            currency: 'USD'
+          } : null,
           tcgPlayer: {
             market: tcgPlayerPrices.market_price || 0,
             mid: tcgPlayerPrices.mid_price || 0,
@@ -1365,6 +1391,80 @@ class TCGGoApiService {
       console.log('🗑️ Cleared all cache (in-memory and persistent)');
     } catch (error) {
       console.warn('⚠️ Failed to clear persistent cache:', error);
+    }
+  }
+
+  /**
+   * Check if a product name indicates it's a sealed product
+   */
+  isSealedProduct(productName) {
+    if (!productName) return false;
+    
+    const sealedKeywords = [
+      'booster', 'box', 'pack', 'bundle', 'collection', 'elite trainer',
+      'premium', 'theme deck', 'starter deck', 'deck', 'tin', 'case',
+      'display', 'sealed', 'unopened', 'factory sealed'
+    ];
+    
+    const lowerName = productName.toLowerCase();
+    return sealedKeywords.some(keyword => lowerName.includes(keyword));
+  }
+
+  /**
+   * Get PriceCharting data for a product
+   */
+  async getPriceChartingData(productName) {
+    const priceChartingApiKey = import.meta.env.VITE_PRICECHARTING_API_KEY;
+    if (!priceChartingApiKey) {
+      throw new Error('PriceCharting API key not configured');
+    }
+
+    const cacheKey = `pricecharting_${productName}`;
+    const cached = this.getFromCache(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const response = await fetch(`https://www.pricecharting.com/api/products?q=${encodeURIComponent(productName)}&t=${priceChartingApiKey}`);
+      
+      if (!response.ok) {
+        throw new Error(`PriceCharting API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Find the best match product
+      let bestMatch = null;
+      if (Array.isArray(data) && data.length > 0) {
+        // Look for exact name match first
+        bestMatch = data.find(item => 
+          item['product-name'] && 
+          item['product-name'].toLowerCase() === productName.toLowerCase()
+        );
+        
+        // If no exact match, use the first result
+        if (!bestMatch) {
+          bestMatch = data[0];
+        }
+      }
+      
+      if (bestMatch) {
+        const priceData = {
+          new_price: bestMatch['new-price'] ? parseFloat(bestMatch['new-price']) / 100 : null,
+          cib_price: bestMatch['cib-price'] ? parseFloat(bestMatch['cib-price']) / 100 : null,
+          loose_price: bestMatch['loose-price'] ? parseFloat(bestMatch['loose-price']) / 100 : null,
+          product_name: bestMatch['product-name'],
+          console_name: bestMatch['console-name']
+        };
+        
+        this.setCache(cacheKey, priceData);
+        console.log(`✅ Found PriceCharting data for ${productName}:`, priceData);
+        return priceData;
+      }
+      
+      throw new Error('No matching product found in PriceCharting');
+    } catch (error) {
+      console.error(`❌ Error fetching PriceCharting data for ${productName}:`, error);
+      throw error;
     }
   }
 }
