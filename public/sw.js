@@ -1,6 +1,6 @@
-const CACHE_NAME = 'onetrack-v2.0.0';
-const STATIC_CACHE_NAME = 'onetrack-static-v2.0.0';
-const DYNAMIC_CACHE_NAME = 'onetrack-dynamic-v2.0.0';
+const CACHE_NAME = 'onetrack-v2.1.0';
+const STATIC_CACHE_NAME = 'onetrack-static-v2.1.0';
+const DYNAMIC_CACHE_NAME = 'onetrack-dynamic-v2.1.0';
 
 // Files to cache for offline functionality
 const STATIC_FILES = [
