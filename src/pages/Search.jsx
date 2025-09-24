@@ -606,10 +606,26 @@ const Search = () => {
   };
 
   const handleAddSuccess = (result) => {
-    // Invalidate collection queries to trigger smooth refresh
+    // Aggressive cache invalidation for PWA
     queryClient.invalidateQueries({ queryKey: queryKeys.orders });
     queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary });
     queryClient.invalidateQueries({ queryKey: queryKeys.collectionData });
+    
+    // Force refetch all collection data
+    queryClient.refetchQueries({ queryKey: queryKeys.orders });
+    queryClient.refetchQueries({ queryKey: queryKeys.collectionSummary });
+    queryClient.refetchQueries({ queryKey: queryKeys.collectionData });
+    
+    // Clear all caches to ensure fresh data
+    if ('caches' in window) {
+      caches.keys().then(cacheNames => {
+        cacheNames.forEach(cacheName => {
+          if (cacheName.includes('onetrack')) {
+            caches.delete(cacheName);
+          }
+        });
+      });
+    }
     
     // Navigate to collection page with success data as URL parameters
     const params = new URLSearchParams({

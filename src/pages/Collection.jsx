@@ -117,6 +117,10 @@ const Collection = () => {
       });
       setShowSuccessNotification(true);
       
+      // Force refresh collection data
+      refetchOrders();
+      refetchSummary();
+      
       // Clean up URL parameters
       const newUrl = window.location.pathname;
       window.history.replaceState({}, document.title, newUrl);
@@ -127,17 +131,25 @@ const Collection = () => {
         setSuccessData(null);
       }, 5000);
     }
-  }, []);
+  }, [refetchOrders, refetchSummary]);
 
-  // Fetch data
+  // Fetch data with cache-busting for PWA
   const { data: orders = [], isLoading: ordersLoading, isFetching: ordersFetching, refetch: refetchOrders } = useQuery({
     queryKey: queryKeys.orders,
     queryFn: getOrders,
+    staleTime: 0, // Always consider data stale
+    cacheTime: 0, // Don't cache data
+    refetchOnMount: true, // Always refetch on mount
+    refetchOnWindowFocus: true, // Refetch when window gains focus
   });
 
   const { data: collectionSummary = [], isLoading: summaryLoading, isFetching: summaryFetching, refetch: refetchSummary } = useQuery({
     queryKey: queryKeys.collectionSummary,
     queryFn: getCollectionSummary,
+    staleTime: 0, // Always consider data stale
+    cacheTime: 0, // Don't cache data
+    refetchOnMount: true, // Always refetch on mount
+    refetchOnWindowFocus: true, // Refetch when window gains focus
   });
 
   // Delete order - SIMPLE!
