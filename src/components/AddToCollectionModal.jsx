@@ -333,7 +333,12 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 onChange={handleInputChange}
                 required
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                style={{ backgroundColor: '#1f2937' }}
+                style={{ 
+                  backgroundColor: '#1f2937',
+                  minWidth: '0',
+                  maxWidth: '100%',
+                  boxSizing: 'border-box'
+                }}
               />
             </div>
 
@@ -536,7 +541,12 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                     value={formData.sellDate}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                style={{ backgroundColor: '#1f2937' }}
+                    style={{ 
+                      backgroundColor: '#1f2937',
+                      minWidth: '0',
+                      maxWidth: '100%',
+                      boxSizing: 'border-box'
+                    }}
                   />
                 </div>
 
