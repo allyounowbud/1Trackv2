@@ -181,7 +181,7 @@
     padding-bottom: calc(80px + env(safe-area-inset-bottom)); /* Height of bottom navigation + safe area */
   }
   
-  /* Bottom navigation specific fixes */
+  /* Bottom navigation specific fixes - ensure it never moves */
   .bottom-nav-fixed {
     position: fixed !important;
     bottom: 0 !important;
@@ -191,6 +191,16 @@
     transform: translateZ(0) !important; /* Force hardware acceleration */
     will-change: transform !important;
     -webkit-transform: translateZ(0) !important; /* Safari fix */
+    -webkit-backface-visibility: hidden !important;
+    backface-visibility: hidden !important;
+    -webkit-perspective: 1000 !important;
+    perspective: 1000 !important;
+    /* Additional mobile fixes */
+    position: -webkit-sticky !important;
+    position: sticky !important;
+    /* Prevent any movement */
+    transform: translate3d(0, 0, 0) !important;
+    -webkit-transform: translate3d(0, 0, 0) !important;
   }
 
   /* Modal overlay fixes - must be higher than bottom navigation */
@@ -222,14 +232,50 @@
   body {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+    /* Prevent any scroll behavior that could affect fixed elements */
+    overscroll-behavior: none;
+    -webkit-overscroll-behavior: none;
   }
   
-  /* Ensure bottom navigation never moves */
+  /* Ensure the main content area doesn't interfere with bottom nav */
+  html, body {
+    /* Prevent any scroll bounce or elastic scrolling on iOS */
+    overscroll-behavior-y: none;
+    -webkit-overscroll-behavior-y: none;
+  }
+  
+  /* Additional mobile browser fixes for bottom navigation */
+  @supports (-webkit-touch-callout: none) {
+    .bottom-nav-fixed {
+      /* iOS Safari specific fixes */
+      position: fixed !important;
+      bottom: 0 !important;
+      -webkit-transform: translate3d(0, 0, 0) !important;
+      transform: translate3d(0, 0, 0) !important;
+    }
+  }
+  
+  /* Prevent any scroll interference with bottom nav */
   .bottom-nav-fixed {
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-    -webkit-perspective: 1000;
-    perspective: 1000;
+    /* Ensure it stays at the very bottom - use safe area if available */
+    bottom: max(0px, env(safe-area-inset-bottom)) !important;
+  }
+  
+  /* Force bottom navigation to never move on any device */
+  @media (max-width: 768px) {
+    .bottom-nav-fixed {
+      position: fixed !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      z-index: 9999 !important;
+      /* Prevent any transform or movement */
+      transform: none !important;
+      -webkit-transform: none !important;
+      /* Force hardware acceleration without transforms */
+      -webkit-backface-visibility: hidden !important;
+      backface-visibility: hidden !important;
+    }
   }
   
   /* Fix for iOS Safari bottom bar issues */
