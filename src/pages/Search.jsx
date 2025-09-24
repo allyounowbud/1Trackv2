@@ -611,17 +611,14 @@ const Search = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary });
     queryClient.invalidateQueries({ queryKey: queryKeys.collectionData });
     
-    // Small delay to ensure database operation is complete before navigation
-    setTimeout(() => {
-      // Navigate to collection page with success data as URL parameters
-      const params = new URLSearchParams({
-        successItem: result.item,
-        successQuantity: result.quantity,
-        successPrice: result.price,
-        ...(result.set && { successSet: result.set })
-      });
-      navigate(`/?${params.toString()}`);
-    }, 500); // 500ms delay to ensure database operation completes
+    // Navigate to collection page with success data as URL parameters
+    const params = new URLSearchParams({
+      successItem: result.item,
+      successQuantity: result.quantity,
+      successPrice: result.price,
+      ...(result.set && { successSet: result.set })
+    });
+    navigate(`/?${params.toString()}`);
     
     setIsAddModalOpen(false);
     closeModal();

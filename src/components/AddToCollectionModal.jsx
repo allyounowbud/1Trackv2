@@ -26,6 +26,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const [error, setError] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [successData, setSuccessData] = useState(null);
+  const [showProcessing, setShowProcessing] = useState(false);
   const [marketplaces, setMarketplaces] = useState([]);
   const [retailers, setRetailers] = useState([]);
   const [retailerSearchQuery, setRetailerSearchQuery] = useState('');
@@ -224,7 +225,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
 
       if (orderError) throw orderError;
 
-      // Success! Pass data to parent and close modal
+      // Success! Show processing animation
       const successInfo = {
         item: product.name,
         quantity: formData.quantity,
@@ -232,15 +233,20 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         set: product.set
       };
       
-      // Close modal first
-      onClose();
-      closeModal();
+      setSuccessData(successInfo);
+      setShowProcessing(true);
       
-      // Call onSuccess after modal is closed to trigger collection refresh and navigation
-      // This ensures the database operation is complete before navigation
+      // Wait for processing animation, then trigger navigation
       setTimeout(() => {
+        // Call onSuccess to trigger collection refresh and navigation
         onSuccess?.(successInfo);
-      }, 100); // Small delay to ensure modal is fully closed
+        
+        // Close modal after a short delay
+        setTimeout(() => {
+          onClose();
+          closeModal();
+        }, 200);
+      }, 2000); // 2 second processing animation
     } catch (err) {
       console.error('Error adding to collection:', err);
       setError(err.message || 'Failed to add item to collection');
@@ -272,6 +278,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       setCustomFeePercentage('');
       setShowSuccess(false);
       setSuccessData(null);
+      setShowProcessing(false);
       onClose();
       closeModal();
     }
@@ -777,36 +784,32 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         </div>
       </form>
 
-      {/* Success Confirmation Modal */}
-      {showSuccess && successData && (
+      {/* Processing Animation Modal */}
+      {showProcessing && successData && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-sm w-full mx-4">
-            {/* Success Icon */}
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 max-w-sm w-full mx-4">
+            {/* Spinning Animation */}
+            <div className="flex justify-center mb-6">
+              <div className="relative">
+                {/* Outer spinning ring */}
+                <div className="w-20 h-20 border-4 border-gray-700 border-t-indigo-500 rounded-full animate-spin"></div>
+                {/* Inner pulsing dot */}
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                  <div className="w-3 h-3 bg-indigo-500 rounded-full animate-pulse"></div>
+                </div>
               </div>
             </div>
 
-            {/* Success Message */}
-            <div className="text-center mb-6">
-              <h3 className="text-lg font-semibold text-white mb-2">Order Added Successfully!</h3>
-              <div className="text-sm text-gray-300 space-y-1">
+            {/* Processing Message */}
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-white mb-2">Adding to Collection</h3>
+              <div className="text-sm text-gray-300 space-y-1 mb-4">
                 <p><span className="font-medium">{successData.quantity}x</span> {successData.item}</p>
                 {successData.set && <p className="text-gray-400">{successData.set}</p>}
                 <p className="text-indigo-400 font-medium">${parseFloat(successData.price).toFixed(2)}</p>
               </div>
+              <p className="text-xs text-gray-400">Updating your collection...</p>
             </div>
-
-            {/* Action Button */}
-            <button
-              onClick={handleSuccessClose}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-            >
-              View Collection
-            </button>
           </div>
         </div>
       )}
