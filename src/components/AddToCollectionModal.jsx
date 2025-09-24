@@ -24,6 +24,8 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successData, setSuccessData] = useState(null);
   const [marketplaces, setMarketplaces] = useState([]);
   const [retailers, setRetailers] = useState([]);
   const [retailerSearchQuery, setRetailerSearchQuery] = useState('');
@@ -222,15 +224,19 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
 
       if (orderError) throw orderError;
 
-      // Success!
-      onSuccess?.({
+      // Success! Show confirmation modal
+      const successInfo = {
         item: product.name,
         quantity: formData.quantity,
-        price: formData.buyPrice
-      });
+        price: formData.buyPrice,
+        set: product.set
+      };
       
-      onClose();
-      closeModal();
+      setSuccessData(successInfo);
+      setShowSuccess(true);
+      
+      // Call onSuccess to trigger collection refresh
+      onSuccess?.(successInfo);
     } catch (err) {
       console.error('Error adding to collection:', err);
       setError(err.message || 'Failed to add item to collection');
@@ -260,9 +266,18 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       setError('');
       setShowCustomFeeInput(false);
       setCustomFeePercentage('');
+      setShowSuccess(false);
+      setSuccessData(null);
       onClose();
       closeModal();
     }
+  };
+
+  const handleSuccessClose = () => {
+    setShowSuccess(false);
+    setSuccessData(null);
+    onClose();
+    closeModal();
   };
 
   if (!isOpen || !product) return null;
@@ -467,7 +482,6 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 style={{ backgroundColor: '#1f2937' }}
               />
-              <p className="text-xs text-gray-400 mt-1">We'll insert that many rows and split totals equally.</p>
             </div>
 
             {/* Price Per Item */}
@@ -758,6 +772,40 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
           </button>
         </div>
       </form>
+
+      {/* Success Confirmation Modal */}
+      {showSuccess && successData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-sm w-full mx-4">
+            {/* Success Icon */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Success Message */}
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-semibold text-white mb-2">Order Added Successfully!</h3>
+              <div className="text-sm text-gray-300 space-y-1">
+                <p><span className="font-medium">{successData.quantity}x</span> {successData.item}</p>
+                {successData.set && <p className="text-gray-400">{successData.set}</p>}
+                <p className="text-indigo-400 font-medium">${parseFloat(successData.price).toFixed(2)}</p>
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <button
+              onClick={handleSuccessClose}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              View Collection
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

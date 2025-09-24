@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import tcgGoApiService from '../services/tcgGoApiService';
 import ProductPreviewModal from '../components/ProductPreviewModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
@@ -10,6 +11,7 @@ import { queryKeys } from '../lib/queryClient';
 const Search = () => {
   const { openModal, closeModal } = useModal();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -608,6 +610,11 @@ const Search = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.orders });
     queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary });
     queryClient.invalidateQueries({ queryKey: queryKeys.collectionData });
+    
+    // Navigate to collection page after a short delay to allow success modal to show
+    setTimeout(() => {
+      navigate('/');
+    }, 2000); // 2 second delay to show success modal
     
     setIsAddModalOpen(false);
     closeModal();
