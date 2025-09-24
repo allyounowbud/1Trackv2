@@ -8,13 +8,13 @@ const __dirname = path.dirname(__filename);
 
 const sizes = [16, 32, 72, 96, 128, 144, 152, 192, 384, 512];
 
-// Create a simple SVG icon matching the login page
+// Create a full square SVG icon for mobile app platforms
 const createSVGIcon = (size) => {
   return `<svg width="${size}" height="${size}" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background with rounded corners matching login page -->
-  <rect width="512" height="512" rx="128" fill="#6366f1"/>
+  <!-- Full square background - no rounded corners to prevent white edges when cropped -->
+  <rect width="512" height="512" fill="#6366f1"/>
   
-  <!-- "1T" text matching login page styling -->
+  <!-- "1T" text centered and sized for full square -->
   <text x="256" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="240" font-weight="bold" fill="white">1T</text>
 </svg>`;
 };
