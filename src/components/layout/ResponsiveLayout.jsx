@@ -1,0 +1,53 @@
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import BottomNavigation from './BottomNavigation';
+import DesktopSidebar from './DesktopSidebar';
+import { useModal } from '../../contexts/ModalContext';
+
+const ResponsiveLayout = ({ children }) => {
+  const location = useLocation();
+  const { isModalOpen } = useModal();
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsDesktop(window.innerWidth >= 1024); // lg breakpoint
+    };
+
+    // Check on mount
+    checkScreenSize();
+
+    // Add event listener
+    window.addEventListener('resize', checkScreenSize);
+
+    // Cleanup
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+
+  if (isDesktop) {
+    // Desktop layout with sidebar
+    return (
+      <div className="desktop-app-container">
+        <DesktopSidebar currentPath={location.pathname} />
+        <div className="desktop-main-content">
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+  // Mobile layout with bottom navigation (unchanged)
+  return (
+    <div className="app-container">
+      {/* Main Content Area - with proper spacing for bottom nav */}
+      <div className="main-content">
+        {children}
+      </div>
+      
+      {/* Bottom Navigation - Always at bottom, never moves */}
+      {!isModalOpen && <BottomNavigation currentPath={location.pathname} />}
+    </div>
+  );
+};
+
+export default ResponsiveLayout;
