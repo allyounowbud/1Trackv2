@@ -103,7 +103,7 @@ const NotificationSettings = () => {
 
   if (!settings.isSupported) {
     return (
-      <div className="p-4 bg-gray-800 rounded-lg">
+      <div className="p-4 bg-gray-900 border border-gray-800 rounded-lg">
         <h3 className="text-lg font-semibold text-white mb-3">Push Notifications</h3>
         <div className="text-gray-400">
           <p>Push notifications are not supported in this browser.</p>
@@ -115,8 +115,6 @@ const NotificationSettings = () => {
 
   return (
     <div className="space-y-3">
-      <h4 className="text-white font-medium text-sm">Notifications</h4>
-      
       {/* Error/Success Messages */}
       {error && (
         <div className="p-2 bg-red-900/20 border border-red-500/30 rounded text-red-300 text-xs">
@@ -131,7 +129,7 @@ const NotificationSettings = () => {
       )}
 
       {/* Price Alerts */}
-      <div className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">
+      <div className="flex items-center justify-between p-3 bg-gray-800/30 rounded-lg">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-yellow-500/20 rounded-lg flex items-center justify-center">
             <svg className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
@@ -158,7 +156,7 @@ const NotificationSettings = () => {
       </div>
 
       {/* Order Updates */}
-      <div className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">
+      <div className="flex items-center justify-between p-3 bg-gray-800/30 rounded-lg">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
             <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
@@ -188,13 +186,13 @@ const NotificationSettings = () => {
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={handleTestPriceAlert}
-            className="px-3 py-2 bg-gray-700/50 hover:bg-gray-700 text-white rounded-lg transition-colors text-xs"
+            className="px-3 py-2 bg-gray-800/30 hover:bg-gray-800/50 text-white rounded-lg transition-colors text-xs"
           >
             Test Price Alert
           </button>
           <button
             onClick={handleTestNotification}
-            className="px-3 py-2 bg-gray-700/50 hover:bg-gray-700 text-white rounded-lg transition-colors text-xs"
+            className="px-3 py-2 bg-gray-800/30 hover:bg-gray-800/50 text-white rounded-lg transition-colors text-xs"
           >
             Test Order Update
           </button>

@@ -29,7 +29,6 @@ const ThemeSettings = () => {
 
   return (
     <div className="space-y-3">
-      <h4 className="text-white font-medium text-sm">Appearance</h4>
       <div className="flex items-center justify-between gap-2">
         {themes.map((themeOption) => (
           <button
@@ -38,7 +37,7 @@ const ThemeSettings = () => {
             className={`flex flex-col items-center space-y-2 p-3 rounded-lg transition-all duration-200 flex-1 min-h-[80px] border ${
               theme === themeOption.id
                 ? 'bg-indigo-600/20 border-indigo-500/30'
-                : 'bg-gray-700/50 border-gray-600/30 hover:bg-gray-700'
+                : 'bg-gray-800/30 border-gray-800/50 hover:bg-gray-800/50'
             }`}
             title={`${themeOption.name} - ${themeOption.description}`}
           >

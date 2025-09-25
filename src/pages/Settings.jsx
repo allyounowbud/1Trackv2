@@ -53,7 +53,7 @@ const Settings = () => {
       {/* Settings Content */}
       <div className="px-4 pb-4">
         {/* Profile Card with Sign Out */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               {/* Avatar */}
@@ -119,22 +119,27 @@ const Settings = () => {
         {/* Settings Sections */}
         <div className="space-y-4">
           {/* App Settings */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
             <h3 className="text-white font-medium mb-4">App Settings</h3>
             <div className="space-y-4">
               {/* Theme Settings */}
               <ThemeSettings />
-              
-              {/* Notification Settings */}
+            </div>
+          </div>
+
+          {/* Notification Settings */}
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h3 className="text-white font-medium mb-4">Notifications</h3>
+            <div className="space-y-4">
               <NotificationSettings />
             </div>
           </div>
 
           {/* Account Settings */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
             <h3 className="text-white font-medium mb-4">Account Settings</h3>
             <div className="space-y-2">
-              <button className="w-full text-left p-3 bg-gray-700/50 hover:bg-gray-700 rounded-lg transition-colors">
+              <button className="w-full text-left p-3 bg-gray-800/30 hover:bg-gray-800/50 rounded-lg transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center">
@@ -153,7 +158,7 @@ const Settings = () => {
                 </div>
               </button>
 
-              <button className="w-full text-left p-3 bg-gray-700/50 hover:bg-gray-700 rounded-lg transition-colors">
+              <button className="w-full text-left p-3 bg-gray-800/30 hover:bg-gray-800/50 rounded-lg transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center">
@@ -174,7 +179,7 @@ const Settings = () => {
 
               <button 
                 onClick={() => setShowAccountDeletion(true)}
-                className="w-full text-left p-3 bg-red-600/10 hover:bg-red-600/20 rounded-lg transition-colors border border-red-500/20"
+                className="w-full text-left p-3 bg-red-600/10 hover:bg-red-600/20 rounded-lg transition-all duration-200 border border-red-500/20 hover:border-red-500/40"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
@@ -198,10 +203,10 @@ const Settings = () => {
           </div>
 
           {/* Help & Support */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
             <h3 className="text-white font-medium mb-3">Help & Support</h3>
             <div className="space-y-2">
-              <button className="w-full text-left p-3 bg-gray-700/50 hover:bg-gray-700 rounded-lg transition-colors">
+              <button className="w-full text-left p-3 bg-gray-800/30 hover:bg-gray-800/50 rounded-lg transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center">
@@ -227,7 +232,7 @@ const Settings = () => {
       {/* Sign Out Confirmation Modal */}
       {showSignOutConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 modal-overlay">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 w-full max-w-sm">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 w-full max-w-sm">
             <h3 className="text-white font-medium mb-2">Sign Out</h3>
             <p className="text-gray-400 text-sm mb-6">
               Are you sure you want to sign out? You'll need to sign in again to access your collection.

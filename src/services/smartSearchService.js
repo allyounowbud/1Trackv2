@@ -19,7 +19,7 @@ class SmartSearchService {
     this.cacheTimeout = 6 * 60 * 60 * 1000; // 6 hours
     this.apiCallQueue = [];
     this.isProcessingQueue = false;
-    this.rateLimitDelay = 100; // 100ms between API calls
+    this.rateLimitDelay = 500; // 500ms between API calls to reduce spam
     
     // API priorities and fallbacks
     this.apiConfig = {
@@ -107,8 +107,8 @@ class SmartSearchService {
       filter = 'all',
       maxCards = 1000,
       maxProducts = 500,
-      includeImages = true,
-      includePricing = true
+      includeImages = false, // Default to false to avoid API spam
+      includePricing = false // Default to false to avoid API spam
     } = options;
 
     const cacheKey = `expansion_${expansionId}_${sort}_${filter}_${maxCards}_${maxProducts}`;
@@ -240,7 +240,7 @@ class SmartSearchService {
    */
   async enhanceItemsBatch(items, options = {}) {
     const { includeImages = true, includePricing = true, itemType = 'items' } = options;
-    const batchSize = 10; // Process 10 items at a time
+    const batchSize = 5; // Process 5 items at a time to reduce API spam
     const enhancedItems = [];
     
     // Check if image service is available (avoid 503 errors)
@@ -328,7 +328,7 @@ class SmartSearchService {
 
       // Rate limiting delay between batches
       if (i + batchSize < items.length) {
-        await this.delay(this.rateLimitDelay * 2);
+        await this.delay(this.rateLimitDelay * 3); // Increased delay to reduce API spam
       }
     }
 

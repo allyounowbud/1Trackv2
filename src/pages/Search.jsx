@@ -35,7 +35,6 @@ const Search = () => {
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [allResults, setAllResults] = useState([]);
-  const [displayedResults, setDisplayedResults] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMoreResults, setHasMoreResults] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -101,7 +100,7 @@ const Search = () => {
         maxCards: 1000,
         maxProducts: 500,
         includeImages: false, // Disabled due to 503 errors from Supabase
-        includePricing: true
+        includePricing: false // Disabled to reduce API spam
       });
 
       return expansionData.allItems;
@@ -233,24 +232,26 @@ const Search = () => {
         filter: filterBy
       });
       
-      // Fetch ALL cards and products from the expansion (no limits for complete results)
-      const cardsPromise = tcgGoApiService.getExpansionCards(expansionId, sortBy, 1000).catch(() => []);
-      const productsPromise = tcgGoApiService.getExpansionProducts(expansionId, sortBy, 1000).catch(() => []);
+      console.log(`🎯 Detected expansion search for: "${expansion.name}"`);
       
-      // Show cards first (usually faster)
-      const cards = await cardsPromise;
-      if (cards && cards.length > 0) {
-        setAllResults(cards);
-        setCurrentPage(1);
-        setHasMoreResults(false);
-      }
+      // Use smart search service to get complete expansion data with all results
+      const expansionData = await smartSearchService.getExpansionData(expansionId, {
+        includePricing: false, // Disable pricing to avoid API spam
+        includeImages: false, // Disable images to avoid 503 errors
+        sortBy: sortBy,
+        filterBy: filterBy
+      });
       
-      // Then add products
-      const products = await productsPromise;
-      if (products && products.length > 0) {
-        const combinedResults = [...(cards || []), ...products];
+      if (expansionData && (expansionData.cards?.length > 0 || expansionData.products?.length > 0)) {
+        // Combine cards and products
+        const combinedResults = [
+          ...(expansionData.cards || []),
+          ...(expansionData.products || [])
+        ];
         
-        // Apply filtering
+        console.log(`✅ Found ${combinedResults.length} items from expansion`);
+        
+        // Apply filtering if needed
         let filteredResults = combinedResults;
         if (filterBy !== 'all') {
           filteredResults = combinedResults.filter(item => {
@@ -268,7 +269,6 @@ const Search = () => {
         
         // Show first page of results
         const firstPageResults = sortedResults.slice(0, resultsPerPage);
-        setDisplayedResults(firstPageResults);
         setSearchResults(firstPageResults);
         setTotalResults(sortedResults.length);
         
@@ -277,9 +277,9 @@ const Search = () => {
         setHasMoreResults(sortedResults.length > resultsPerPage);
         
       } else {
+        console.log('No expansion data found, falling back to regular search');
         setSearchResults([]);
         setAllResults([]);
-        setDisplayedResults([]);
         setTotalResults(0);
         setTotalAvailableResults(0);
         setHasMoreResults(false);
@@ -446,7 +446,6 @@ const Search = () => {
     if (!searchQuery.trim() || searchQuery.trim().length < 2) {
       setSearchResults([]);
       setAllResults([]);
-      setDisplayedResults([]);
       setTotalResults(0);
       setTotalAvailableResults(0);
       setCurrentPage(1);
@@ -519,7 +518,7 @@ const Search = () => {
                 maxCards: 1000,
                 maxProducts: 500,
                 includeImages: false, // Disabled due to 503 errors from Supabase
-                includePricing: true // Re-enabled with PriceCharting data for all items
+                includePricing: false // Disabled to reduce API spam // Re-enabled with PriceCharting data for all items
               });
               
               result = expansionData.allItems;
@@ -530,7 +529,7 @@ const Search = () => {
                 sort: sortBy,
                 maxResults: 100,
                 includeImages: false, // Disabled due to 503 errors from Supabase
-                includePricing: true // Re-enabled with PriceCharting data for all items
+                includePricing: false // Disabled to reduce API spam // Re-enabled with PriceCharting data for all items
               });
               result = [...searchResult.cards, ...searchResult.products];
             }
@@ -540,7 +539,7 @@ const Search = () => {
               sort: sortBy,
               maxResults: 100,
               includeImages: false, // Disabled due to 503 errors from Supabase
-              includePricing: true // Re-enabled with PriceCharting priority for sealed products
+              includePricing: false // Disabled to reduce API spam // Re-enabled with PriceCharting priority for sealed products
             });
             result = [...searchResult.cards, ...searchResult.products];
           }
@@ -550,7 +549,7 @@ const Search = () => {
             sort: sortBy,
             maxResults: 100,
             includeImages: false, // Disabled due to 503 errors from Supabase
-            includePricing: true // Re-enabled with PriceCharting priority for sealed products
+            includePricing: false // Disabled to reduce API spam // Re-enabled with PriceCharting priority for sealed products
           });
           result = [...searchResult.cards, ...searchResult.products];
         }
@@ -575,7 +574,6 @@ const Search = () => {
           
           // Show first page of results
           const firstPageResults = filteredResults.slice(0, resultsPerPage);
-          setDisplayedResults(firstPageResults);
           setSearchResults(firstPageResults);
           setTotalResults(filteredResults.length);
           
@@ -586,7 +584,6 @@ const Search = () => {
         } else {
           setSearchResults([]);
           setAllResults([]);
-          setDisplayedResults([]);
           setTotalResults(0);
           setTotalAvailableResults(0);
           setHasMoreResults(false);
@@ -596,7 +593,6 @@ const Search = () => {
         setError('Search failed. Please try again.');
         setSearchResults([]);
         setAllResults([]);
-        setDisplayedResults([]);
         setTotalResults(0);
         setTotalAvailableResults(0);
         setHasMoreResults(false);
@@ -649,19 +645,12 @@ const Search = () => {
       const nextBatch = allResults.slice(startIndex, endIndex);
       
       if (nextBatch && nextBatch.length > 0) {
-        // Add to displayed results
-        setDisplayedResults(prev => {
-          const newDisplayed = [...prev, ...nextBatch];
-          return newDisplayed;
-        });
+        // Add to search results
         setSearchResults(prev => {
           const newSearch = [...prev, ...nextBatch];
           return newSearch;
         });
         setCurrentPage(nextPage);
-        
-        // Total results count stays the same (it's the total available)
-        // setTotalResults remains unchanged
         
         // Check if there are more results
         const hasMore = endIndex < allResults.length;
@@ -676,7 +665,7 @@ const Search = () => {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, hasMoreResults, currentPage, allResults, displayedResults, resultsPerPage, totalAvailableResults]);
+  }, [isLoadingMore, hasMoreResults, currentPage, allResults, resultsPerPage]);
 
   // Debounced load more results function
   const debouncedLoadMore = useCallback(() => {
@@ -731,7 +720,7 @@ const Search = () => {
         clearTimeout(loadMoreTimeoutRef.current);
       }
     };
-  }, [debouncedLoadMore, hasMoreResults, isLoadingMore, allResults, displayedResults]);
+  }, [debouncedLoadMore, hasMoreResults, isLoadingMore, allResults]);
 
   // Alternative approach: IntersectionObserver for infinite scroll
   useEffect(() => {
@@ -987,7 +976,7 @@ const Search = () => {
             </div>
             <div className="text-right">
               <div className="text-xs text-gray-400">
-                Showing {displayedResults.length} of {totalResults.toLocaleString()}
+                Showing {searchResults.length} of {totalResults.toLocaleString()}
               </div>
               {hasMoreResults && (
                 <div className="text-xs text-indigo-400 mt-1">
@@ -1133,7 +1122,7 @@ const Search = () => {
           )}
 
           {/* End of Results Indicator */}
-          {!hasMoreResults && displayedResults.length > 0 && (
+          {!hasMoreResults && searchResults.length > 0 && (
             <div className="flex justify-center py-4">
               <div className="text-xs text-gray-500">
                 All {totalResults.toLocaleString()} results loaded
