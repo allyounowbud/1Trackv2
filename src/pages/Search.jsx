@@ -25,6 +25,11 @@ const Search = () => {
   const [productToAdd, setProductToAdd] = useState(null);
   const [trendingProducts, setTrendingProducts] = useState([]);
   const [isLoadingTrending, setIsLoadingTrending] = useState(false);
+  const [allExpansions, setAllExpansions] = useState([]);
+  const [displayedExpansions, setDisplayedExpansions] = useState([]);
+  const [currentExpansionPage, setCurrentExpansionPage] = useState(1);
+  const [hasMoreExpansions, setHasMoreExpansions] = useState(false);
+  const [isLoadingMoreExpansions, setIsLoadingMoreExpansions] = useState(false);
   const [sortBy, setSortBy] = useState('relevance');
   const [filterBy, setFilterBy] = useState('all');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
@@ -42,6 +47,7 @@ const Search = () => {
   const searchTimeoutRef = useRef(null);
   const resultsPerPage = 30;
   const maxResults = 500; // Increased max results to show all expansion items
+  const expansionsPerPage = 20; // Show 20 expansions per page
 
   // Sort results based on sortBy option
   const sortResults = useCallback((results, sortOption) => {
@@ -105,19 +111,27 @@ const Search = () => {
     }
   }, []);
 
-  // Load popular expansions using SmartSearchService
-  const loadPopularExpansions = async () => {
+  // Load all expansions using SmartSearchService
+  const loadAllExpansionsFromSmartSearch = async () => {
     setIsLoadingTrending(true);
     try {
-      console.log('🔍 Loading popular expansions...');
+      console.log('🔍 Loading all expansions...');
       
-      const allExpansions = await smartSearchService.getAllExpansions();
+      const allExpansionsData = await smartSearchService.getAllExpansions();
       
-      // Get top 10 most popular expansions
-      const popularExpansions = allExpansions.slice(0, 10);
+      // Store all expansions and show first page
+      setAllExpansions(allExpansionsData);
       
-      setTrendingProducts(popularExpansions);
-      console.log(`✅ Loaded ${popularExpansions.length} popular expansions`);
+      // Show first page of expansions
+      const firstPageExpansions = allExpansionsData.slice(0, expansionsPerPage);
+      setDisplayedExpansions(firstPageExpansions);
+      setTrendingProducts(firstPageExpansions);
+      
+      // Set pagination state
+      setCurrentExpansionPage(1);
+      setHasMoreExpansions(allExpansionsData.length > expansionsPerPage);
+      
+      console.log(`✅ Loaded ${allExpansionsData.length} expansions, showing first ${firstPageExpansions.length}`);
     } catch (error) {
       console.error('❌ Error loading popular expansions:', error);
       // Fallback to regular API
@@ -126,6 +140,43 @@ const Search = () => {
       setIsLoadingTrending(false);
     }
   };
+
+  // Load more expansions for pagination
+  const loadMoreExpansions = useCallback(() => {
+    if (isLoadingMoreExpansions || !hasMoreExpansions) {
+      return;
+    }
+
+    setIsLoadingMoreExpansions(true);
+    
+    try {
+      const nextPage = currentExpansionPage + 1;
+      const startIndex = nextPage * expansionsPerPage;
+      const endIndex = startIndex + expansionsPerPage;
+      
+      // Get next batch of expansions
+      const nextBatch = allExpansions.slice(startIndex, endIndex);
+      
+      if (nextBatch && nextBatch.length > 0) {
+        // Add to displayed expansions
+        setDisplayedExpansions(prev => [...prev, ...nextBatch]);
+        setTrendingProducts(prev => [...prev, ...nextBatch]);
+        setCurrentExpansionPage(nextPage);
+        
+        // Check if there are more expansions
+        const hasMore = endIndex < allExpansions.length;
+        setHasMoreExpansions(hasMore);
+      } else {
+        // No more expansions
+        setHasMoreExpansions(false);
+      }
+    } catch (error) {
+      console.error('Error loading more expansions:', error);
+      setHasMoreExpansions(false);
+    } finally {
+      setIsLoadingMoreExpansions(false);
+    }
+  }, [isLoadingMoreExpansions, hasMoreExpansions, currentExpansionPage, allExpansions, expansionsPerPage]);
 
   // Browse expansion cards using expansion ID
   const browseExpansionCards = async (expansion) => {
@@ -468,7 +519,7 @@ const Search = () => {
                 maxCards: 1000,
                 maxProducts: 500,
                 includeImages: false, // Disabled due to 503 errors from Supabase
-                includePricing: true // Re-enabled with PriceCharting priority for sealed products
+                includePricing: true // Re-enabled with PriceCharting data for all items
               });
               
               result = expansionData.allItems;
@@ -479,7 +530,7 @@ const Search = () => {
                 sort: sortBy,
                 maxResults: 100,
                 includeImages: false, // Disabled due to 503 errors from Supabase
-                includePricing: true // Re-enabled with PriceCharting priority for sealed products
+                includePricing: true // Re-enabled with PriceCharting data for all items
               });
               result = [...searchResult.cards, ...searchResult.products];
             }
@@ -562,9 +613,9 @@ const Search = () => {
     };
   }, [searchQuery, searchType, filterBy, sortBy]);
 
-  // Load trending products on component mount
+  // Load all expansions on component mount
   useEffect(() => {
-    loadPopularExpansions();
+    loadAllExpansionsFromSmartSearch();
   }, []);
 
   const handleSearch = async () => {
@@ -1029,11 +1080,22 @@ const Search = () => {
                         <div className="flex items-center space-x-2">
                             <span className="text-white font-semibold" style={{fontSize: '12px'}}>
                               {card?.marketValue ? formatPrice(card.marketValue) : 'N/A'} Value
-                              {card?.prices?.source === 'pricecharting' && card?.prices?.priceCharting?.loose > 0 && (
-                                <span className="ml-1 text-indigo-400" style={{fontSize: '8px'}}>(L)</span>
+                              {card?.priceSource && (
+                                <span className="ml-1 text-indigo-400" style={{fontSize: '8px'}}>
+                                  ({card.priceSource === 'pricecharting' ? 'PC' : card.priceSource === 'tcgGo' ? 'TCG' : card.priceSource === 'marketData' ? 'CM' : card.priceSource})
+                                </span>
                               )}
                             </span>
                         </div>
+                        
+                        {/* Additional Pricing Sources */}
+                        {card?.prices?.priceCharting && (
+                          <div className="text-gray-400" style={{fontSize: '9px'}}>
+                            PC: {card.prices.priceCharting.loose > 0 ? formatPrice(card.prices.priceCharting.loose) : 'N/A'}
+                            {card.prices.priceCharting.cib > 0 && ` | CIB: ${formatPrice(card.prices.priceCharting.cib)}`}
+                            {card.prices.priceCharting.new > 0 && ` | New: ${formatPrice(card.prices.priceCharting.new)}`}
+                          </div>
+                        )}
                         
                         {/* Trend Data */}
                         <div className="text-gray-400" style={{fontSize: '9px'}}>
@@ -1136,7 +1198,7 @@ const Search = () => {
               <div className="text-center py-8">
                 <div className="text-gray-400 mb-2">Unable to load expansions</div>
                 <button 
-                  onClick={loadPopularExpansions}
+                  onClick={loadAllExpansionsFromSmartSearch}
                   className="text-indigo-400 hover:text-indigo-300 text-sm"
                 >
                   Try again
@@ -1149,8 +1211,10 @@ const Search = () => {
           {!isLoadingTrending && trendingProducts.length > 0 && (
             <div className="mb-8">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-white">Expansions</h2>
-                <div className="text-xs text-gray-400">Browse by set</div>
+                <h2 className="text-lg font-semibold text-white">All Expansions</h2>
+                <div className="text-xs text-gray-400">
+                  Showing {trendingProducts.length} of {allExpansions.length} sets
+                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-3 pb-20">
@@ -1214,6 +1278,40 @@ const Search = () => {
                   );
                 })}
               </div>
+
+              {/* Load More Expansions Button */}
+              {hasMoreExpansions && (
+                <div className="flex justify-center mt-6">
+                  <button
+                    onClick={loadMoreExpansions}
+                    disabled={isLoadingMoreExpansions}
+                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 disabled:opacity-50 text-white rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    {isLoadingMoreExpansions ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Loading more...
+                      </>
+                    ) : (
+                      <>
+                        Load More Expansions
+                        <span className="text-xs opacity-75">
+                          ({allExpansions.length - trendingProducts.length} remaining)
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* End of Expansions Indicator */}
+              {!hasMoreExpansions && allExpansions.length > expansionsPerPage && (
+                <div className="flex justify-center mt-6">
+                  <div className="text-xs text-gray-500">
+                    All {allExpansions.length} expansions loaded
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

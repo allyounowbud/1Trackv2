@@ -37,11 +37,15 @@ class SmartSearchService {
       },
       pricing: {
         primary: 'tcgGo', // TCG Go has TCGPlayer + CardMarket data
-        fallbacks: ['marketData']
+        fallbacks: ['priceCharting', 'marketData']
       },
       sealedPricing: {
         primary: 'priceCharting', // PriceCharting has most accurate sealed product pricing
         fallbacks: ['tcgGo', 'marketData']
+      },
+      singlesPricing: {
+        primary: 'tcgGo', // TCG Go for singles, but include PriceCharting for comparison
+        fallbacks: ['priceCharting', 'marketData']
       },
       images: {
         primary: 'hybrid', // Hybrid service with multiple sources
@@ -297,8 +301,8 @@ class SmartSearchService {
                   enhancedItem.marketValue = pricingData.bestPrice;
                   enhancedItem.priceSource = pricingData.bestSource;
                   
-                  // For sealed products, also update the prices object with PriceCharting data
-                  if (pricingData.priceCharting && (item.type === 'product' || item.type === 'sealed')) {
+                  // Update the prices object with PriceCharting data for all items
+                  if (pricingData.priceCharting) {
                     enhancedItem.prices = {
                       ...enhancedItem.prices,
                       priceCharting: pricingData.priceCharting
@@ -354,34 +358,48 @@ class SmartSearchService {
         bestSource: existingItem?.priceSource || 'tcgGo'
       };
 
-      // For sealed products, prioritize PriceCharting API
-      if (isSealedProduct) {
-        try {
-          console.log(`🔍 Getting PriceCharting pricing for sealed product: ${itemName}`);
-          const priceChartingData = await marketDataService.getProductMarketData(itemName);
-          
-          if (priceChartingData.success && priceChartingData.data) {
-            const pcData = priceChartingData.data;
-            pricing.priceCharting = {
-              loose: pcData.prices?.loose || 0,
-              cib: pcData.prices?.cib || 0,
-              new: pcData.prices?.new || 0,
-              source: 'pricecharting'
-            };
-            pricing.sources.push('pricecharting');
+      // Get PriceCharting pricing for all items (singles and sealed products)
+      try {
+        console.log(`🔍 Getting PriceCharting pricing for: ${itemName}`);
+        const priceChartingData = await marketDataService.getProductMarketData(itemName);
+        
+        if (priceChartingData.success && priceChartingData.data) {
+          const pcData = priceChartingData.data;
+          pricing.priceCharting = {
+            loose: pcData.prices?.loose || 0,
+            cib: pcData.prices?.cib || 0,
+            new: pcData.prices?.new || 0,
+            source: 'pricecharting'
+          };
+          pricing.sources.push('pricecharting');
 
-            // Use the most appropriate price for sealed products (new > cib > loose)
+          // For sealed products, prioritize PriceCharting (new > cib > loose)
+          if (isSealedProduct) {
             const sealedPrice = pcData.prices?.new || pcData.prices?.cib || pcData.prices?.loose || 0;
             
             if (sealedPrice > 0) {
               pricing.bestPrice = sealedPrice;
               pricing.bestSource = 'pricecharting';
-              console.log(`✅ PriceCharting pricing found: $${sealedPrice} for ${itemName}`);
+              console.log(`✅ PriceCharting pricing found: $${sealedPrice} for sealed product ${itemName}`);
+            }
+          } else {
+            // For singles, use loose price but don't override TCGPlayer/CardMarket unless it's better
+            const loosePrice = pcData.prices?.loose || 0;
+            
+            if (loosePrice > 0) {
+              // Only use PriceCharting as best price if we don't have other pricing or if it's significantly better
+              if (pricing.bestPrice === 0 || (loosePrice < pricing.bestPrice * 0.8)) {
+                pricing.bestPrice = loosePrice;
+                pricing.bestSource = 'pricecharting';
+                console.log(`✅ PriceCharting pricing found: $${loosePrice} for single ${itemName}`);
+              } else {
+                console.log(`📊 PriceCharting pricing available: $${loosePrice} for single ${itemName} (not used as best price)`);
+              }
             }
           }
-        } catch (error) {
-          console.warn(`⚠️ PriceCharting pricing failed for ${itemName}:`, error.message);
         }
+      } catch (error) {
+        console.warn(`⚠️ PriceCharting pricing failed for ${itemName}:`, error.message);
       }
 
       // Try to get additional pricing from Market Data Service (Card Market)
