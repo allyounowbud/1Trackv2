@@ -39,6 +39,10 @@ class SmartSearchService {
         primary: 'tcgGo', // TCG Go has TCGPlayer + CardMarket data
         fallbacks: ['marketData']
       },
+      sealedPricing: {
+        primary: 'priceCharting', // PriceCharting has most accurate sealed product pricing
+        fallbacks: ['tcgGo', 'marketData']
+      },
       images: {
         primary: 'hybrid', // Hybrid service with multiple sources
         fallbacks: []
@@ -292,6 +296,14 @@ class SmartSearchService {
                 if (pricingData.bestPrice && pricingData.bestPrice > 0) {
                   enhancedItem.marketValue = pricingData.bestPrice;
                   enhancedItem.priceSource = pricingData.bestSource;
+                  
+                  // For sealed products, also update the prices object with PriceCharting data
+                  if (pricingData.priceCharting && (item.type === 'product' || item.type === 'sealed')) {
+                    enhancedItem.prices = {
+                      ...enhancedItem.prices,
+                      priceCharting: pricingData.priceCharting
+                    };
+                  }
                 }
               }
             } catch (error) {
@@ -324,6 +336,15 @@ class SmartSearchService {
    */
   async getEnhancedPricing(itemName, existingItem = null) {
     try {
+      // Determine if this is a sealed product
+      const isSealedProduct = existingItem?.type === 'product' || 
+                             existingItem?.type === 'sealed' ||
+                             itemName.toLowerCase().includes('booster') ||
+                             itemName.toLowerCase().includes('box') ||
+                             itemName.toLowerCase().includes('pack') ||
+                             itemName.toLowerCase().includes('case') ||
+                             itemName.toLowerCase().includes('bundle');
+
       // Start with existing pricing from TCG Go
       const pricing = {
         tcgPlayer: existingItem?.prices?.tcgPlayer || {},
@@ -333,7 +354,37 @@ class SmartSearchService {
         bestSource: existingItem?.priceSource || 'tcgGo'
       };
 
-      // Try to get additional pricing from Market Data Service
+      // For sealed products, prioritize PriceCharting API
+      if (isSealedProduct) {
+        try {
+          console.log(`🔍 Getting PriceCharting pricing for sealed product: ${itemName}`);
+          const priceChartingData = await marketDataService.getProductMarketData(itemName);
+          
+          if (priceChartingData.success && priceChartingData.data) {
+            const pcData = priceChartingData.data;
+            pricing.priceCharting = {
+              loose: pcData.prices?.loose || 0,
+              cib: pcData.prices?.cib || 0,
+              new: pcData.prices?.new || 0,
+              source: 'pricecharting'
+            };
+            pricing.sources.push('pricecharting');
+
+            // Use the most appropriate price for sealed products (new > cib > loose)
+            const sealedPrice = pcData.prices?.new || pcData.prices?.cib || pcData.prices?.loose || 0;
+            
+            if (sealedPrice > 0) {
+              pricing.bestPrice = sealedPrice;
+              pricing.bestSource = 'pricecharting';
+              console.log(`✅ PriceCharting pricing found: $${sealedPrice} for ${itemName}`);
+            }
+          }
+        } catch (error) {
+          console.warn(`⚠️ PriceCharting pricing failed for ${itemName}:`, error.message);
+        }
+      }
+
+      // Try to get additional pricing from Market Data Service (Card Market)
       try {
         const marketData = await marketDataService.searchCardMarketAll(itemName, 1);
         if (marketData.success && marketData.data.cards.length > 0) {
@@ -345,9 +396,9 @@ class SmartSearchService {
           };
           pricing.sources.push('marketData');
 
-          // Update best price if market data is better
+          // Update best price if market data is better (but don't override PriceCharting for sealed)
           if (marketCard.price && marketCard.price > 0) {
-            if (pricing.bestPrice === 0 || marketCard.price < pricing.bestPrice) {
+            if (pricing.bestPrice === 0 || (!isSealedProduct && marketCard.price < pricing.bestPrice)) {
               pricing.bestPrice = marketCard.price;
               pricing.bestSource = 'marketData';
             }
@@ -360,6 +411,39 @@ class SmartSearchService {
       return pricing;
     } catch (error) {
       console.warn(`⚠️ Enhanced pricing failed for ${itemName}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get PriceCharting pricing specifically for sealed products
+   */
+  async getSealedProductPricing(productName) {
+    try {
+      console.log(`🔍 Getting PriceCharting pricing for sealed product: ${productName}`);
+      const priceChartingData = await marketDataService.getProductMarketData(productName);
+      
+      if (priceChartingData.success && priceChartingData.data) {
+        const pcData = priceChartingData.data;
+        const pricing = {
+          priceCharting: {
+            loose: pcData.prices?.loose || 0,
+            cib: pcData.prices?.cib || 0,
+            new: pcData.prices?.new || 0,
+            source: 'pricecharting'
+          },
+          bestPrice: pcData.prices?.new || pcData.prices?.cib || pcData.prices?.loose || 0,
+          bestSource: 'pricecharting',
+          sources: ['pricecharting']
+        };
+        
+        console.log(`✅ PriceCharting pricing found: $${pricing.bestPrice} for ${productName}`);
+        return pricing;
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn(`⚠️ PriceCharting pricing failed for ${productName}:`, error.message);
       return null;
     }
   }

@@ -468,7 +468,7 @@ const Search = () => {
                 maxCards: 1000,
                 maxProducts: 500,
                 includeImages: false, // Disabled due to 503 errors from Supabase
-                includePricing: true
+                includePricing: true // Re-enabled with PriceCharting priority for sealed products
               });
               
               result = expansionData.allItems;
@@ -479,7 +479,7 @@ const Search = () => {
                 sort: sortBy,
                 maxResults: 100,
                 includeImages: false, // Disabled due to 503 errors from Supabase
-                includePricing: true
+                includePricing: true // Re-enabled with PriceCharting priority for sealed products
               });
               result = [...searchResult.cards, ...searchResult.products];
             }
@@ -489,7 +489,7 @@ const Search = () => {
               sort: sortBy,
               maxResults: 100,
               includeImages: false, // Disabled due to 503 errors from Supabase
-              includePricing: true
+              includePricing: true // Re-enabled with PriceCharting priority for sealed products
             });
             result = [...searchResult.cards, ...searchResult.products];
           }
@@ -499,7 +499,7 @@ const Search = () => {
             sort: sortBy,
             maxResults: 100,
             includeImages: false, // Disabled due to 503 errors from Supabase
-            includePricing: true
+            includePricing: true // Re-enabled with PriceCharting priority for sealed products
           });
           result = [...searchResult.cards, ...searchResult.products];
         }
