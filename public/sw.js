@@ -266,6 +266,21 @@ self.addEventListener('notificationclick', (event) => {
 
   const notificationData = event.notification.data || {};
   const action = event.action;
+  const notificationId = notificationData.notificationId;
+
+  // Mark notification as read when clicked
+  if (notificationId) {
+    event.waitUntil(
+      clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({ 
+            type: 'MARK_NOTIFICATION_READ', 
+            notificationId: notificationId 
+          });
+        });
+      })
+    );
+  }
 
   // Handle different notification types and actions
   if (action === 'view-card' && notificationData.type === 'price-alert') {

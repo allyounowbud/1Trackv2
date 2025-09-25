@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import smartSearchService from '../services/smartSearchService';
-import tcgGoApiService from '../services/tcgGoApiService';
+import internalApiService from '../services/internalApiService';
 import ProductPreviewModal from '../components/ProductPreviewModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
 import { getCleanItemName, getCardDisplayName } from '../utils/nameUtils';

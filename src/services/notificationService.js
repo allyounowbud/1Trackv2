@@ -3,6 +3,8 @@
  * Handles push notifications, permission requests, and notification management
  */
 
+import badgeService from './badgeService.js';
+
 class NotificationService {
   constructor() {
     this.isSupported = 'Notification' in window && 'serviceWorker' in navigator;
@@ -139,6 +141,22 @@ class NotificationService {
     };
 
     try {
+      // Generate unique notification ID
+      const notificationId = `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Add to badge service
+      await badgeService.addNotification(notificationId, {
+        type: options.data?.type || 'general',
+        title: title,
+        data: options.data || {}
+      });
+
+      // Add notification ID to options for tracking
+      defaultOptions.data = {
+        ...defaultOptions.data,
+        notificationId: notificationId
+      };
+
       if (this.registration) {
         // Use service worker to show notification
         await this.registration.showNotification(title, defaultOptions);
@@ -282,6 +300,42 @@ class NotificationService {
       const notifications = await this.registration.getNotifications();
       notifications.forEach(notification => notification.close());
     }
+    
+    // Clear badge service as well
+    await badgeService.clearAll();
+  }
+
+  /**
+   * Mark notification as read when user interacts with it
+   */
+  async markNotificationAsRead(notificationId) {
+    try {
+      await badgeService.markAsRead(notificationId);
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to mark notification as read:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Mark all notifications as read
+   */
+  async markAllAsRead() {
+    try {
+      await badgeService.markAllAsRead();
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to mark all notifications as read:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get badge service instance for direct access
+   */
+  getBadgeService() {
+    return badgeService;
   }
 }
 

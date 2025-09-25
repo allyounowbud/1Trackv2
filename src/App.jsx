@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModalProvider } from './contexts/ModalContext';
@@ -8,6 +9,7 @@ import Search from './pages/Search';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import LoadingScreen from './components/LoadingScreen';
+import badgeService from './services/badgeService';
 import './index.css';
 
 // Auth Guard Component
@@ -26,6 +28,27 @@ function AuthGuard({ children }) {
 }
 
 function App() {
+  useEffect(() => {
+    // Listen for service worker messages
+    const handleMessage = (event) => {
+      if (event.data?.type === 'MARK_NOTIFICATION_READ') {
+        badgeService.markAsRead(event.data.notificationId);
+        // Dispatch custom event to update UI
+        window.dispatchEvent(new CustomEvent('badge-updated'));
+      }
+    };
+
+    // Add message listener
+    navigator.serviceWorker?.addEventListener('message', handleMessage);
+
+    // Cleanup old notifications on app start
+    badgeService.cleanupOldNotifications();
+
+    return () => {
+      navigator.serviceWorker?.removeEventListener('message', handleMessage);
+    };
+  }, []);
+
   return (
     <ThemeProvider>
       <AuthProvider>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import notificationService from '../services/notificationService';
+import badgeService from '../services/badgeService';
 
 const NotificationSettings = () => {
   const [settings, setSettings] = useState({
@@ -7,6 +8,11 @@ const NotificationSettings = () => {
     permission: 'denied',
     isEnabled: false,
     hasSubscription: false
+  });
+  const [badgeStatus, setBadgeStatus] = useState({
+    isSupported: false,
+    unreadCount: 0,
+    totalNotifications: 0
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -23,6 +29,10 @@ const NotificationSettings = () => {
         const currentSettings = notificationService.getSettings();
         setSettings(currentSettings);
       }
+      
+      // Initialize badge status
+      const badgeInfo = badgeService.getStatus();
+      setBadgeStatus(badgeInfo);
     } catch (error) {
       console.error('Failed to initialize notifications:', error);
       setError('Failed to initialize notification service');
@@ -95,9 +105,36 @@ const NotificationSettings = () => {
         true
       );
       setSuccess('Test price alert sent!');
+      // Update badge status
+      const badgeInfo = badgeService.getStatus();
+      setBadgeStatus(badgeInfo);
     } catch (error) {
       console.error('Failed to send test price alert:', error);
       setError('Failed to send test price alert');
+    }
+  };
+
+  const handleClearBadges = async () => {
+    try {
+      await badgeService.clearAll();
+      setSuccess('All notifications cleared!');
+      const badgeInfo = badgeService.getStatus();
+      setBadgeStatus(badgeInfo);
+    } catch (error) {
+      console.error('Failed to clear badges:', error);
+      setError('Failed to clear notifications');
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await badgeService.markAllAsRead();
+      setSuccess('All notifications marked as read!');
+      const badgeInfo = badgeService.getStatus();
+      setBadgeStatus(badgeInfo);
+    } catch (error) {
+      console.error('Failed to mark all as read:', error);
+      setError('Failed to mark notifications as read');
     }
   };
 
@@ -182,6 +219,26 @@ const NotificationSettings = () => {
         </button>
       </div>
 
+      {/* Badge Status */}
+      {badgeStatus.isSupported && (
+        <div className="p-3 bg-gray-800/30 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-white text-sm font-medium">PWA Badge</div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs text-gray-400">
+                {badgeStatus.unreadCount} unread
+              </span>
+              {badgeStatus.unreadCount > 0 && (
+                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+              )}
+            </div>
+          </div>
+          <div className="text-xs text-gray-400">
+            Total notifications: {badgeStatus.totalNotifications}
+          </div>
+        </div>
+      )}
+
       {settings.isEnabled && (
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -195,6 +252,25 @@ const NotificationSettings = () => {
             className="px-3 py-2 bg-gray-800/30 hover:bg-gray-800/50 text-white rounded-lg transition-colors text-xs"
           >
             Test Order Update
+          </button>
+        </div>
+      )}
+
+      {/* Badge Management */}
+      {badgeStatus.isSupported && badgeStatus.totalNotifications > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={handleMarkAllAsRead}
+            disabled={badgeStatus.unreadCount === 0}
+            className="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 disabled:bg-gray-600/20 disabled:text-gray-500 text-blue-400 rounded-lg transition-colors text-xs"
+          >
+            Mark All Read
+          </button>
+          <button
+            onClick={handleClearBadges}
+            className="px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors text-xs"
+          >
+            Clear All
           </button>
         </div>
       )}

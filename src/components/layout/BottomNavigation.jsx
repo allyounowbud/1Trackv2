@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
+import NotificationBadge from '../NotificationBadge';
 
 const BottomNavigation = ({ currentPath }) => {
   const navigate = useNavigate();
@@ -57,8 +58,14 @@ const BottomNavigation = ({ currentPath }) => {
                 : 'text-gray-400 hover:text-gray-300'
             }`}
           >
-            <div className={`${isActive(item.path) ? 'text-indigo-500' : 'text-gray-400'}`}>
+            <div className={`relative ${isActive(item.path) ? 'text-indigo-500' : 'text-gray-400'}`}>
               {item.icon}
+              {item.id === 'settings' && (
+                <NotificationBadge 
+                  className="absolute -top-1 -right-1" 
+                  size="xs"
+                />
+              )}
             </div>
             <span className="text-xs">{item.label}</span>
             {isActive(item.path) && (

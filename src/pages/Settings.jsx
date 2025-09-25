@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../contexts/ModalContext';
 import NotificationSettings from '../components/NotificationSettings';
+import NotificationCenter from '../components/NotificationCenter';
 import ThemeSettings from '../components/ThemeSettings';
 import AccountDeletionModal from '../components/AccountDeletionModal';
 
@@ -13,6 +14,7 @@ const Settings = () => {
   const [loading, setLoading] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [showAccountDeletion, setShowAccountDeletion] = useState(false);
+  const [showNotificationCenter, setShowNotificationCenter] = useState(false);
 
   const handleSignOut = async () => {
     setLoading(true);
@@ -129,7 +131,15 @@ const Settings = () => {
 
           {/* Notification Settings */}
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <h3 className="text-white font-medium mb-4">Notifications</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-medium">Notifications</h3>
+              <button
+                onClick={() => setShowNotificationCenter(true)}
+                className="px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg transition-colors text-sm"
+              >
+                View All
+              </button>
+            </div>
             <div className="space-y-4">
               <NotificationSettings />
             </div>
@@ -263,6 +273,12 @@ const Settings = () => {
       <AccountDeletionModal 
         isOpen={showAccountDeletion}
         onClose={() => setShowAccountDeletion(false)}
+      />
+
+      {/* Notification Center */}
+      <NotificationCenter 
+        isOpen={showNotificationCenter}
+        onClose={() => setShowNotificationCenter(false)}
       />
     </div>
   );

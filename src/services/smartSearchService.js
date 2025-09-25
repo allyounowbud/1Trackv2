@@ -9,8 +9,7 @@
  * - Fallback strategies for API failures
  */
 
-import tcgGoApiService from './tcgGoApiService.js';
-import { marketDataService } from './marketDataService.js';
+import internalApiService from './internalApiService.js';
 import { getProductImages } from './hybridImageService.js';
 
 class SmartSearchService {
@@ -67,7 +66,8 @@ class SmartSearchService {
 
     try {
       console.log('🔍 Fetching all expansions...');
-      const expansions = await tcgGoApiService.getAllExpansions();
+      const expansions = await internalApiService.getAllExpansions();
+      console.log('📊 Got expansions from internal API service:', expansions?.length || 0);
       
       // Enhance with additional metadata
       const enhancedExpansions = expansions.map(expansion => ({
@@ -94,7 +94,11 @@ class SmartSearchService {
       return sortedExpansions;
     } catch (error) {
       console.error('❌ Error fetching expansions:', error);
-      throw error;
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack
+      });
+      return [];
     }
   }
 
@@ -184,8 +188,8 @@ class SmartSearchService {
     try {
       console.log(`🃏 Loading cards for expansion ${expansionId}...`);
       
-      // Get cards from TCG Go API
-      const cards = await tcgGoApiService.getExpansionCards(expansionId, sort, maxResults);
+      // Get cards from internal API
+      const cards = await internalApiService.getExpansionCards(expansionId, sort, maxResults);
       
       if (!includeImages && !includePricing) {
         return cards;
@@ -214,8 +218,8 @@ class SmartSearchService {
     try {
       console.log(`📦 Loading products for expansion ${expansionId}...`);
       
-      // Get products from TCG Go API
-      const products = await tcgGoApiService.getExpansionProducts(expansionId, sort, maxResults);
+      // Get products from internal API
+      const products = await internalApiService.getExpansionProducts(expansionId, sort, maxResults);
       
       if (!includeImages && !includePricing) {
         return products;
@@ -361,7 +365,7 @@ class SmartSearchService {
       // Get PriceCharting pricing for all items (singles and sealed products)
       try {
         console.log(`🔍 Getting PriceCharting pricing for: ${itemName}`);
-        const priceChartingData = await marketDataService.getProductMarketData(itemName);
+        const priceChartingData = await internalApiService.getMarketData(itemName);
         
         if (priceChartingData.success && priceChartingData.data) {
           const pcData = priceChartingData.data;
