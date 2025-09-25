@@ -7,7 +7,7 @@ const ResponsiveSearch = () => {
 
   useEffect(() => {
     const checkScreenSize = () => {
-      setIsDesktop(window.innerWidth >= 1024);
+      setIsDesktop(window.innerWidth >= 768); // Lower breakpoint for testing
     };
 
     checkScreenSize();

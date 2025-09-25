@@ -7,7 +7,7 @@ const ResponsiveCollection = () => {
 
   useEffect(() => {
     const checkScreenSize = () => {
-      const isDesktopSize = window.innerWidth >= 1024;
+      const isDesktopSize = window.innerWidth >= 768; // Lower breakpoint for testing
       console.log('📊 ResponsiveCollection screen check:', { width: window.innerWidth, isDesktop: isDesktopSize });
       setIsDesktop(isDesktopSize);
     };

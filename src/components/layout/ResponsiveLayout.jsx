@@ -11,7 +11,7 @@ const ResponsiveLayout = ({ children }) => {
 
   useEffect(() => {
     const checkScreenSize = () => {
-      const isDesktopSize = window.innerWidth >= 1024;
+      const isDesktopSize = window.innerWidth >= 768; // Lower breakpoint for testing
       console.log('🖥️ Screen size check:', { width: window.innerWidth, isDesktop: isDesktopSize });
       setIsDesktop(isDesktopSize);
     };
