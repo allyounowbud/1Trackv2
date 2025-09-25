@@ -12,6 +12,7 @@ import Settings from './pages/Settings';
 import Login from './pages/Login';
 import LoadingScreen from './components/LoadingScreen';
 import ScreenSizeDebug from './components/debug/ScreenSizeDebug';
+import SimpleResponsiveTest from './components/debug/SimpleResponsiveTest';
 import badgeService from './services/badgeService';
 import './index.css';
 
@@ -69,7 +70,7 @@ function App() {
                   <AuthGuard>
                     <ResponsiveLayout>
                       <Routes>
-                        <Route path="/" element={<ResponsiveCollection />} />
+                        <Route path="/" element={<SimpleResponsiveTest />} />
                         <Route path="/search" element={<ResponsiveSearch />} />
                         <Route path="/analytics" element={<Analytics />} />
                         <Route path="/orders" element={<Orders />} />
