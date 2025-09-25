@@ -11,12 +11,15 @@ import Orders from './pages/Orders';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import LoadingScreen from './components/LoadingScreen';
+import ScreenSizeDebug from './components/debug/ScreenSizeDebug';
 import badgeService from './services/badgeService';
 import './index.css';
 
 // Auth Guard Component
 function AuthGuard({ children }) {
   const { user, loading } = useAuth();
+
+  console.log('🔐 AuthGuard render:', { user: !!user, loading, windowWidth: window.innerWidth });
 
   if (loading) {
     return <LoadingScreen message="Loading your collection..." />;
@@ -31,6 +34,8 @@ function AuthGuard({ children }) {
 
 function App() {
   useEffect(() => {
+    console.log('🚀 App component mounted, window width:', window.innerWidth);
+    
     // Listen for service worker messages
     const handleMessage = (event) => {
       if (event.data?.type === 'MARK_NOTIFICATION_READ') {
@@ -57,6 +62,7 @@ function App() {
         <ModalProvider>
           <Router>
             <div className="min-h-screen transition-colors duration-200">
+              <ScreenSizeDebug />
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/*" element={
