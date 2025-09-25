@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { marketplaceRetailerService } from '../services/marketplaceRetailerService';
 import { getCleanItemName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
+import notificationService from '../services/notificationService';
 
 const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const { openModal, closeModal } = useModal();
@@ -238,6 +239,14 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       
       // Wait for processing animation, then trigger navigation
       setTimeout(() => {
+        // Show notification for successful addition
+        if (notificationService.isEnabled()) {
+          const itemName = getCleanItemName(product?.name, product?.set) || product?.name || 'Item';
+          notificationService.showCollectionUpdate(itemName, 'added').catch(error => {
+            console.warn('Failed to show collection update notification:', error);
+          });
+        }
+        
         // Call onSuccess to trigger collection refresh and navigation
         onSuccess?.(successInfo);
         

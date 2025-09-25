@@ -232,16 +232,16 @@ const Search = () => {
         filter: filterBy
       });
       
-      // Fetch cards and products separately for progressive loading
-      const cardsPromise = tcgGoApiService.getExpansionCards(expansionId, sortBy, 50).catch(() => []);
-      const productsPromise = tcgGoApiService.getExpansionProducts(expansionId, sortBy, 20).catch(() => []);
+      // Fetch ALL cards and products from the expansion (no limits for complete results)
+      const cardsPromise = tcgGoApiService.getExpansionCards(expansionId, sortBy, 1000).catch(() => []);
+      const productsPromise = tcgGoApiService.getExpansionProducts(expansionId, sortBy, 1000).catch(() => []);
       
       // Show cards first (usually faster)
       const cards = await cardsPromise;
       if (cards && cards.length > 0) {
         setAllResults(cards);
         setCurrentPage(1);
-        setHasMore(false);
+        setHasMoreResults(false);
       }
       
       // Then add products

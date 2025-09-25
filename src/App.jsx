@@ -1,5 +1,4 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useState } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModalProvider } from './contexts/ModalContext';
@@ -27,22 +26,12 @@ function AuthGuard({ children }) {
 }
 
 function App() {
-  const [isDarkMode, setIsDarkMode] = useState(true);
-
-  const toggleTheme = () => {
-    const newTheme = !isDarkMode;
-    setIsDarkMode(newTheme);
-    localStorage.setItem('theme', newTheme ? 'dark' : 'light');
-  };
-
   return (
-    <ThemeProvider value={{ isDarkMode, toggleTheme }}>
+    <ThemeProvider>
       <AuthProvider>
         <ModalProvider>
           <Router>
-            <div className={`min-h-screen transition-colors duration-200 ${
-              isDarkMode ? 'dark' : ''
-            }`}>
+            <div className="min-h-screen transition-colors duration-200">
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/*" element={

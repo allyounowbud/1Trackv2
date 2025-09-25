@@ -234,30 +234,51 @@ class TCGGoApiService {
    * Get cards from expansion with pagination
    * GET /pokemon/episodes/{id}/cards?sort={sort}
    */
-  async getExpansionCards(expansionId, sort = 'price_highest', maxResults = 50) {
+  async getExpansionCards(expansionId, sort = 'price_highest', maxResults = 1000) {
     const cacheKey = `expansion_cards_${expansionId}_${sort}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) return cached;
 
     try {
-      // Limit to first page only for faster loading (50 cards max)
-      const responseData = await this.makeRequest(`/pokemon/episodes/${expansionId}/cards?sort=${sort}&page=1`);
+      let allCards = [];
+      let currentPage = 1;
+      let totalPages = 1;
       
-      // Handle different response structures
-      let data;
-      if (Array.isArray(responseData)) {
-        data = responseData;
-      } else if (responseData.data && Array.isArray(responseData.data)) {
-        data = responseData.data;
-      } else if (responseData.results && Array.isArray(responseData.results)) {
-        data = responseData.results;
-      } else {
-        console.error('❌ Unexpected expansion cards API response structure:', responseData);
-        return [];
-      }
-      
-      // Limit results for faster processing
-      const allCards = data.slice(0, maxResults);
+      // Fetch ALL pages to get complete results
+      do {
+        const responseData = await this.makeRequest(`/pokemon/episodes/${expansionId}/cards?sort=${sort}&page=${currentPage}`);
+        
+        // Handle different response structures
+        let data;
+        if (Array.isArray(responseData)) {
+          data = responseData;
+        } else if (responseData.data && Array.isArray(responseData.data)) {
+          data = responseData.data;
+        } else if (responseData.results && Array.isArray(responseData.results)) {
+          data = responseData.results;
+        } else {
+          console.error('❌ Unexpected expansion cards API response structure:', responseData);
+          break;
+        }
+        
+        // Add cards from this page
+        allCards = allCards.concat(data);
+        
+        // Check if we've reached the max results limit
+        if (allCards.length >= maxResults) {
+          allCards = allCards.slice(0, maxResults);
+          break;
+        }
+        
+        // Check pagination info
+        if (responseData.paging) {
+          totalPages = responseData.paging.total || 1;
+          currentPage++;
+        } else {
+          break; // No pagination info, assume single page
+        }
+        
+      } while (currentPage <= totalPages && allCards.length < maxResults);
       
       // Format all cards data in parallel for much faster processing
       const formatPromises = allCards.map(async (card) => {
@@ -288,30 +309,51 @@ class TCGGoApiService {
    * Get products from expansion with pagination
    * GET /pokemon/episodes/{id}/products?sort={sort}
    */
-  async getExpansionProducts(expansionId, sort = 'price_highest', maxResults = 20) {
+  async getExpansionProducts(expansionId, sort = 'price_highest', maxResults = 1000) {
     const cacheKey = `expansion_products_${expansionId}_${sort}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) return cached;
 
     try {
-      // Limit to first page only for faster loading (20 products max)
-      const responseData = await this.makeRequest(`/pokemon/episodes/${expansionId}/products?sort=${sort}&page=1`);
+      let allProducts = [];
+      let currentPage = 1;
+      let totalPages = 1;
       
-      // Handle different response structures
-      let data;
-      if (Array.isArray(responseData)) {
-        data = responseData;
-      } else if (responseData.data && Array.isArray(responseData.data)) {
-        data = responseData.data;
-      } else if (responseData.results && Array.isArray(responseData.results)) {
-        data = responseData.results;
-      } else {
-        console.error('❌ Unexpected expansion products API response structure:', responseData);
-        return [];
-      }
-      
-      // Limit results for faster processing
-      const allProducts = data.slice(0, maxResults);
+      // Fetch ALL pages to get complete results
+      do {
+        const responseData = await this.makeRequest(`/pokemon/episodes/${expansionId}/products?sort=${sort}&page=${currentPage}`);
+        
+        // Handle different response structures
+        let data;
+        if (Array.isArray(responseData)) {
+          data = responseData;
+        } else if (responseData.data && Array.isArray(responseData.data)) {
+          data = responseData.data;
+        } else if (responseData.results && Array.isArray(responseData.results)) {
+          data = responseData.results;
+        } else {
+          console.error('❌ Unexpected expansion products API response structure:', responseData);
+          break;
+        }
+        
+        // Add products from this page
+        allProducts = allProducts.concat(data);
+        
+        // Check if we've reached the max results limit
+        if (allProducts.length >= maxResults) {
+          allProducts = allProducts.slice(0, maxResults);
+          break;
+        }
+        
+        // Check pagination info
+        if (responseData.paging) {
+          totalPages = responseData.paging.total || 1;
+          currentPage++;
+        } else {
+          break; // No pagination info, assume single page
+        }
+        
+      } while (currentPage <= totalPages && allProducts.length < maxResults);
       
       // Format all products data in parallel for much faster processing
       const formatPromises = allProducts.map(async (product) => {
@@ -915,17 +957,8 @@ class TCGGoApiService {
    */
   async formatProduct(product) {
     try {
-      // For sealed products, try PriceCharting API first
-      let priceChartingData = null;
+      // PriceCharting API removed due to CORS issues - use TCG Go API data only
       const isSealed = product.name && this.isSealedProduct(product.name);
-      
-      if (isSealed) {
-        try {
-          priceChartingData = await this.getPriceChartingData(product.name);
-        } catch (error) {
-          // Silently fall back to TCG Go API
-        }
-      }
 
       // Handle the actual API response structure
       // The API sometimes returns empty price objects, so we need to handle that
@@ -933,24 +966,7 @@ class TCGGoApiService {
       // Try different possible field names for TCGPlayer data
       const tcgPlayerPrices = product.prices?.tcgplayer || product.prices?.tcg_player || product.prices?.tcgPlayer || {};
       
-      // Debug: Log the actual price structure for this product
-      console.log(`🔍 Price structure for ${product.name}:`, {
-        hasPrices: !!product.prices,
-        priceKeys: product.prices ? Object.keys(product.prices) : [],
-        cardMarket: cardMarketPrices,
-        tcgPlayer: tcgPlayerPrices,
-        allPrices: product.prices
-      });
       
-      // Debug: Check if TCGPlayer data exists with different field names
-      if (product.prices) {
-        const possibleTcgFields = ['tcgplayer', 'tcg_player', 'tcgPlayer', 'tcg', 'tcgplayer_prices'];
-        possibleTcgFields.forEach(field => {
-          if (product.prices[field]) {
-            console.log(`🔍 Found TCGPlayer data under field "${field}":`, product.prices[field]);
-          }
-        });
-      }
       
       // Get market value - API returns all prices in USD
       // TCGPlayer: Use market_price (most accurate) or mid_price as fallback
@@ -963,44 +979,23 @@ class TCGGoApiService {
       let marketValue;
       let priceSource;
       
-      // Debug logging for market value selection
-      console.log(`🎯 Market value selection for ${product.name}:`, {
-        priceChartingData: priceChartingData ? {
-          loose_price: priceChartingData.loose_price,
-          new_price: priceChartingData.new_price,
-          cib_price: priceChartingData.cib_price,
-          found_but_no_price: priceChartingData.found_but_no_price
-        } : null,
-        tcgPlayerMarketPrice,
-        cardMarketPrice
-      });
-
-      if (priceChartingData && !priceChartingData.found_but_no_price) {
-        // For sealed products, prioritize PriceCharting data
-        // Use loose_price as primary (most accurate for sealed), fallback to new_price, then cib_price
-        if (priceChartingData.loose_price && priceChartingData.loose_price > 0) {
-          marketValue = priceChartingData.loose_price;
-          priceSource = 'pricecharting';
-          console.log(`✅ PRIMARY: Using PriceCharting loose price for ${product.name}: $${marketValue} (LOOSE PRICE PRIORITIZED)`);
-        } else if (priceChartingData.new_price && priceChartingData.new_price > 0) {
-          marketValue = priceChartingData.new_price;
-          priceSource = 'pricecharting';
-          console.log(`✅ FALLBACK: Using PriceCharting new price for ${product.name}: $${marketValue} (loose price was ${priceChartingData.loose_price})`);
-        } else if (priceChartingData.cib_price && priceChartingData.cib_price > 0) {
-          marketValue = priceChartingData.cib_price;
-          priceSource = 'pricecharting';
-          console.log(`✅ FALLBACK: Using PriceCharting CIB price for ${product.name}: $${marketValue}`);
-        } else {
-          // PriceCharting found product but no valid prices, fallback to TCG APIs
-          marketValue = tcgPlayerMarketPrice || cardMarketPrice;
-          priceSource = tcgPlayerMarketPrice ? 'tcgplayer' : 'cardmarket';
-          console.log(`⚠️ PriceCharting found ${product.name} but no valid prices, using ${priceSource}: $${marketValue}`);
-        }
+      // Pricing priority: TCGPlayer first, then PriceCharting for sealed, CardMarket as backup
+      if (tcgPlayerMarketPrice && tcgPlayerMarketPrice > 0) {
+        // TCGPlayer is the primary source for all items
+        marketValue = tcgPlayerMarketPrice;
+        priceSource = 'tcgplayer';
+      } else if (isSealed && cardMarketPrice && cardMarketPrice > 0) {
+        // For sealed products, use CardMarket if TCGPlayer not available
+        marketValue = cardMarketPrice;
+        priceSource = 'cardmarket';
+      } else if (cardMarketPrice && cardMarketPrice > 0) {
+        // CardMarket as backup for singles
+        marketValue = cardMarketPrice;
+        priceSource = 'cardmarket';
       } else {
-        // No PriceCharting data available, use TCG APIs
-        marketValue = tcgPlayerMarketPrice || cardMarketPrice;
-        priceSource = tcgPlayerMarketPrice ? 'tcgplayer' : 'cardmarket';
-        console.log(`📊 Using ${priceSource} for ${product.name}: $${marketValue}`);
+        // No pricing available
+        marketValue = 0;
+        priceSource = 'none';
       }
 
       // Calculate trend from available 7d/30d averages (no individual API calls)
@@ -1024,14 +1019,6 @@ class TCGGoApiService {
           market: marketValue || 0,
           trend: trend || 0,
           source: priceSource,
-          priceCharting: priceChartingData ? {
-            new: priceChartingData.new_price || 0,
-            cib: priceChartingData.cib_price || 0,
-            loose: priceChartingData.loose_price || 0,
-            used: priceChartingData.used_price || 0,
-            complete: priceChartingData.complete_price || 0,
-            currency: 'USD'
-          } : null,
           tcgPlayer: {
             market: tcgPlayerPrices.market_price || 0,
             mid: tcgPlayerPrices.mid_price || 0,
@@ -1365,187 +1352,6 @@ class TCGGoApiService {
     return sealedKeywords.some(keyword => lowerName.includes(keyword));
   }
 
-  /**
-   * Get PriceCharting data for a product
-   */
-  async getPriceChartingData(productName) {
-    const priceChartingApiKey = import.meta.env.VITE_PRICECHARTING_API_KEY;
-    console.log(`🔑 PriceCharting API key configured: ${priceChartingApiKey ? 'YES' : 'NO'}`);
-    console.log(`🔑 API key value: ${priceChartingApiKey ? priceChartingApiKey.substring(0, 10) + '...' : 'NOT FOUND'}`);
-    if (!priceChartingApiKey) {
-      throw new Error('PriceCharting API key not configured');
-    }
-
-    const cacheKey = `pricecharting_${productName}`;
-    const cached = this.getFromCache(cacheKey);
-    if (cached) return cached;
-
-    try {
-      // Try multiple search strategies
-      const searchStrategies = [
-        // Strategy 1: Original name
-        productName,
-        // Strategy 2: Replace "Elite Trainer Box" with "ETB"
-        productName.replace(/Elite Trainer Box/gi, 'ETB'),
-        // Strategy 3: Remove "Pokemon TCG" prefix
-        productName.replace(/Pokemon TCG/gi, '').trim(),
-        // Strategy 4: Extract just the set name and product type
-        productName.replace(/Pokemon TCG/gi, '').replace(/Elite Trainer Box/gi, 'ETB').trim(),
-        // Strategy 5: Just the set name
-        productName.split(' ').slice(-2).join(' ') // Last 2 words (e.g., "Prismatic Evolutions")
-      ];
-      
-      let data = null;
-      let successfulQuery = null;
-      
-      for (let i = 0; i < searchStrategies.length; i++) {
-        const searchQuery = searchStrategies[i];
-        if (!searchQuery) continue;
-        
-        const url = `https://www.pricecharting.com/api/products?q=${encodeURIComponent(searchQuery)}&t=${priceChartingApiKey}`;
-        
-        try {
-          const response = await fetch(url);
-          
-          if (!response.ok) {
-            continue;
-          }
-          
-          const responseData = await response.json();
-          
-          // Check if we got meaningful results
-          let products = null;
-          if (Array.isArray(responseData)) {
-            products = responseData;
-          } else if (responseData && Array.isArray(responseData.products)) {
-            products = responseData.products;
-          } else if (responseData && responseData.data && Array.isArray(responseData.data)) {
-            products = responseData.data;
-          }
-          
-          if (products && products.length > 0) {
-            data = responseData;
-            successfulQuery = searchQuery;
-            break;
-          }
-        } catch (error) {
-          continue;
-        }
-      }
-      
-      if (!data) {
-        throw new Error(`No results found with any search strategy for "${productName}"`);
-      }
-      
-      // Find the best match product
-      let bestMatch = null;
-      let products = null;
-      
-      // Handle different possible response formats
-      if (Array.isArray(data)) {
-        products = data;
-      } else if (data && Array.isArray(data.products)) {
-        products = data.products;
-      } else if (data && data.data && Array.isArray(data.data)) {
-        products = data.data;
-      }
-      
-      if (products && products.length > 0) {
-        // Normalize names for better matching
-        const normalizeName = (name) => {
-          return name.toLowerCase()
-            .replace(/elite trainer box/gi, 'etb')
-            .replace(/pokemon tcg/gi, 'pokemon')
-            .replace(/pokémon/gi, 'pokemon')
-            .replace(/[^\w\s]/g, '') // Remove special characters
-            .replace(/\s+/g, ' ') // Normalize whitespace
-            .trim();
-        };
-        
-        const normalizedProductName = normalizeName(productName);
-        
-        // Look for exact name match first
-        bestMatch = products.find(item => {
-          const itemName = item['product-name'] || item.name || item.title;
-          const normalizedItemName = normalizeName(itemName);
-          return itemName && normalizedItemName === normalizedProductName;
-        });
-        
-        // If no exact match, look for partial match
-        if (!bestMatch) {
-          bestMatch = products.find(item => {
-            const itemName = item['product-name'] || item.name || item.title;
-            const normalizedItemName = normalizeName(itemName);
-            return itemName && (
-              normalizedItemName.includes(normalizedProductName) ||
-              normalizedProductName.includes(normalizedItemName)
-            );
-          });
-        }
-        
-        // If still no match, use the first result
-        if (!bestMatch) {
-          bestMatch = products[0];
-        }
-      }
-      
-      if (bestMatch) {
-        // PriceCharting API returns prices in cents, so we need to convert to dollars
-        const parsePrice = (price) => {
-          if (!price) return null;
-          const numPrice = parseFloat(price);
-          return isNaN(numPrice) ? null : numPrice / 100; // Convert cents to dollars
-        };
-
-        const priceData = {
-          new_price: parsePrice(bestMatch['new-price'] || bestMatch['new_price'] || bestMatch.price || bestMatch['new']),
-          cib_price: parsePrice(bestMatch['cib-price'] || bestMatch['cib_price'] || bestMatch.cib),
-          loose_price: parsePrice(bestMatch['loose-price'] || bestMatch['loose_price'] || bestMatch.loose),
-          product_name: bestMatch['product-name'] || bestMatch.name || bestMatch.title,
-          console_name: bestMatch['console-name'] || bestMatch.console || bestMatch.platform,
-          // Add additional fields for better market value determination
-          used_price: parsePrice(bestMatch['used-price'] || bestMatch['used_price'] || bestMatch.used),
-          complete_price: parsePrice(bestMatch['complete-price'] || bestMatch['complete_price'] || bestMatch.complete)
-        };
-
-        // Debug logging to see what prices we're getting
-        console.log(`🔍 PriceCharting debug for ${productName}:`, {
-          rawData: {
-            'new-price': bestMatch['new-price'],
-            'loose-price': bestMatch['loose-price'],
-            'cib-price': bestMatch['cib-price']
-          },
-          parsedData: {
-            new_price: priceData.new_price,
-            loose_price: priceData.loose_price,
-            cib_price: priceData.cib_price
-          }
-        });
-        
-        // Even if no price data is found, return the product info
-        if (priceData.new_price || priceData.cib_price || priceData.loose_price) {
-          this.setCache(cacheKey, priceData);
-          return priceData;
-        } else {
-          // Return a minimal data structure to indicate the product was found
-          const minimalData = {
-            new_price: null,
-            cib_price: null,
-            loose_price: null,
-            product_name: priceData.product_name,
-            console_name: priceData.console_name,
-            found_but_no_price: true
-          };
-          this.setCache(cacheKey, minimalData);
-          return minimalData;
-        }
-      }
-      
-      throw new Error('No matching product found in PriceCharting');
-    } catch (error) {
-      throw error;
-    }
-  }
 }
 
 // Create singleton instance

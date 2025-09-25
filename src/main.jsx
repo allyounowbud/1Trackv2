@@ -10,12 +10,18 @@ import LoadingScreen from "./components/LoadingScreen.jsx";
 // import { startBackgroundPriceService } from "./services/startBackgroundService.js";
 import { initializePWA } from "./utils/pwa.js";
 import { queryClient } from "./lib/queryClient.js";
+import notificationService from "./services/notificationService.js";
 
 // Start background price service
 // startBackgroundPriceService();
 
 // Initialize PWA features
 initializePWA();
+
+// Initialize notification service
+notificationService.initialize().catch(error => {
+  console.warn('Failed to initialize notification service:', error);
+});
 
 // PWA Loading Wrapper Component
 function PWALoadingWrapper() {

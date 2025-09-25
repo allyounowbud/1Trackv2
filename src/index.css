@@ -3,6 +3,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .hover\:scale-102:hover {
+    transform: scale(1.02);
+  }
+}
+
 @layer base {
   html {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;

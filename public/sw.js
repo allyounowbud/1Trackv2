@@ -178,20 +178,73 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// Enhanced push notification handler
 self.addEventListener('push', (event) => {
-  const options = {
-    body: event.data ? event.data.text() : 'New update available',
+  let notificationData = {
+    title: 'OneTrack',
+    body: 'New update available',
     icon: '/icons/icon-192x192.svg',
     badge: '/icons/icon-72x72.svg',
     vibrate: [100, 50, 100],
     data: {
       dateOfArrival: Date.now(),
-      primaryKey: 1
-    },
-    actions: [
+      primaryKey: 1,
+      type: 'general'
+    }
+  };
+
+  // Parse push data if available
+  if (event.data) {
+    try {
+      const data = event.data.json();
+      notificationData = { ...notificationData, ...data };
+    } catch (error) {
+      // Fallback to text data
+      notificationData.body = event.data.text();
+    }
+  }
+
+  // Add actions based on notification type
+  if (notificationData.data.type === 'price-alert') {
+    notificationData.actions = [
+      {
+        action: 'view-card',
+        title: 'View Card',
+        icon: '/icons/icon-96x96.svg'
+      },
+      {
+        action: 'dismiss',
+        title: 'Dismiss',
+        icon: '/icons/icon-96x96.svg'
+      }
+    ];
+  } else if (notificationData.data.type === 'collection-update') {
+    notificationData.actions = [
+      {
+        action: 'view-collection',
+        title: 'View Collection',
+        icon: '/icons/icon-96x96.svg'
+      }
+    ];
+  } else if (notificationData.data.type === 'app-update') {
+    notificationData.actions = [
+      {
+        action: 'refresh',
+        title: 'Refresh App',
+        icon: '/icons/icon-96x96.svg'
+      },
+      {
+        action: 'later',
+        title: 'Later',
+        icon: '/icons/icon-96x96.svg'
+      }
+    ];
+  } else {
+    // Default actions
+    notificationData.actions = [
       {
         action: 'explore',
-        title: 'View Collection',
+        title: 'Open App',
         icon: '/icons/icon-96x96.svg'
       },
       {
@@ -199,23 +252,43 @@ self.addEventListener('push', (event) => {
         title: 'Close',
         icon: '/icons/icon-96x96.svg'
       }
-    ]
-  };
+    ];
+  }
 
   event.waitUntil(
-    self.registration.showNotification('OneTrack', options)
+    self.registration.showNotification(notificationData.title, notificationData)
   );
 });
 
-// Notification click handler
+// Enhanced notification click handler
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  if (event.action === 'explore') {
+  const notificationData = event.notification.data || {};
+  const action = event.action;
+
+  // Handle different notification types and actions
+  if (action === 'view-card' && notificationData.type === 'price-alert') {
+    // Open app to specific card
+    event.waitUntil(
+      clients.openWindow(`/search?q=${encodeURIComponent(notificationData.cardName)}`)
+    );
+  } else if (action === 'view-collection' || action === 'explore') {
+    // Open collection page
     event.waitUntil(
       clients.openWindow('/')
     );
-  } else if (event.action === 'close') {
+  } else if (action === 'refresh' && notificationData.type === 'app-update') {
+    // Refresh the app
+    event.waitUntil(
+      clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({ type: 'REFRESH_APP' });
+        });
+        return clients.openWindow('/');
+      })
+    );
+  } else if (action === 'later' || action === 'dismiss' || action === 'close') {
     // Just close the notification
     return;
   } else {
