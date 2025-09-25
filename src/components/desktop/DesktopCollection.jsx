@@ -24,8 +24,6 @@ async function getCollectionSummary() {
 }
 
 const DesktopCollection = () => {
-  console.log('🖥️ DesktopCollection component rendered');
-  
   const [viewMode, setViewMode] = useState('summary');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');

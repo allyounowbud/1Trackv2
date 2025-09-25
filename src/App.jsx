@@ -11,16 +11,12 @@ import Orders from './pages/Orders';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import LoadingScreen from './components/LoadingScreen';
-import ScreenSizeDebug from './components/debug/ScreenSizeDebug';
-import SimpleResponsiveTest from './components/debug/SimpleResponsiveTest';
 import badgeService from './services/badgeService';
 import './index.css';
 
 // Auth Guard Component
 function AuthGuard({ children }) {
   const { user, loading } = useAuth();
-
-  console.log('🔐 AuthGuard render:', { user: !!user, loading, windowWidth: window.innerWidth });
 
   if (loading) {
     return <LoadingScreen message="Loading your collection..." />;
@@ -35,8 +31,6 @@ function AuthGuard({ children }) {
 
 function App() {
   useEffect(() => {
-    console.log('🚀 App component mounted, window width:', window.innerWidth);
-    
     // Listen for service worker messages
     const handleMessage = (event) => {
       if (event.data?.type === 'MARK_NOTIFICATION_READ') {
@@ -63,36 +57,13 @@ function App() {
         <ModalProvider>
           <Router>
             <div className="min-h-screen transition-colors duration-200">
-              <ScreenSizeDebug />
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/*" element={
                   <AuthGuard>
                     <ResponsiveLayout>
                       <Routes>
-                        <Route path="/" element={(() => {
-                          const isDesktop = window.innerWidth >= 768;
-                          console.log('🧪 Inline test render:', { width: window.innerWidth, isDesktop });
-                          return (
-                            <div style={{ 
-                              background: isDesktop ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                              color: 'white',
-                              padding: '20px',
-                              textAlign: 'center',
-                              fontSize: '24px',
-                              fontWeight: 'bold',
-                              minHeight: '100vh'
-                            }}>
-                              {isDesktop ? '🖥️ DESKTOP LAYOUT IS WORKING! 🖥️' : '📱 MOBILE LAYOUT'}
-                              <br />
-                              Width: {window.innerWidth}px
-                              <br />
-                              Breakpoint: 768px
-                              <br />
-                              Is Desktop: {isDesktop ? 'YES' : 'NO'}
-                            </div>
-                          );
-                        })()} />
+                        <Route path="/" element={<ResponsiveCollection />} />
                         <Route path="/search" element={<ResponsiveSearch />} />
                         <Route path="/analytics" element={<Analytics />} />
                         <Route path="/orders" element={<Orders />} />

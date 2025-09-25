@@ -11,8 +11,7 @@ const ResponsiveLayout = ({ children }) => {
 
   useEffect(() => {
     const checkScreenSize = () => {
-      const isDesktopSize = window.innerWidth >= 768; // Lower breakpoint for testing
-      console.log('🖥️ Screen size check:', { width: window.innerWidth, isDesktop: isDesktopSize });
+      const isDesktopSize = window.innerWidth >= 1024; // Back to proper breakpoint
       setIsDesktop(isDesktopSize);
     };
 
@@ -26,11 +25,8 @@ const ResponsiveLayout = ({ children }) => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  console.log('🖥️ ResponsiveLayout render:', { isDesktop, width: window.innerWidth });
-
   if (isDesktop) {
     // Desktop layout with sidebar
-    console.log('🖥️ Rendering desktop layout');
     return (
       <div className="desktop-app-container">
         <DesktopSidebar currentPath={location.pathname} />
@@ -42,7 +38,6 @@ const ResponsiveLayout = ({ children }) => {
   }
 
   // Mobile layout with bottom navigation (unchanged)
-  console.log('📱 Rendering mobile layout');
   return (
     <div className="app-container">
       {/* Main Content Area - with proper spacing for bottom nav */}

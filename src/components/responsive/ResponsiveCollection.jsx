@@ -7,8 +7,7 @@ const ResponsiveCollection = () => {
 
   useEffect(() => {
     const checkScreenSize = () => {
-      const isDesktopSize = window.innerWidth >= 768; // Lower breakpoint for testing
-      console.log('📊 ResponsiveCollection screen check:', { width: window.innerWidth, isDesktop: isDesktopSize });
+      const isDesktopSize = window.innerWidth >= 1024; // Back to proper breakpoint
       setIsDesktop(isDesktopSize);
     };
 
@@ -17,15 +16,11 @@ const ResponsiveCollection = () => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  console.log('📊 ResponsiveCollection render:', { isDesktop, width: window.innerWidth });
-
   if (isDesktop) {
-    console.log('📊 Rendering DesktopCollection');
     return <DesktopCollection />;
   }
 
   // Mobile version (unchanged)
-  console.log('📊 Rendering mobile Collection');
   return <Collection />;
 };
 
