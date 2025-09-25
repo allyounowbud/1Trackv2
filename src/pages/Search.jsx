@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import tcgGoApiService from '../services/tcgGoApiService';
+import smartSearchService from '../services/smartSearchService';
 import ProductPreviewModal from '../components/ProductPreviewModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
 import { getCleanItemName, getCardDisplayName } from '../utils/nameUtils';
@@ -83,91 +83,40 @@ const Search = () => {
     }
   }, []);
 
-  // Fetch all expansion results and handle pagination
+  // Fetch all expansion results using SmartSearchService
   const fetchAllExpansionResults = useCallback(async (expansionId, sort, filter) => {
     try {
+      console.log(`🔍 Loading expansion data for ${expansionId}...`);
       
-      // Check cache first
-      const cacheKey = `expansion_all_${expansionId}_${sort}_${filter}`;
-      const cached = localStorage.getItem(cacheKey);
-      
-      if (cached) {
-        return JSON.parse(cached);
-      }
+      const expansionData = await smartSearchService.getExpansionData(expansionId, {
+        sort,
+        filter,
+        maxCards: 1000,
+        maxProducts: 500,
+        includeImages: false, // Disabled due to 503 errors from Supabase
+        includePricing: true
+      });
 
-      // Fetch all cards and products
-      const [cards, products] = await Promise.all([
-        tcgGoApiService.getExpansionCards(expansionId, sort).catch(() => []),
-        tcgGoApiService.getExpansionProducts(expansionId, sort).catch(() => [])
-      ]);
-
-      // Combine results
-      let allItems = [...cards, ...products];
-
-      // Apply filtering
-      if (filter !== 'all') {
-        allItems = allItems.filter(item => {
-          if (filter === 'sealed') return item.type === 'sealed';
-          if (filter === 'singles') return item.type === 'singles';
-          return true;
-        });
-      }
-
-      // Apply sorting
-      allItems = sortResults(allItems, sort);
-
-      // Cache results
-      localStorage.setItem(cacheKey, JSON.stringify(allItems));
-      
-      return allItems;
+      return expansionData.allItems;
     } catch (error) {
-      console.error('Error fetching expansion results:', error);
+      console.error('❌ Error fetching expansion results:', error);
       return [];
     }
-  }, [sortResults]);
+  }, []);
 
-  // Load popular expansions using search API for better image data
+  // Load popular expansions using SmartSearchService
   const loadPopularExpansions = async () => {
     setIsLoadingTrending(true);
     try {
+      console.log('🔍 Loading popular expansions...');
       
-      // List of popular expansions to search for
-      const popularExpansionNames = [
-        'Prismatic Evolutions',
-        'Scarlet & Violet 151', 
-        'Crown Zenith',
-        'Silver Tempest',
-        'Lost Origin',
-        'Astral Radiance',
-        'Brilliant Stars',
-        'Fusion Strike',
-        'Evolving Skies',
-        'Chilling Reign'
-      ];
-
-      // Search for each popular expansion
-      const expansionPromises = popularExpansionNames.map(async (name) => {
-        try {
-          const result = await tcgGoApiService.searchExpansions(name);
-          if (result && result.length > 0) {
-            return result[0]; // Return the first (most relevant) result
-          }
-          return null;
-        } catch (error) {
-          console.warn(`Failed to search for ${name}:`, error);
-          return null;
-        }
-      });
-
-      const expansions = (await Promise.all(expansionPromises)).filter(Boolean);
+      const allExpansions = await smartSearchService.getAllExpansions();
       
+      // Get top 10 most popular expansions
+      const popularExpansions = allExpansions.slice(0, 10);
       
-      if (expansions.length > 0) {
-        setTrendingProducts(expansions);
-      } else {
-        // Fallback to regular API if search fails
-        await loadAllExpansions();
-      }
+      setTrendingProducts(popularExpansions);
+      console.log(`✅ Loaded ${popularExpansions.length} popular expansions`);
     } catch (error) {
       console.error('❌ Error loading popular expansions:', error);
       // Fallback to regular API
@@ -298,14 +247,12 @@ const Search = () => {
   const loadAllExpansions = async () => {
     setIsLoadingTrending(true);
     try {
-      const expansions = await tcgGoApiService.getAllExpansions();
+      console.log('🔍 Loading all expansions...');
+      const expansions = await smartSearchService.getAllExpansions();
       
-      
-      // The getAllExpansions function returns the data directly, not wrapped in success/data
       if (expansions && Array.isArray(expansions)) {
-        
-        
         setTrendingProducts(expansions);
+        console.log(`✅ Loaded ${expansions.length} expansions`);
       } else {
         console.error('❌ Failed to load expansions - invalid response:', expansions);
         setTrendingProducts([]);
@@ -504,58 +451,56 @@ const Search = () => {
           
           // Try to find the expansion first
           try {
-            const expansions = await tcgGoApiService.searchExpansions(searchQuery);
-            if (expansions && expansions.length > 0) {
-              const expansion = expansions[0]; // Take the first match
-              console.log(`📦 Found expansion: ${expansion.name} (ID: ${expansion.id})`);
+            const expansions = await smartSearchService.getAllExpansions();
+            const matchingExpansion = expansions.find(exp => 
+              exp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              searchQuery.toLowerCase().includes(exp.name.toLowerCase())
+            );
+            
+            if (matchingExpansion) {
+              console.log(`📦 Found expansion: ${matchingExpansion.name} (ID: ${matchingExpansion.id})`);
               
-              // Get both cards and products from this expansion
-              const sortOption = sortBy === 'highest_price' ? 'price_highest' : 
-                               sortBy === 'lowest_price' ? 'price_lowest' : 
-                               sortBy === 'alphabetical' ? 'name' : 'price_highest';
+              // Get complete expansion data using SmartSearchService
+              const expansionData = await smartSearchService.getExpansionData(matchingExpansion.id, {
+                sort: sortBy,
+                filter: filterBy,
+                maxCards: 1000,
+                maxProducts: 500,
+                includeImages: true,
+                includePricing: true
+              });
               
-              const [cards, products] = await Promise.all([
-                tcgGoApiService.getExpansionCards(expansion.id, sortOption),
-                tcgGoApiService.getExpansionProducts(expansion.id, sortOption)
-              ]);
-              
-              // Combine results
-              const combinedResults = [...cards, ...products];
-              result = combinedResults; // Don't limit expansion results
-              console.log(`✅ Found ${combinedResults.length} items from expansion`);
+              result = expansionData.allItems;
+              console.log(`✅ Found ${result.length} items from expansion`);
             } else {
               // Fall back to regular search if no expansion found
-              result = await tcgGoApiService.searchAll(searchQuery, 'relevance');
+              const searchResult = await smartSearchService.searchAll(searchQuery, {
+                sort: sortBy,
+                maxResults: 100,
+                includeImages: true,
+                includePricing: true
+              });
+              result = [...searchResult.cards, ...searchResult.products];
             }
           } catch (expansionError) {
             console.log('⚠️ Expansion search failed, falling back to regular search:', expansionError);
-            result = await tcgGoApiService.searchAll(searchQuery, 'relevance');
+            const searchResult = await smartSearchService.searchAll(searchQuery, {
+              sort: sortBy,
+              maxResults: 100,
+              includeImages: true,
+              includePricing: true
+            });
+            result = [...searchResult.cards, ...searchResult.products];
           }
         } else {
-          // Use enhanced search with sorting for better results
-          const sortOption = sortBy === 'highest_price' ? 'price_highest' : 
-                           sortBy === 'lowest_price' ? 'price_lowest' : 
-                           sortBy === 'alphabetical' ? 'name' : 'relevance';
-          
-          try {
-            const searchResults = await tcgGoApiService.searchAll(searchQuery, sortOption);
-            result = searchResults;
-          } catch (searchError) {
-            console.log('⚠️ Enhanced search failed, falling back to regular search:', searchError);
-            // Fall back to regular search
-            switch (searchType) {
-              case 'cards':
-                result = await tcgGoApiService.searchCards(searchQuery, sortOption);
-                break;
-              case 'products':
-                result = await tcgGoApiService.searchProducts(searchQuery, sortOption);
-                break;
-              case 'all':
-              default:
-                result = await tcgGoApiService.searchAll(searchQuery, 'relevance');
-                break;
-            }
-          }
+          // Use SmartSearchService for comprehensive search
+          const searchResult = await smartSearchService.searchAll(searchQuery, {
+            sort: sortBy,
+            maxResults: 100,
+            includeImages: true,
+            includePricing: true
+          });
+          result = [...searchResult.cards, ...searchResult.products];
         }
         
         if (result && Array.isArray(result)) {

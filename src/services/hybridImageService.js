@@ -97,6 +97,12 @@ export async function getProductImages(productName, consoleName = null, forceRef
       },
     });
     
+    // Handle 503 Service Unavailable gracefully
+    if (response.status === 503) {
+      console.warn(`⚠️ PriceCharting API service unavailable (503) for: ${cleanProductName}`);
+      return [];
+    }
+    
     if (response.ok) {
       const data = await response.json();
       
@@ -156,7 +162,10 @@ export async function getProductImages(productName, consoleName = null, forceRef
     return fallbackUrls;
     
   } catch (error) {
-    console.error(`Error getting images for ${cleanProductName}:`, error);
+    // Only log non-503 errors to avoid spam
+    if (!error.message.includes('503') && !error.message.includes('Service Unavailable')) {
+      console.error(`Error getting images for ${cleanProductName}:`, error);
+    }
     
     // Return fallback images even on error
     const fallbackUrls = generateImageUrl(cleanProductName, null, consoleName);
