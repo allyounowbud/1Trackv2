@@ -31,12 +31,12 @@ const DesktopCollection = () => {
 
   // Fetch data
   const { data: orders = [], isLoading: ordersLoading } = useQuery({
-    queryKey: queryKeys.orders(),
+    queryKey: queryKeys.orders,
     queryFn: getOrders,
   });
 
   const { data: summary = [], isLoading: summaryLoading } = useQuery({
-    queryKey: queryKeys.collectionSummary(),
+    queryKey: queryKeys.collectionSummary,
     queryFn: getCollectionSummary,
   });
 
