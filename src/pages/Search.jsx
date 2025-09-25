@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import smartSearchService from '../services/smartSearchService';
+import tcgGoApiService from '../services/tcgGoApiService';
 import ProductPreviewModal from '../components/ProductPreviewModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
 import { getCleanItemName, getCardDisplayName } from '../utils/nameUtils';
@@ -466,7 +467,7 @@ const Search = () => {
                 filter: filterBy,
                 maxCards: 1000,
                 maxProducts: 500,
-                includeImages: true,
+                includeImages: false, // Disabled due to 503 errors from Supabase
                 includePricing: true
               });
               
@@ -477,7 +478,7 @@ const Search = () => {
               const searchResult = await smartSearchService.searchAll(searchQuery, {
                 sort: sortBy,
                 maxResults: 100,
-                includeImages: true,
+                includeImages: false, // Disabled due to 503 errors from Supabase
                 includePricing: true
               });
               result = [...searchResult.cards, ...searchResult.products];
@@ -487,7 +488,7 @@ const Search = () => {
             const searchResult = await smartSearchService.searchAll(searchQuery, {
               sort: sortBy,
               maxResults: 100,
-              includeImages: true,
+              includeImages: false, // Disabled due to 503 errors from Supabase
               includePricing: true
             });
             result = [...searchResult.cards, ...searchResult.products];
@@ -497,7 +498,7 @@ const Search = () => {
           const searchResult = await smartSearchService.searchAll(searchQuery, {
             sort: sortBy,
             maxResults: 100,
-            includeImages: true,
+            includeImages: false, // Disabled due to 503 errors from Supabase
             includePricing: true
           });
           result = [...searchResult.cards, ...searchResult.products];
