@@ -70,7 +70,29 @@ function App() {
                   <AuthGuard>
                     <ResponsiveLayout>
                       <Routes>
-                        <Route path="/" element={<SimpleResponsiveTest />} />
+                        <Route path="/" element={(() => {
+                          const isDesktop = window.innerWidth >= 768;
+                          console.log('🧪 Inline test render:', { width: window.innerWidth, isDesktop });
+                          return (
+                            <div style={{ 
+                              background: isDesktop ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                              color: 'white',
+                              padding: '20px',
+                              textAlign: 'center',
+                              fontSize: '24px',
+                              fontWeight: 'bold',
+                              minHeight: '100vh'
+                            }}>
+                              {isDesktop ? '🖥️ DESKTOP LAYOUT IS WORKING! 🖥️' : '📱 MOBILE LAYOUT'}
+                              <br />
+                              Width: {window.innerWidth}px
+                              <br />
+                              Breakpoint: 768px
+                              <br />
+                              Is Desktop: {isDesktop ? 'YES' : 'NO'}
+                            </div>
+                          );
+                        })()} />
                         <Route path="/search" element={<ResponsiveSearch />} />
                         <Route path="/analytics" element={<Analytics />} />
                         <Route path="/orders" element={<Orders />} />
