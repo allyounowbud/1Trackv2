@@ -497,6 +497,32 @@ serve(async (req) => {
     const path = url.pathname
     const searchParams = Object.fromEntries(url.searchParams.entries())
     
+    // Log the request for debugging
+    console.log(`🔍 API Proxy Request: ${req.method} ${path}`, searchParams)
+    console.log(`🔍 Headers:`, Object.fromEntries(req.headers.entries()))
+    console.log(`🔍 Environment variables:`, {
+      SUPABASE_URL: Deno.env.get('SUPABASE_URL') ? 'SET' : 'NOT SET',
+      SUPABASE_SERVICE_ROLE_KEY: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ? 'SET' : 'NOT SET',
+      RAPIDAPI_KEY: Deno.env.get('RAPIDAPI_KEY') ? 'SET' : 'NOT SET',
+      PRICECHARTING_API_KEY: Deno.env.get('PRICECHARTING_API_KEY') ? 'SET' : 'NOT SET'
+    })
+    
+    // Check if we have proper authentication
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader) {
+      console.log('❌ No authorization header found')
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Authorization header required' 
+        }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
+    
     const apiService = new ApiProxyService()
     let result: any
 
@@ -537,10 +563,17 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('API Proxy error:', error)
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      url: req.url,
+      method: req.method
+    })
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message 
+        error: error.message,
+        details: error.stack
       }),
       { 
         status: 500, 

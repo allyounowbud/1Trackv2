@@ -51,6 +51,62 @@ class InternalApiService {
   }
 
   /**
+   * Store data in Supabase database for caching
+   */
+  async storeInDatabase(table, data) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY
+      );
+
+      const { error } = await supabase
+        .from(table)
+        .upsert(data, { onConflict: 'id' });
+
+      if (error) {
+        console.error(`Error storing in ${table}:`, error);
+      } else {
+        console.log(`✅ Stored data in ${table}`);
+      }
+    } catch (error) {
+      console.error(`Database storage error for ${table}:`, error);
+    }
+  }
+
+  /**
+   * Get data from Supabase database cache
+   */
+  async getFromDatabase(table, filters = {}) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY
+      );
+
+      let query = supabase.from(table).select('*');
+      
+      Object.entries(filters).forEach(([key, value]) => {
+        query = query.eq(key, value);
+      });
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error(`Error fetching from ${table}:`, error);
+        return [];
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error(`Database fetch error for ${table}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Client-side cache management
    */
   getCacheKey(endpoint, params) {
@@ -211,6 +267,19 @@ class InternalApiService {
     }
 
     try {
+      // Try database cache first
+      console.log('🔍 Checking database cache for expansions...');
+      const dbCached = await this.getFromDatabase('cached_products', { 
+        search_term: 'expansion' 
+      });
+      
+      if (dbCached && dbCached.length > 0) {
+        console.log('📦 Database cache hit for expansions, got', dbCached.length, 'items');
+        const expansions = dbCached.map(item => item.data).filter(Boolean);
+        this.setCache(cacheKey, { success: true, data: expansions, source: 'database_cache' });
+        return expansions;
+      }
+
       // Try backend API first
       const result = await this.makeRequest('/search/products', { 
         q: 'expansion', 
@@ -226,6 +295,23 @@ class InternalApiService {
         console.log('🔄 Attempting fallback to TCG Go API...');
         const expansions = await tcgGoApiService.getAllExpansions();
         console.log('✅ TCG Go API fallback successful, got', expansions?.length || 0, 'expansions');
+        
+        // Store in database for future use
+        if (expansions && expansions.length > 0) {
+          const dataToStore = expansions.map((expansion, index) => ({
+            id: `expansion_${expansion.id || index}`,
+            search_term: 'expansion',
+            name: expansion.name,
+            set: expansion.set,
+            price: expansion.price || 0,
+            image_url: expansion.imageUrl || expansion.image_url,
+            product_id: expansion.id,
+            data: expansion,
+            created_at: new Date().toISOString()
+          }));
+          
+          await this.storeInDatabase('cached_products', dataToStore);
+        }
         
         const fallbackResult = {
           success: true,
@@ -250,6 +336,17 @@ class InternalApiService {
    */
   async getExpansionCards(expansionId, sort = 'relevance', limit = 1000) {
     try {
+      // Try database cache first
+      console.log(`🔍 Checking database cache for expansion ${expansionId} cards...`);
+      const dbCached = await this.getFromDatabase('cached_cards', { 
+        expansion_id: expansionId 
+      });
+      
+      if (dbCached && dbCached.length > 0) {
+        console.log('📦 Database cache hit for expansion cards, got', dbCached.length, 'cards');
+        return dbCached.map(item => item.data).filter(Boolean);
+      }
+
       const expansionData = await this.getExpansionData(expansionId);
       if (expansionData.success && expansionData.data) {
         return expansionData.data.cards || [];
@@ -261,6 +358,26 @@ class InternalApiService {
         try {
           const cards = await tcgGoApiService.getExpansionCards(expansionId, sort, limit);
           console.log('✅ TCG Go API fallback successful for expansion cards, got', cards?.length || 0, 'cards');
+          
+          // Store in database for future use
+          if (cards && cards.length > 0) {
+            const dataToStore = cards.map((card, index) => ({
+              id: `card_${card.id || card.product_id || index}`,
+              expansion_id: expansionId,
+              search_term: card.name?.toLowerCase() || '',
+              name: card.name,
+              set: card.set,
+              rarity: card.rarity,
+              price: card.price || 0,
+              image_url: card.imageUrl || card.image_url,
+              product_id: card.id || card.product_id,
+              data: card,
+              created_at: new Date().toISOString()
+            }));
+            
+            await this.storeInDatabase('cached_cards', dataToStore);
+          }
+          
           return cards || [];
         } catch (fallbackError) {
           console.error('❌ TCG Go API fallback failed for expansion cards:', fallbackError);
@@ -280,6 +397,17 @@ class InternalApiService {
    */
   async getExpansionProducts(expansionId, sort = 'relevance', limit = 500) {
     try {
+      // Try database cache first
+      console.log(`🔍 Checking database cache for expansion ${expansionId} products...`);
+      const dbCached = await this.getFromDatabase('cached_products', { 
+        expansion_id: expansionId 
+      });
+      
+      if (dbCached && dbCached.length > 0) {
+        console.log('📦 Database cache hit for expansion products, got', dbCached.length, 'products');
+        return dbCached.map(item => item.data).filter(Boolean);
+      }
+
       const expansionData = await this.getExpansionData(expansionId);
       if (expansionData.success && expansionData.data) {
         return expansionData.data.products || [];
@@ -291,6 +419,25 @@ class InternalApiService {
         try {
           const products = await tcgGoApiService.getExpansionProducts(expansionId, sort, limit);
           console.log('✅ TCG Go API fallback successful for expansion products, got', products?.length || 0, 'products');
+          
+          // Store in database for future use
+          if (products && products.length > 0) {
+            const dataToStore = products.map((product, index) => ({
+              id: `product_${product.id || product.product_id || index}`,
+              expansion_id: expansionId,
+              search_term: product.name?.toLowerCase() || '',
+              name: product.name,
+              set: product.set,
+              price: product.price || 0,
+              image_url: product.imageUrl || product.image_url,
+              product_id: product.id || product.product_id,
+              data: product,
+              created_at: new Date().toISOString()
+            }));
+            
+            await this.storeInDatabase('cached_products', dataToStore);
+          }
+          
           return products || [];
         } catch (fallbackError) {
           console.error('❌ TCG Go API fallback failed for expansion products:', fallbackError);
