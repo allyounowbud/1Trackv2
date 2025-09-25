@@ -254,6 +254,20 @@ class InternalApiService {
       if (expansionData.success && expansionData.data) {
         return expansionData.data.cards || [];
       }
+      
+      // If backend failed, try direct TCG Go API fallback
+      if (!this.backendAvailable) {
+        console.log('🔄 Backend unavailable, falling back to direct TCG Go API for expansion cards...');
+        try {
+          const cards = await tcgGoApiService.getExpansionCards(expansionId, sort, limit);
+          console.log('✅ TCG Go API fallback successful for expansion cards, got', cards?.length || 0, 'cards');
+          return cards || [];
+        } catch (fallbackError) {
+          console.error('❌ TCG Go API fallback failed for expansion cards:', fallbackError);
+          return [];
+        }
+      }
+      
       return [];
     } catch (error) {
       console.error('Get expansion cards error:', error);
@@ -270,6 +284,20 @@ class InternalApiService {
       if (expansionData.success && expansionData.data) {
         return expansionData.data.products || [];
       }
+      
+      // If backend failed, try direct TCG Go API fallback
+      if (!this.backendAvailable) {
+        console.log('🔄 Backend unavailable, falling back to direct TCG Go API for expansion products...');
+        try {
+          const products = await tcgGoApiService.getExpansionProducts(expansionId, sort, limit);
+          console.log('✅ TCG Go API fallback successful for expansion products, got', products?.length || 0, 'products');
+          return products || [];
+        } catch (fallbackError) {
+          console.error('❌ TCG Go API fallback failed for expansion products:', fallbackError);
+          return [];
+        }
+      }
+      
       return [];
     } catch (error) {
       console.error('Get expansion products error:', error);

@@ -17,11 +17,12 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
   };
 
   // Debug logging for market value
-  console.log(`🔍 ProductPreviewModal - Product: "${product?.name}"`);
-  console.log(`🔍 ProductPreviewModal - marketValue: $${product?.marketValue}`);
-  console.log(`🔍 ProductPreviewModal - prices source: ${product?.prices?.source}`);
-  console.log(`🔍 ProductPreviewModal - priceCharting loose: $${product?.prices?.priceCharting?.loose}`);
-  console.log(`🔍 ProductPreviewModal - priceCharting new: $${product?.prices?.priceCharting?.new}`);
+  console.log(`🔍 ProductPreviewModal - Product:`, product);
+  console.log(`🔍 ProductPreviewModal - Product name: "${product?.name || product?.product_name || 'undefined'}"`);
+  console.log(`🔍 ProductPreviewModal - marketValue: $${product?.marketValue || product?.price || 'undefined'}`);
+  console.log(`🔍 ProductPreviewModal - prices source: ${product?.prices?.source || 'undefined'}`);
+  console.log(`🔍 ProductPreviewModal - priceCharting loose: $${product?.prices?.priceCharting?.loose || 'undefined'}`);
+  console.log(`🔍 ProductPreviewModal - priceCharting new: $${product?.prices?.priceCharting?.new || 'undefined'}`);
 
   const handleAddToCollection = () => {
     if (onAddToCollection) {
@@ -47,15 +48,20 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
 
   if (!isOpen || !product) return null;
 
-  // Get clean item name and set name
-  const itemName = getCleanItemName(product.name, product.set);
-  const setName = product.set;
+  // Get clean item name and set name - handle different possible field names
+  const productName = product?.name || product?.product_name || product?.title || 'Unknown Product';
+  const productSet = product?.set || product?.set_name || product?.expansion || '';
+  const itemName = getCleanItemName(productName, productSet);
+  const setName = productSet;
 
   // Extract comprehensive pricing data from product
   const prices = product.prices || {};
   const cardMarketPrices = prices.cardMarket || {};
   const tcgPlayerPrices = prices.tcgPlayer || {};
   const priceChartingPrices = prices.priceCharting || {};
+
+  // Get market value from different possible sources
+  const marketValue = product.marketValue || product.price || product.loose_price || product.new_price || 0;
 
   // Price change calculation
   const priceChange = product.trend || 0;
@@ -65,7 +71,7 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
   // Generate realistic price history data
   const generatePriceHistory = (timeRange) => {
     const data = [];
-    const basePrice = product.marketValue || 10;
+    const basePrice = marketValue || 10;
     
     let days;
     switch (timeRange) {
@@ -157,10 +163,10 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
         {/* Product Image */}
         <div className="flex justify-center pt-6 pb-4">
           <div className="w-80 h-96 overflow-hidden">
-            {product.imageUrl ? (
+            {(product.imageUrl || product.image_url || product.image) ? (
               <img
-                src={product.imageUrl}
-                alt={product.name || 'Product'}
+                src={product.imageUrl || product.image_url || product.image}
+                alt={productName || 'Product'}
                 className="w-full h-full object-contain"
                 onError={(e) => {
                   e.target.style.display = 'none';
@@ -198,7 +204,7 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
                 )}
               </span>
               <span className="text-2xl font-bold text-white">
-                {formatPrice(product.marketValue)}
+                {formatPrice(marketValue)}
               </span>
             </div>
             
@@ -263,7 +269,7 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
                 <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
                   <div className="text-xs text-gray-400 mb-1">Market Value</div>
                   <div className="text-lg font-bold text-white">
-                    {formatPrice(product.marketValue)}
+                    {formatPrice(marketValue)}
                   </div>
                 </div>
                 <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
