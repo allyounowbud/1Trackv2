@@ -123,58 +123,36 @@
   }
 
   /* Desktop-specific styles */
-  @media (min-width: 1024px) {
-    .desktop-app-container {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      display: flex;
-      background-color: #111827;
-      overflow: hidden;
-    }
-
-    .desktop-sidebar {
-      position: relative;
-      height: 100vh;
-      flex-shrink: 0;
-      background-color: #030712;
-      border-right: 1px solid #374151;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .desktop-main-content {
-      flex: 1;
-      overflow-y: auto;
-      overflow-x: hidden;
-      background-color: #111827;
-      padding: 0;
-      /* Remove mobile-specific padding */
-      padding-bottom: 0;
-    }
-
-    /* Hide mobile bottom navigation on desktop */
-    .app-container {
-      display: none;
-    }
+  .desktop-app-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    background-color: #111827;
+    overflow: hidden;
   }
 
-  /* Mobile-only styles - ensure desktop styles don't interfere */
-  @media (max-width: 1023px) {
-    .desktop-app-container {
-      display: none;
-    }
+  .desktop-sidebar {
+    position: relative;
+    height: 100vh;
+    flex-shrink: 0;
+    background-color: #030712;
+    border-right: 1px solid #374151;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+  }
 
-    .desktop-sidebar {
-      display: none;
-    }
-
-    .desktop-main-content {
-      display: none;
-    }
+  .desktop-main-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background-color: #111827;
+    padding: 0;
+    /* Remove mobile-specific padding */
+    padding-bottom: 0;
   }
 
   /* Hide scrollbars for mobile app-like experience */

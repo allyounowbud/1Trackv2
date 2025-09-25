@@ -11,7 +11,9 @@ const ResponsiveLayout = ({ children }) => {
 
   useEffect(() => {
     const checkScreenSize = () => {
-      setIsDesktop(window.innerWidth >= 1024); // lg breakpoint
+      const isDesktopSize = window.innerWidth >= 1024;
+      console.log('🖥️ Screen size check:', { width: window.innerWidth, isDesktop: isDesktopSize });
+      setIsDesktop(isDesktopSize);
     };
 
     // Check on mount
@@ -24,8 +26,11 @@ const ResponsiveLayout = ({ children }) => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
+  console.log('🖥️ ResponsiveLayout render:', { isDesktop, width: window.innerWidth });
+
   if (isDesktop) {
     // Desktop layout with sidebar
+    console.log('🖥️ Rendering desktop layout');
     return (
       <div className="desktop-app-container">
         <DesktopSidebar currentPath={location.pathname} />
@@ -37,6 +42,7 @@ const ResponsiveLayout = ({ children }) => {
   }
 
   // Mobile layout with bottom navigation (unchanged)
+  console.log('📱 Rendering mobile layout');
   return (
     <div className="app-container">
       {/* Main Content Area - with proper spacing for bottom nav */}
