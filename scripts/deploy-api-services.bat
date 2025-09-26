@@ -73,3 +73,4 @@ echo   - Get Market Data: /functions/v1/api-proxy/market-data?product=product_na
 echo   - Background Sync: /functions/v1/background-sync?action=full
 
 pause
+

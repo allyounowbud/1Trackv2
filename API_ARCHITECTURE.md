@@ -216,3 +216,4 @@ supabase functions logs background-sync
 curl -X GET "your-supabase-url/functions/v1/api-proxy/search/cards?q=pikachu&limit=5" \
   -H "Authorization: Bearer your-anon-key"
 ```
+

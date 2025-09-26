@@ -91,3 +91,4 @@ echo "  - Search Products: /functions/v1/api-proxy/search/products?q=query&limit
 echo "  - Get Expansion: /functions/v1/api-proxy/expansion?id=expansion_id"
 echo "  - Get Market Data: /functions/v1/api-proxy/market-data?product=product_name"
 echo "  - Background Sync: /functions/v1/background-sync?action=full"
+
