@@ -329,7 +329,7 @@ const Collection = () => {
     );
     
 
-    // Count items by type - sum quantities, not order count
+    // Count items by type - sum quantities for top cards
     const ungradedCount = orders
       .filter(order => 
         !order.is_sold && 
@@ -360,11 +360,18 @@ const Collection = () => {
       )
       .reduce((sum, order) => sum + (order.buy_quantity || 1), 0);
 
+    const customCount = orders
+      .filter(order => 
+        !order.is_sold && order.source === 'manual'
+      )
+      .reduce((sum, order) => sum + (order.buy_quantity || 1), 0);
+
     // Debug: Log the filtered results
     console.log('🔍 Debug - Counts:', {
       ungradedCount,
       gradedCount, 
       sealedCount,
+      customCount,
       totalOrders: orders.length
     });
 
@@ -381,6 +388,7 @@ const Collection = () => {
           item_type: order.item_type,
           market_value_cents: order.market_value_cents,
           image_url: order.image_url,
+          source: order.source,
           quantity: 0,
           totalPaid: 0,
           orders: []
@@ -401,9 +409,11 @@ const Collection = () => {
       const profit = totalValue - group.totalPaid;
       const profitPercent = group.totalPaid > 0 ? (profit / group.totalPaid) * 100 : 0;
       
-      // Determine status based on item name
+      // Determine status based on item name and source
       let status = "Ungraded";
-      if (group.name.toLowerCase().includes('graded') || group.name.toLowerCase().includes('psa') || group.name.toLowerCase().includes('bgs')) {
+      if (group.source === 'manual') {
+        status = "Custom";
+      } else if (group.name.toLowerCase().includes('graded') || group.name.toLowerCase().includes('psa') || group.name.toLowerCase().includes('bgs')) {
         status = "Graded";
       } else if (group.name.toLowerCase().includes('box') || group.name.toLowerCase().includes('bundle') || 
                  group.name.toLowerCase().includes('pack') || group.name.toLowerCase().includes('collection') ||
@@ -411,13 +421,13 @@ const Collection = () => {
         status = "Sealed";
       }
 
-      // Use clean item name and add card number if available
+      // Use clean item name and separate card number
       const cleanName = getItemDisplayName(group);
-      const displayName = group.card_number ? `${cleanName} #${group.card_number}` : cleanName;
       
       return {
         id: group.orders[0]?.item_id || `item-${index}`, // Use actual item_id from database
-        name: displayName, // Include card number if available
+        name: cleanName, // Clean name without card number
+        cardNumber: group.card_number, // Separate card number field
         set: group.set_name || "Unknown Set",
         status: status,
         value: perItemValue / 100, // Convert cents to dollars (per-item value)
@@ -437,6 +447,7 @@ const Collection = () => {
       ungradedCount,
       gradedCount,
       sealedCount,
+      customCount,
       items
     };
   })();
@@ -575,202 +586,267 @@ const Collection = () => {
 
   return (
     <div>
-          {/* Header */}
-          <div className="px-4 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold text-white">OneTrack</h1>
-                {(ordersFetching || summaryFetching) && (
-                  <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
-                )}
-              </div>
-            </div>
-          </div>
-
-      {/* Collection Value Section */}
-      <div className="px-4 py-3">
-        <div className="text-center mb-3 pt-4">
-          <div className="text-xs text-gray-300 mb-0.5">Your collection is worth</div>
-          <div className="text-5xl font-bold text-indigo-500 mb-0.5">
-            {formatPrice(collectionData.totalValue)}
-          </div>
-          <div className="text-xs text-gray-300">You Paid • {formatPrice(collectionData.totalPaid)} <span className={collectionData.profitPercentage >= 0 ? 'text-green-400' : 'text-red-400'}>({collectionData.profitPercentage >= 0 ? '+' : ''}{collectionData.profitPercentage.toFixed(1)}%)</span></div>
-        </div>
-
-        {/* Item Status Breakdown */}
-        <div className="grid grid-cols-3 gap-3 mb-4 pt-2">
-          <div className="text-center bg-gray-900 border border-gray-800 rounded-lg p-3">
-            <div className="text-xs text-gray-400 mb-1">Ungraded</div>
-            <div className="text-xs text-indigo-500">
-              {collectionData.ungradedCount}
-            </div>
-          </div>
-          <div className="text-center bg-gray-900 border border-gray-800 rounded-lg p-3">
-            <div className="text-xs text-gray-400 mb-1">Graded</div>
-            <div className="text-xs text-indigo-500">
-              {collectionData.gradedCount}
-            </div>
-          </div>
-          <div className="text-center bg-gray-900 border border-gray-800 rounded-lg p-3">
-            <div className="text-xs text-gray-400 mb-1">Sealed</div>
-            <div className="text-xs text-indigo-500">
-              {collectionData.sealedCount}
-            </div>
+      {/* Mobile Header with OneTrack Logo */}
+      <div className="md:hidden px-4 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <h1 className="text-2xl font-bold text-white tracking-wide">OneTrack</h1>
           </div>
         </div>
       </div>
 
+      {/* Collection Value Section */}
+      <div className="px-4 md:px-6 lg:px-8 py-6">
+        <div className="text-center mb-3 pt-2 md:mb-6 md:pt-4">
+          <div className="text-sm text-gray-300 mb-1 md:mb-2">Your collection is worth</div>
+          <div className="text-5xl md:text-4xl lg:text-5xl font-bold text-blue-400 mb-1 md:mb-2 tracking-tight">
+            {formatPrice(collectionData.totalValue)}
+          </div>
+          <div className="text-sm text-gray-300">You Paid • {formatPrice(collectionData.totalPaid)} <span className={collectionData.profitPercentage >= 0 ? 'text-green-400' : 'text-red-400'}>({collectionData.profitPercentage >= 0 ? '+' : ''}{collectionData.profitPercentage.toFixed(1)}%)</span></div>
+        </div>
+      </div>
+
+      {/* Item Status Breakdown - Moved above Portfolio */}
+      <div className="px-4 md:px-6 lg:px-8">
+        <div className="grid grid-cols-4 gap-3 md:gap-6 lg:gap-8 mb-2 md:mb-4">
+          <button 
+            onClick={() => {
+              setSelectedFilter('Ungraded');
+              // Smooth scroll to results section
+              setTimeout(() => {
+                const resultsSection = document.querySelector('[data-section="results"]');
+                if (resultsSection) {
+                  resultsSection.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start' 
+                  });
+                }
+              }, 100);
+            }}
+            className="text-center bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:border-blue-400/50"
+          >
+            <div className="text-xs text-gray-400 mb-1 md:mb-2">Ungraded</div>
+            <div className="text-sm font-bold text-blue-400">
+              {collectionData.ungradedCount}
+            </div>
+          </button>
+          <button 
+            onClick={() => {
+              setSelectedFilter('Graded');
+              // Smooth scroll to results section
+              setTimeout(() => {
+                const resultsSection = document.querySelector('[data-section="results"]');
+                if (resultsSection) {
+                  resultsSection.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start' 
+                  });
+                }
+              }, 100);
+            }}
+            className="text-center bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:border-blue-400/50"
+          >
+            <div className="text-xs text-gray-400 mb-1 md:mb-2">Graded</div>
+            <div className="text-sm font-bold text-blue-400">
+              {collectionData.gradedCount}
+            </div>
+          </button>
+          <button 
+            onClick={() => {
+              setSelectedFilter('Sealed');
+              // Smooth scroll to results section
+              setTimeout(() => {
+                const resultsSection = document.querySelector('[data-section="results"]');
+                if (resultsSection) {
+                  resultsSection.scrollIntoView({ 
+                    behavior: 'smooth',
+                    block: 'start'
+                  });
+                }
+              }, 100);
+            }}
+            className="text-center bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:border-blue-400/50"
+          >
+            <div className="text-xs text-gray-400 mb-1 md:mb-2">Sealed</div>
+            <div className="text-sm font-bold text-blue-400">
+              {collectionData.sealedCount}
+            </div>
+          </button>
+          <button 
+            onClick={() => {
+              setSelectedFilter('Custom');
+              // Smooth scroll to results section
+              setTimeout(() => {
+                const resultsSection = document.querySelector('[data-section="results"]');
+                if (resultsSection) {
+                  resultsSection.scrollIntoView({ 
+                    behavior: 'smooth',
+                    block: 'start'
+                  });
+                }
+              }, 100);
+            }}
+            className="text-center bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:border-blue-400/50"
+          >
+            <div className="text-xs text-gray-400 mb-1 md:mb-2">Custom</div>
+            <div className="text-sm font-bold text-blue-400">
+              {collectionData.customCount}
+            </div>
+          </button>
+        </div>
+      </div>
+
       {/* Collection History */}
-      <div className="px-3 py-2">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-medium text-white">Collection History</div>
+      <div className="px-3 md:px-6 lg:px-8 pb-4 md:pb-8" style={{ paddingTop: '9px' }}>
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-10 lg:p-12">
+          <div className="flex items-center justify-between mb-4 md:mb-8">
+            <div>
+              <div className="text-base md:text-2xl lg:text-3xl font-semibold text-white">My Portfolio</div>
+              {/* Summary Text */}
+              <div className="text-sm text-gray-400 mt-1">
+                {currentDateRange.label} <span className="text-blue-400">{formatPrice(collectionData.totalValue)}</span> 
+                <span className="text-blue-400 ml-1">
+                  ({percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(2)}%)
+                </span>
+              </div>
+            </div>
             {/* Share Collection */}
-            <button className="flex items-center gap-1 px-2 py-1 border border-gray-600/50 rounded-lg text-xs text-white bg-gray-800/30">
-              <svg className="w-3 h-3 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
+            <button className="flex items-center gap-1 md:gap-3 px-2 md:px-4 py-1 md:py-2 border border-gray-600/50 rounded-lg text-xs md:text-base text-white bg-gray-800/30 hover:bg-gray-700/30 transition-colors">
+              <svg className="w-3 h-3 md:w-5 md:h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
-              <span>Share Collection</span>
+              <span className="hidden md:inline">Share Collection</span>
+              <span className="md:hidden">Share</span>
             </button>
           </div>
-
-          {/* Summary Text */}
-          <div className="flex items-center justify-between mb-2 text-xs">
-            <div className="text-gray-400">
-              {currentDateRange.label} <span className="text-indigo-500">{formatPrice(collectionData.totalValue)}</span> 
-              <span className="text-indigo-500 ml-1">
-                ({percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(2)}%)
-              </span>
-            </div>
-          </div>
           
-                 {/* Chart */}
-                 <div className="h-36 mb-2 px-3">
-                   <svg width="100%" height="100%" viewBox="0 0 300 100" className="overflow-visible">
-                     <defs>
-                       {/* Gradient for area under line */}
-                       <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                         <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3"/>
-                         <stop offset="100%" stopColor="#6366f1" stopOpacity="0"/>
-                       </linearGradient>
-                     </defs>
+        {/* Chart */}
+        <div className="h-36 md:h-80 lg:h-96 xl:h-[28rem] mb-2 md:mb-6">
+          <svg width="100%" height="100%" viewBox="0 0 300 100" className="overflow-visible">
+            <defs>
+              {/* Gradient for area under line */}
+              <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.3"/>
+                <stop offset="100%" stopColor="#60a5fa" stopOpacity="0"/>
+              </linearGradient>
+            </defs>
 
-                     {/* Dynamic chart based on real data */}
-                     {(() => {
-                       if (chartData.length === 0) return null;
-                       
-                       const width = 300;
-                       const height = 100;
-                       const padding = 10;
-                       
-                       // Calculate scale factors
-                       const valueRange = maxValue - minValue;
-                       const scaleY = valueRange > 0 ? (height - 2 * padding) / valueRange : 1;
-                       const scaleX = (width - 2 * padding) / (chartData.length - 1);
-                       
-                       // Generate path data
-                       const points = chartData.map((point, index) => {
-                         const x = padding + (index * scaleX);
-                         const y = height - padding - ((point.value - minValue) * scaleY);
-                         return { x, y };
-                       });
-                       
-                       // Create smooth curved line using quadratic Bézier curves
-                       const createSmoothPath = (points) => {
-                         if (points.length < 2) return '';
-                         
-                         let path = `M ${points[0].x},${points[0].y}`;
-                         
-                         for (let i = 1; i < points.length; i++) {
-                           const prev = points[i - 1];
-                           const curr = points[i];
-                           
-                           // Calculate control point for smooth curve
-                           const controlX = (prev.x + curr.x) / 2;
-                           const controlY = prev.y;
-                           
-                           path += ` Q ${controlX},${controlY} ${curr.x},${curr.y}`;
-                         }
-                         
-                         return path;
-                       };
-                       
-                       // Create area path (for gradient fill) - also smooth
-                       const createSmoothAreaPath = (points) => {
-                         if (points.length < 2) return '';
-                         
-                         let path = `M ${points[0].x},${height - padding}`;
-                         path += ` L ${points[0].x},${points[0].y}`;
-                         
-                         for (let i = 1; i < points.length; i++) {
-                           const prev = points[i - 1];
-                           const curr = points[i];
-                           
-                           // Calculate control point for smooth curve
-                           const controlX = (prev.x + curr.x) / 2;
-                           const controlY = prev.y;
-                           
-                           path += ` Q ${controlX},${controlY} ${curr.x},${curr.y}`;
-                         }
-                         
-                         path += ` L ${points[points.length - 1].x},${height - padding} Z`;
-                         
-                         return path;
-                       };
-                       
-                       const areaPath = createSmoothAreaPath(points);
-                       const linePath = createSmoothPath(points);
-                       
-                       // Get last point for circle
-                       const lastPoint = points[points.length - 1];
-                       
-                       return (
-                         <>
-                           {/* Area under the line */}
-                           <path
-                             d={areaPath}
-                             fill="url(#chartGradient)"
-                           />
-                           {/* Line */}
-                           <path
-                             d={linePath}
-                             stroke="#6366f1"
-                             strokeWidth="2"
-                             strokeLinecap="round"
-                             fill="none"
-                           />
-                           {/* Data point circle */}
-                           <circle
-                             cx={lastPoint.x}
-                             cy={lastPoint.y}
-                             r="3"
-                             fill="#6366f1"
-                             stroke="#1f2937"
-                             strokeWidth="1"
-                           />
-                         </>
-                       );
-                     })()}
-                   </svg>
-                 </div>
+            {/* Dynamic chart based on real data */}
+            {(() => {
+              if (chartData.length === 0) return null;
+              
+              const width = 300;
+              const height = 100;
+              const padding = 10;
+              
+              // Calculate scale factors
+              const valueRange = maxValue - minValue;
+              const scaleY = valueRange > 0 ? (height - 2 * padding) / valueRange : 1;
+              const scaleX = (width - 2 * padding) / (chartData.length - 1);
+              
+              // Generate path data
+              const points = chartData.map((point, index) => {
+                const x = padding + (index * scaleX);
+                const y = height - padding - ((point.value - minValue) * scaleY);
+                return { x, y };
+              });
+              
+              // Create smooth curved line using quadratic Bézier curves
+              const createSmoothPath = (points) => {
+                if (points.length < 2) return '';
+                
+                let path = `M ${points[0].x},${points[0].y}`;
+                
+                for (let i = 1; i < points.length; i++) {
+                  const prev = points[i - 1];
+                  const curr = points[i];
+                  
+                  // Calculate control point for smooth curve
+                  const controlX = (prev.x + curr.x) / 2;
+                  const controlY = prev.y;
+                  
+                  path += ` Q ${controlX},${controlY} ${curr.x},${curr.y}`;
+                }
+                
+                return path;
+              };
+              
+              // Create area path (for gradient fill) - also smooth
+              const createSmoothAreaPath = (points) => {
+                if (points.length < 2) return '';
+                
+                let path = `M ${points[0].x},${height - padding}`;
+                path += ` L ${points[0].x},${points[0].y}`;
+                
+                for (let i = 1; i < points.length; i++) {
+                  const prev = points[i - 1];
+                  const curr = points[i];
+                  
+                  // Calculate control point for smooth curve
+                  const controlX = (prev.x + curr.x) / 2;
+                  const controlY = prev.y;
+                  
+                  path += ` Q ${controlX},${controlY} ${curr.x},${curr.y}`;
+                }
+                
+                path += ` L ${points[points.length - 1].x},${height - padding} Z`;
+                
+                return path;
+              };
+              
+              const areaPath = createSmoothAreaPath(points);
+              const linePath = createSmoothPath(points);
+              
+              // Get last point for circle
+              const lastPoint = points[points.length - 1];
+              
+              return (
+                <>
+                  {/* Area under the line */}
+                  <path
+                    d={areaPath}
+                    fill="url(#chartGradient)"
+                  />
+                  {/* Line */}
+                  <path
+                    d={linePath}
+                    stroke="#60a5fa"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    fill="none"
+                  />
+                  {/* Data point circle */}
+                  <circle
+                    cx={lastPoint.x}
+                    cy={lastPoint.y}
+                    r="3"
+                    fill="#60a5fa"
+                    stroke="#1f2937"
+                    strokeWidth="1"
+                  />
+                </>
+              );
+            })()}
+          </svg>
+        </div>
           
                  {/* Date labels below chart */}
-                 <div className="flex justify-between text-xs text-gray-500/60 mb-3 px-2">
+                 <div className="flex justify-between text-sm text-gray-400 mb-6 px-2">
                    <span>{formatDate(currentDateRange.dates[0])}</span>
                    <span>{formatDate(currentDateRange.dates[1])}</span>
                    <span>{formatDate(currentDateRange.dates[2])}</span>
                  </div>
           
                  {/* Time range buttons below chart - centered */}
-                 <div className="flex justify-center gap-1 mb-3">
+                 <div className="flex justify-center gap-2 md:gap-3 mb-6">
                    {['7D', '1M', '3M', '6M', '1Y'].map((range) => (
                      <button
                        key={range}
                        onClick={() => setTimeRange(range)}
-                       className={`px-6 py-1.5 rounded-md text-xs ${
+                       className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors ${
                          timeRange === range
-                           ? 'bg-indigo-600 text-white'
-                           : 'bg-gray-700/50 text-gray-300'
+                           ? 'bg-blue-500/20 text-blue-400 border border-blue-400/30'
+                           : 'bg-gray-800/30 text-gray-400 hover:bg-gray-700/40 hover:text-gray-300 border border-gray-700/30'
                        }`}
                      >
                        {range}
@@ -779,23 +855,25 @@ const Collection = () => {
                  </div>
           
             {/* Disclaimer text - centered and smaller */}
-            <div className="text-center text-xs text-gray-500/40 leading-tight px-6 py-4">
+            <div className="text-center text-sm text-gray-500/40 leading-tight px-6">
               <div>Collection history tracks the total value of your items for each day since the day they're added.</div>
             </div>
         </div>
       </div>
 
+
+
       {/* Collected Items */}
-      <div className="px-3 py-2">
-        <div className="p-3">
-          <div className="flex items-center justify-between mb-2">
+      <div className="px-3 md:px-6 lg:px-8 py-4 md:py-8" data-section="results">
+        <div className="px-3 md:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-4 md:mb-8">
             <div>
-              <div className="flex items-center gap-1">
-                <span className="text-xs font-medium text-white">Collection •</span>
+              <div className="flex items-center gap-2 md:gap-3">
+                <span className="text-sm font-medium text-white">Collection •</span>
                 <div className="relative" ref={filterDropdownRef}>
                   <button 
                     onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                    className="text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors"
+                    className="text-sm font-medium text-blue-400 hover:text-blue-400 transition-colors"
                   >
                     {selectedFilter}
                   </button>
@@ -804,7 +882,7 @@ const Collection = () => {
                   {showFilterDropdown && (
                     <div className="absolute top-full left-0 mt-1 w-32 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-20">
                       <div className="py-1">
-                        {['All', 'Ungraded', 'Graded', 'Sealed'].map((filter) => (
+                        {['All', 'Ungraded', 'Graded', 'Sealed', 'Custom'].map((filter) => (
                           <button
                             key={filter}
                             onClick={() => {
@@ -813,7 +891,7 @@ const Collection = () => {
                             }}
                             className={`w-full text-left px-3 py-2 text-xs transition-colors ${
                               selectedFilter === filter
-                                ? 'bg-indigo-500/20 text-indigo-400'
+                                ? 'bg-blue-400/20 text-blue-400'
                                 : 'text-white hover:bg-gray-800'
                             }`}
                           >
@@ -825,15 +903,15 @@ const Collection = () => {
                   )}
                 </div>
               </div>
-              <div className="text-xs text-gray-400">
+              <div className="text-sm text-gray-400">
                 {selectedFilter === 'All' 
                   ? (collectionData.items?.length || 0)
-                  : (collectionData.items?.filter(item => item.status === selectedFilter).reduce((sum, item) => sum + item.quantity, 0) || 0)
+                  : (collectionData.items?.filter(item => item.status === selectedFilter).length || 0)
                 } Results
               </div>
             </div>
             <div className="text-right">
-              <div className="text-xs font-medium text-white">Total Value • <span className="text-indigo-500">
+              <div className="text-sm font-medium text-white">Total Value • <span className="text-blue-400">
                 {formatPrice(
                   selectedFilter === 'All' 
                     ? collectionData.totalValue 
@@ -842,47 +920,30 @@ const Collection = () => {
                         .reduce((sum, item) => sum + (item.value * item.quantity), 0)
                 )}
               </span></div>
-              <div className="text-xs text-gray-400">Press + Hold To Select</div>
+              <div className="text-sm md:text-base text-gray-400">Press + Hold To Select</div>
             </div>
           </div>
 
-        {/* Search Bar */}
-        <div className="relative mb-3">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg className="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+          {/* Search Bar */}
+          <div className="relative mb-4 md:mb-6">
+            <div className="absolute inset-y-0 left-0 pl-3 md:pl-4 flex items-center pointer-events-none">
+              <svg className="h-4 w-4 md:h-5 md:w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search your items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 md:pl-12 pr-3 md:pr-4 py-2 md:py-3 bg-gray-800 border border-gray-700 rounded-lg text-sm md:text-base text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Search your items..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Filter Buttons */}
-        <div className="flex gap-2 mb-3">
-          <button className="flex items-center gap-1 px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white hover:bg-gray-700 transition-colors">
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Sort By Recent
-          </button>
-          <button className="flex items-center gap-1 px-2 py-1 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white hover:bg-gray-700 transition-colors">
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-            </svg>
-            All Items
-          </button>
-          </div>
-        </div>
         </div>
 
         {/* Items Grid */}
-      <div className={`px-3 ${isSelectionMode ? 'pb-20' : 'pb-4'}`}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`px-3 md:px-6 lg:px-8 ${isSelectionMode ? 'pb-20' : 'pb-4'}`}>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
           {(collectionData.items || [])
             .filter(item => selectedFilter === 'All' || item.status === selectedFilter)
             .map((item) => {
@@ -890,10 +951,10 @@ const Collection = () => {
             return (
                    <div 
                      key={item.id} 
-                     className={`relative bg-gray-900 border border-gray-800 rounded-lg overflow-hidden transition-all duration-200 ${
+                     className={`relative bg-gray-900 border border-gray-800 rounded-xl overflow-hidden transition-all duration-200 ${
                        isSelected 
-                         ? 'border-indigo-500 bg-indigo-900/20' 
-                         : 'hover:border-gray-700'
+                         ? 'border-blue-400 bg-blue-900/20 shadow-blue-400/25' 
+                         : 'hover:border-gray-700 hover:shadow-gray-900/50'
                      }`}
                      onTouchStart={(e) => {
                        longPressTriggeredRef.current = false;
@@ -942,43 +1003,45 @@ const Collection = () => {
                      }}
                    >
               {/* Card Image */}
-              <div className="aspect-[4/3] flex items-center justify-center py-2 relative">
-                
+              <div className="aspect-[1/1] flex items-center justify-center p-4 relative">
                 {item.image ? (
                   <img 
                     src={item.image} 
                     alt={item.name}
-                    className="w-full h-full object-contain"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        e.target.nextSibling.style.display = 'flex';
-                      }}
+                    className="w-3/4 h-3/4 object-contain"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
                   />
-                  ) : null}
-                  <div className={`w-full h-full flex items-center justify-center bg-gray-800 ${item.image ? 'hidden' : 'flex'}`}>
-                    <div className="text-center">
-                      <div className="text-2xl mb-1">📦</div>
-                  <div className="text-gray-400 text-xs">No Image</div>
-                    </div>
+                ) : null}
+                <div className={`w-full h-full flex items-center justify-center bg-gray-800 ${item.image ? 'hidden' : 'flex'}`}>
+                  <div className="text-center">
+                    <div className="text-2xl mb-1">📦</div>
+                    <div className="text-gray-400 text-xs">No Image</div>
                   </div>
+                </div>
               </div>
               
               {/* Card Details */}
-              <div className="p-2 space-y-1">
+              <div className="p-3 space-y-1">
                 {/* Item Name - First Line */}
                 <div>
-                  <h3 className="text-white leading-tight line-clamp-2 font-bold" style={{fontSize: '12px'}}>
+                  <h3 className="text-white leading-tight line-clamp-2 font-bold text-[11px] md:text-xs">
                     {item.name}
+                    {item.cardNumber && (
+                      <span className="text-blue-400"> #{item.cardNumber}</span>
+                    )}
                   </h3>
                 </div>
                 
                 {/* Set Name - Ghost Text */}
-                <div className="text-xs text-gray-400 truncate" style={{fontSize: '12px'}}>
+                <div className="text-[11px] md:text-xs text-gray-400 truncate">
                   {item.set}
                 </div>
                   
                   {/* Status Text */}
-                  <div className="text-xs text-indigo-500">
+                  <div className="text-[11px] md:text-xs text-blue-400 font-medium">
                     {item.status}
                   </div>
                 
@@ -986,12 +1049,12 @@ const Collection = () => {
                 <div className="h-1"></div>
                 
                 {/* Financial Details */}
-                <div className="space-y-0.5">
-                  <div className="text-xs text-white" style={{fontSize: '12px'}}>
-                      {item.value > 0 ? formatPrice(item.value * item.quantity) : 'No Market Data'} Value • Qty {item.quantity}
+                <div className="space-y-1">
+                  <div className="text-[11px] md:text-xs text-white">
+                    {item.value > 0 ? formatPrice(item.value * item.quantity) : 'No Market Data'} Value • Qty {item.quantity}
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className="text-xs text-white" style={{fontSize: '12px'}}>
+                    <div className="text-[11px] md:text-xs text-white">
                       {formatPrice(item.paid)} Paid 
                         {item.value > 0 ? (
                       <span className={`ml-1 ${item.profit > 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -1004,7 +1067,7 @@ const Collection = () => {
                     
                     {/* Menu Button / Check Icon - Bottom Right */}
                     {isSelected ? (
-                      <div className="text-indigo-400">
+                      <div className="text-blue-400">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                         </svg>
@@ -1019,7 +1082,7 @@ const Collection = () => {
                         }}
                         className="text-gray-400 hover:text-white"
                       >
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                         </svg>
                       </button>
@@ -1082,7 +1145,7 @@ const Collection = () => {
       {/* Bulk Actions Bar - Fixed at bottom */}
       {isSelectionMode && (
         <div className="fixed bottom-16 left-0 right-0 modal-overlay">
-          <div className="bg-indigo-600 border-t border-indigo-500 px-4 py-3">
+          <div className="bg-blue-500 border-t border-blue-400 px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-white font-medium">
@@ -1092,7 +1155,7 @@ const Collection = () => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={selectAll}
-                  className="px-3 py-1 bg-indigo-500 hover:bg-indigo-400 rounded-md text-xs text-white transition-colors"
+                  className="px-3 py-1 bg-blue-400 hover:bg-blue-300 rounded-md text-xs text-white transition-colors"
                 >
                   Select All
                 </button>
@@ -1101,7 +1164,7 @@ const Collection = () => {
                     setShowBulkActionsMenu(true);
                     openModal();
                   }}
-                  className="px-3 py-1 bg-indigo-500 hover:bg-indigo-400 rounded-md text-xs text-white transition-colors flex items-center gap-1"
+                  className="px-3 py-1 bg-blue-400 hover:bg-blue-300 rounded-md text-xs text-white transition-colors flex items-center gap-1"
                 >
                   Bulk Actions
                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -1110,7 +1173,7 @@ const Collection = () => {
                 </button>
                 <button
                   onClick={clearSelection}
-                  className="text-white hover:text-indigo-200 transition-colors"
+                  className="text-white hover:text-blue-400 transition-colors"
                 >
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -1132,7 +1195,7 @@ const Collection = () => {
           }}
         >
           <div 
-            className="w-full bg-gray-950 border border-indigo-500/50 rounded-t-2xl max-h-[80vh] overflow-y-auto"
+            className="w-full bg-gray-950 border border-blue-400/50 rounded-t-2xl max-h-[80vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -1147,7 +1210,7 @@ const Collection = () => {
               {/* Edit Price Paid */}
               <button className="w-full flex items-center justify-between p-3 hover:bg-gray-700/50 transition-colors">
                 <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
                   </svg>
                   <div className="text-left">
@@ -1206,7 +1269,7 @@ const Collection = () => {
               {/* Edit Price Paid */}
               <button className="w-full flex items-center justify-between p-3 hover:bg-gray-700 transition-colors">
                 <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
                   </svg>
                   <div className="text-left">
@@ -1296,7 +1359,7 @@ const Collection = () => {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={selectAllOrders}
-                      className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+                      className="text-xs text-blue-400 hover:text-blue-400 font-medium"
                     >
                       Select All
                     </button>
@@ -1495,11 +1558,10 @@ const Collection = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
-
-export default Collection;
 
 // Mark as Sold Modal Component
 const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
@@ -1528,7 +1590,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
               type="date"
               value={formData.sellDate}
               onChange={(e) => setFormData({...formData, sellDate: e.target.value})}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
               required
             />
           </div>
@@ -1540,7 +1602,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
               step="0.01"
               value={formData.sellPrice}
               onChange={(e) => setFormData({...formData, sellPrice: e.target.value})}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
               required
             />
           </div>
@@ -1553,7 +1615,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
               max={order?.buy_quantity || 1}
               value={formData.quantity}
               onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value)})}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
               required
             />
           </div>
@@ -1564,7 +1626,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
               type="text"
               value={formData.location}
               onChange={(e) => setFormData({...formData, location: e.target.value})}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
           
@@ -1575,7 +1637,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
               step="0.01"
               value={formData.fees}
               onChange={(e) => setFormData({...formData, fees: e.target.value})}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           </div>
           
@@ -1584,7 +1646,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({...formData, notes: e.target.value})}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
               rows="3"
             />
           </div>
@@ -1609,3 +1671,5 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
     </div>
   );
 };
+
+export default Collection;

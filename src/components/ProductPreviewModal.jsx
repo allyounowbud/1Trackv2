@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getCleanItemName } from '../utils/nameUtils';
+import DesktopSideMenu from './DesktopSideMenu';
 
 const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) => {
   const [quantity, setQuantity] = useState(1);
@@ -48,10 +49,82 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
 
   if (!isOpen || !product) return null;
 
+  // Check if we're on desktop
+  const isDesktop = window.innerWidth >= 1024;
+
   // Get clean item name and set name - handle different possible field names
   const productName = product?.name || product?.product_name || product?.title || 'Unknown Product';
   const productSet = product?.set || product?.set_name || product?.expansion || '';
   const itemName = getCleanItemName(productName, productSet);
+
+  if (isDesktop) {
+    return (
+      <DesktopSideMenu isOpen={isOpen} onClose={onClose} title="Product Preview">
+        <div className="p-6 space-y-6">
+          {/* Product Image */}
+          <div className="flex justify-center">
+            <div className="w-32 h-32 bg-gray-800 rounded-xl flex items-center justify-center">
+              {product.imageUrl ? (
+                <img 
+                  src={product.imageUrl} 
+                  alt={itemName}
+                  className="w-full h-full object-contain rounded-xl"
+                />
+              ) : (
+                <div className="text-gray-400 text-4xl">📦</div>
+              )}
+            </div>
+          </div>
+
+          {/* Product Info */}
+          <div className="text-center space-y-2">
+            <h3 className="text-xl font-semibold text-white">{itemName}</h3>
+            <p className="text-gray-400">{productSet}</p>
+            {marketValue > 0 && (
+              <div className="flex items-center justify-center space-x-2">
+                <span className="text-2xl font-bold text-blue-400">${marketValue.toFixed(2)}</span>
+                {priceChange !== 0 && (
+                  <span className={`text-sm ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                    {isPositive ? '+' : ''}{priceChange.toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Quantity Selector */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-400">Quantity</label>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                className="w-8 h-8 bg-gray-800 hover:bg-gray-700 rounded-lg flex items-center justify-center text-white transition-colors"
+              >
+                -
+              </button>
+              <span className="text-white font-medium w-8 text-center">{quantity}</span>
+              <button
+                onClick={() => setQuantity(quantity + 1)}
+                className="w-8 h-8 bg-gray-800 hover:bg-gray-700 rounded-lg flex items-center justify-center text-white transition-colors"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          {/* Add to Collection Button */}
+          <button
+            onClick={handleAddToCollection}
+            className="w-full bg-blue-500 hover:bg-blue-400 text-white py-3 rounded-lg font-medium transition-colors"
+          >
+            Add to Collection
+          </button>
+        </div>
+      </DesktopSideMenu>
+    );
+  }
+
+  // Mobile version (original modal)
   const setName = productSet;
 
   // Extract comprehensive pricing data from product

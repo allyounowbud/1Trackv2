@@ -4,8 +4,8 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModalProvider } from './contexts/ModalContext';
 import ResponsiveLayout from './components/layout/ResponsiveLayout';
-import ResponsiveCollection from './components/responsive/ResponsiveCollection';
-import ResponsiveSearch from './components/responsive/ResponsiveSearch';
+import Collection from './pages/Collection';
+import Search from './pages/Search';
 import Analytics from './pages/Analytics';
 import Orders from './pages/Orders';
 import Settings from './pages/Settings';
@@ -63,8 +63,8 @@ function App() {
                   <AuthGuard>
                     <ResponsiveLayout>
                       <Routes>
-                        <Route path="/" element={<ResponsiveCollection />} />
-                        <Route path="/search" element={<ResponsiveSearch />} />
+                        <Route path="/" element={<Collection />} />
+                        <Route path="/search" element={<Search />} />
                         <Route path="/analytics" element={<Analytics />} />
                         <Route path="/orders" element={<Orders />} />
                         <Route path="/settings" element={<Settings />} />

@@ -4,6 +4,7 @@ import { marketplaceRetailerService } from '../services/marketplaceRetailerServi
 import { getCleanItemName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
 import notificationService from '../services/notificationService';
+import DesktopSideMenu from './DesktopSideMenu';
 
 const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const { openModal, closeModal } = useModal();
@@ -135,7 +136,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       const { data: existingItem, error: itemError } = await supabase
         .from('items')
         .select('id')
-        .eq('name', getCleanItemName(product.name, product.set))
+        .eq('name', product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set))
         .single();
 
       if (itemError && itemError.code !== 'PGRST116') { // PGRST116 = no rows returned
@@ -147,15 +148,16 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       } else {
         // Debug: Log what we're about to insert
         const itemData = {
-          name: getCleanItemName(product.name, product.set),
+          name: product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set),
           set_name: product.set || null,
           item_type: product.type || 'Card',
-          source: 'api',
+          source: product.source || 'api',
           api_id: product.productId?.toString() || null,
-          api_source: 'cardmarket',
+          api_source: product.source === 'manual' ? null : 'cardmarket',
           market_value_cents: product.marketValue ? Math.round(product.marketValue * 100) : null,
           image_url: product.imageUrl || null,
-          card_number: product.details?.cardNumber || null
+          card_number: product.details?.cardNumber || null,
+          description: product.description || null
         };
 
         // Create new item in items table
@@ -228,7 +230,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
 
       // Success! Show processing animation
       const successInfo = {
-        item: product.name,
+        item: product.source === 'manual' ? product.name : product.name,
         quantity: formData.quantity,
         price: formData.buyPrice,
         set: product.set
@@ -241,7 +243,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       setTimeout(() => {
         // Show notification for successful addition
         if (notificationService.isEnabled()) {
-          const itemName = getCleanItemName(product?.name, product?.set) || product?.name || 'Item';
+          const itemName = product?.source === 'manual' ? product?.name : (getCleanItemName(product?.name, product?.set) || product?.name || 'Item');
           notificationService.showCollectionUpdate(itemName, 'added').catch(error => {
             console.warn('Failed to show collection update notification:', error);
           });
@@ -302,24 +304,13 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
 
   if (!isOpen || !product) return null;
 
-  return (
-    <div className="fixed inset-0 bg-gray-900 flex flex-col overflow-hidden modal-overlay">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-800">
-        <div>
-          <h2 className="text-lg font-semibold text-white">Add Order</h2>
-          <p className="text-sm text-gray-400">Add new orders and sales quickly</p>
-        </div>
-        <button
-          onClick={handleClose}
-          disabled={isSubmitting}
-          className="text-gray-400 hover:text-white disabled:opacity-50"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+  // Check if we're on desktop
+  const isDesktop = window.innerWidth >= 1024;
+
+  if (isDesktop) {
+    return (
+      <DesktopSideMenu isOpen={isOpen} onClose={onClose} title="Add to Collection">
+        <div className="p-6 space-y-6">
 
       {/* Product Info */}
       <div className="p-4 border-b border-gray-800">
@@ -332,7 +323,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
             />
           )}
           <div>
-            <h3 className="text-white font-medium text-sm">{getCleanItemName(product.name, product.set)}</h3>
+            <h3 className="text-white font-medium text-sm">{product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set)}</h3>
             {product.set && (
               <p className="text-gray-400 text-xs">{product.set}</p>
             )}
@@ -384,7 +375,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
               </label>
               <input
                 type="text"
-                value={getCleanItemName(product.name, product.set)}
+                value={product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set)}
                 readOnly
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm opacity-75"
               />
@@ -816,6 +807,412 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 <p><span className="font-medium">{successData.quantity}x</span> {successData.item}</p>
                 {successData.set && <p className="text-gray-400">{successData.set}</p>}
                 <p className="text-indigo-400 font-medium">${parseFloat(successData.price).toFixed(2)}</p>
+              </div>
+              <p className="text-xs text-gray-400">Updating your collection...</p>
+            </div>
+          </div>
+        </div>
+      )}
+        </div>
+      </DesktopSideMenu>
+    );
+  }
+
+  // Mobile version (original modal)
+  return (
+    <div className="fixed inset-0 bg-gray-900 flex flex-col overflow-hidden modal-overlay">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-800">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Add Order</h2>
+          <p className="text-sm text-gray-400">Add new orders and sales quickly</p>
+        </div>
+        <button
+          onClick={handleClose}
+          disabled={isSubmitting}
+          className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
+        >
+          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Product Info */}
+      <div className="p-4 border-b border-gray-800">
+        <div className="flex items-center space-x-3">
+          <div className="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center">
+            {product.imageUrl ? (
+              <img 
+                src={product.imageUrl} 
+                alt={product.name}
+                className="w-8 h-8 object-contain"
+              />
+            ) : (
+              <div className="text-gray-400 text-lg">📦</div>
+            )}
+          </div>
+          <div className="flex-1">
+            <h3 className="text-white font-medium text-sm">{product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set)}</h3>
+            <p className="text-gray-400 text-xs">{product.set}</p>
+            {product.marketValue && (
+              <p className="text-blue-400 text-xs">
+                Market Value: ${product.marketValue.toFixed(2)}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {error && (
+            <div className="bg-red-900/20 border border-red-800 rounded-lg p-3">
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* Purchase Details Section */}
+          <div className="space-y-4">
+            <h3 className="text-white font-medium text-sm">Purchase Details</h3>
+            
+            {/* Buy Date */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Buy Date</label>
+              <input
+                type="date"
+                value={formData.buyDate}
+                onChange={(e) => setFormData({...formData, buyDate: e.target.value})}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                style={{
+                  colorScheme: 'dark',
+                  backgroundColor: '#1f2937',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Item Name (read-only) */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Item Name</label>
+              <input
+                type="text"
+                value={product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set)}
+                readOnly
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm opacity-75"
+              />
+            </div>
+
+            {/* Retailer */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Retailer</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.buyLocation}
+                  onChange={(e) => {
+                    setFormData({...formData, buyLocation: e.target.value});
+                    setRetailerSearchQuery(e.target.value);
+                  }}
+                  onFocus={() => setIsRetailerFocused(true)}
+                  onBlur={() => setTimeout(() => setIsRetailerFocused(false), 200)}
+                  placeholder="Search retailers..."
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  style={{ backgroundColor: '#1f2937' }}
+                />
+                {isRetailerFocused && retailers.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto">
+                    {retailers
+                      .filter(retailer => 
+                        retailer.name.toLowerCase().includes(retailerSearchQuery.toLowerCase())
+                      )
+                      .slice(0, 5)
+                      .map((retailer) => (
+                        <button
+                          key={retailer.id}
+                          type="button"
+                          onClick={() => {
+                            setFormData({...formData, buyLocation: retailer.name});
+                            setRetailerSearchQuery(retailer.name);
+                            setIsRetailerFocused(false);
+                          }}
+                          className="w-full px-3 py-2 text-left text-white text-sm hover:bg-gray-700 transition-colors"
+                        >
+                          {retailer.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Quantity */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Quantity</label>
+              <input
+                type="number"
+                min="1"
+                value={formData.quantity}
+                onChange={(e) => {
+                  const qty = parseInt(e.target.value) || 1;
+                  setFormData({
+                    ...formData, 
+                    quantity: qty,
+                    buyPrice: formData.pricePerItem ? (parseFloat(formData.pricePerItem) * qty).toFixed(2) : ''
+                  });
+                }}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                style={{ backgroundColor: '#1f2937' }}
+              />
+            </div>
+
+            {/* Price Per Item */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Price Per Item</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.pricePerItem}
+                onChange={(e) => {
+                  const price = e.target.value;
+                  setFormData({
+                    ...formData, 
+                    pricePerItem: price,
+                    buyPrice: price ? (parseFloat(price) * formData.quantity).toFixed(2) : ''
+                  });
+                }}
+                placeholder="0.00"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                style={{ backgroundColor: '#1f2937' }}
+              />
+              <p className="text-xs text-gray-400 mt-1">Enter the price you paid for each individual item.</p>
+            </div>
+
+            {/* Total Buy Price */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Total Buy Price</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.buyPrice}
+                onChange={(e) => setFormData({...formData, buyPrice: e.target.value})}
+                placeholder="0.00"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                style={{ backgroundColor: '#1f2937' }}
+              />
+              <p className="text-xs text-gray-400 mt-1">Total amount paid for all items (auto-calculated from price per item).</p>
+            </div>
+          </div>
+
+          {/* Sale Details Section */}
+          <div className="space-y-4 pt-4 border-t border-gray-800">
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-medium text-sm">Sale Details</h3>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-gray-400">Mark as sold</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.isSold}
+                    onChange={(e) => setFormData({...formData, isSold: e.target.checked})}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                </label>
+              </div>
+            </div>
+
+            {formData.isSold && (
+              <div className="space-y-4">
+                {/* Sell Date */}
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Sell Date</label>
+                  <input
+                    type="date"
+                    value={formData.sellDate}
+                    onChange={(e) => setFormData({...formData, sellDate: e.target.value})}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    style={{
+                      colorScheme: 'dark',
+                      backgroundColor: '#1f2937',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* Sell Price */}
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Sell Price</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.sellPrice}
+                    onChange={(e) => setFormData({...formData, sellPrice: e.target.value})}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                style={{ backgroundColor: '#1f2937' }}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">If qty &gt; 1 we'll split this total across rows.</p>
+                </div>
+
+                {/* Marketplace */}
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Marketplace</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={formData.sellMarketplace}
+                      onChange={(e) => {
+                        setFormData({...formData, sellMarketplace: e.target.value});
+                        setSellMarketplaceSearchQuery(e.target.value);
+                      }}
+                      onFocus={() => setIsSellMarketplaceFocused(true)}
+                      onBlur={() => setTimeout(() => setIsSellMarketplaceFocused(false), 200)}
+                      placeholder="Search marketplaces..."
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      style={{ backgroundColor: '#1f2937' }}
+                    />
+                    {isSellMarketplaceFocused && marketplaces.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-10 max-h-40 overflow-y-auto">
+                        {marketplaces
+                          .filter(marketplace => 
+                            marketplace.name.toLowerCase().includes(sellMarketplaceSearchQuery.toLowerCase())
+                          )
+                          .slice(0, 5)
+                          .map((marketplace) => (
+                            <button
+                              key={marketplace.id}
+                              type="button"
+                              onClick={() => {
+                                setFormData({...formData, sellMarketplace: marketplace.name});
+                                setSellMarketplaceSearchQuery(marketplace.name);
+                                setIsSellMarketplaceFocused(false);
+                                
+                                // Auto-fill fees based on marketplace
+                                if (marketplace.fee_percentage) {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    fees: (parseFloat(prev.sellPrice || 0) * marketplace.fee_percentage / 100).toFixed(2)
+                                  }));
+                                }
+                              }}
+                              className="w-full px-3 py-2 text-left text-white text-sm hover:bg-gray-700 transition-colors"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span>{marketplace.name}</span>
+                                {marketplace.fee_percentage && (
+                                  <span className="text-xs text-gray-400">
+                                    {marketplace.fee_percentage}% fee
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fees */}
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Fees</label>
+                  {formData.sellMarketplace === 'Other' ? (
+                    <div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={customFeePercentage}
+                        onChange={(e) => {
+                          const percentage = parseFloat(e.target.value) || 0;
+                          setCustomFeePercentage(e.target.value);
+                          setFormData({
+                            ...formData,
+                            fees: (parseFloat(formData.sellPrice || 0) * percentage / 100).toFixed(2)
+                          });
+                        }}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                style={{ backgroundColor: '#1f2937' }}
+                      />
+                      <p className="text-xs text-blue-300">Custom fee for "Other" marketplace</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.fees}
+                        onChange={(e) => setFormData({...formData, fees: e.target.value})}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        style={{ backgroundColor: '#1f2937' }}
+                        readOnly
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Auto filled once a marketplace is selected.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Shipping */}
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Shipping</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.shipping}
+                    onChange={(e) => setFormData({...formData, shipping: e.target.value})}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                style={{ backgroundColor: '#1f2937' }}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">If qty &gt; 1 we'll split shipping across rows.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Submit Button - Updated to blue */}
+        <div className="p-4 border-t border-gray-800">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full bg-blue-500 hover:bg-blue-400 disabled:bg-gray-600 text-white py-3 rounded-lg font-medium transition-colors"
+          >
+            {isSubmitting ? 'Adding...' : 'Add Order'}
+          </button>
+        </div>
+      </form>
+
+      {/* Processing Animation Modal */}
+      {showProcessing && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 max-w-sm w-full mx-4">
+            {/* Spinning Animation */}
+            <div className="flex justify-center mb-6">
+              <div className="relative w-16 h-16">
+                {/* Outer ring */}
+                <div className="absolute inset-0 border-4 border-gray-700 border-t-blue-500 rounded-full animate-spin"></div>
+                {/* Inner pulsing dot */}
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Processing Message */}
+            <div className="text-center">
+              <div className="text-white font-medium mb-2">
+                <p><span className="font-medium">{successData.quantity}x</span> {successData.item}</p>
+                {successData.set && <p className="text-gray-400">{successData.set}</p>}
+                <p className="text-blue-400 font-medium">${parseFloat(successData.price).toFixed(2)}</p>
               </div>
               <p className="text-xs text-gray-400">Updating your collection...</p>
             </div>

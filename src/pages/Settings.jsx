@@ -46,20 +46,22 @@ const Settings = () => {
   return (
     <div>
       {/* Header */}
-      <div className="px-4 py-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-white">Settings</h1>
+      <div className="px-4 md:px-6 lg:px-8 py-3">
+        <div className="p-4 md:p-10 lg:p-12">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold text-white">Settings</h1>
+          </div>
         </div>
       </div>
 
       {/* Settings Content */}
-      <div className="px-4 pb-4">
+      <div className="px-4 md:px-6 lg:px-8 pb-4">
         {/* Profile Card with Sign Out */}
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-6 mb-4 md:mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               {/* Avatar */}
-              <div className="w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center">
+              <div className="w-12 h-12 bg-blue-400 rounded-full flex items-center justify-center">
                 {user?.user_metadata?.avatar_url ? (
                   <img 
                     src={user.user_metadata.avatar_url} 
@@ -121,7 +123,7 @@ const Settings = () => {
         {/* Settings Sections */}
         <div className="space-y-4">
           {/* App Settings */}
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-6">
             <h3 className="text-white font-medium mb-4">App Settings</h3>
             <div className="space-y-4">
               {/* Theme Settings */}
@@ -130,7 +132,7 @@ const Settings = () => {
           </div>
 
           {/* Notification Settings */}
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-white font-medium">Notifications</h3>
               <button
@@ -146,7 +148,7 @@ const Settings = () => {
           </div>
 
           {/* Account Settings */}
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-6">
             <h3 className="text-white font-medium mb-4">Account Settings</h3>
             <div className="space-y-2">
               <button className="w-full text-left p-3 bg-gray-800/30 hover:bg-gray-800/50 rounded-lg transition-colors">
@@ -213,7 +215,7 @@ const Settings = () => {
           </div>
 
           {/* Help & Support */}
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-6">
             <h3 className="text-white font-medium mb-3">Help & Support</h3>
             <div className="space-y-2">
               <button className="w-full text-left p-3 bg-gray-800/30 hover:bg-gray-800/50 rounded-lg transition-colors">
@@ -242,7 +244,7 @@ const Settings = () => {
       {/* Sign Out Confirmation Modal */}
       {showSignOutConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 modal-overlay">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 w-full max-w-sm">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 md:p-8 w-full max-w-sm">
             <h3 className="text-white font-medium mb-2">Sign Out</h3>
             <p className="text-gray-400 text-sm mb-6">
               Are you sure you want to sign out? You'll need to sign in again to access your collection.

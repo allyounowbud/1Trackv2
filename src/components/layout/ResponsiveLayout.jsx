@@ -8,6 +8,7 @@ const ResponsiveLayout = ({ children }) => {
   const location = useLocation();
   const { isModalOpen } = useModal();
   const [isDesktop, setIsDesktop] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -29,8 +30,11 @@ const ResponsiveLayout = ({ children }) => {
     // Desktop layout with sidebar
     return (
       <div className="desktop-app-container">
-        <DesktopSidebar currentPath={location.pathname} />
-        <div className="desktop-main-content">
+        <DesktopSidebar 
+          currentPath={location.pathname} 
+          onExpandedChange={setSidebarExpanded}
+        />
+        <div className={`desktop-main-content ${sidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
           {children}
         </div>
       </div>

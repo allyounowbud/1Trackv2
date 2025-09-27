@@ -10,7 +10,9 @@ const STATIC_FILES = [
   '/login',
   '/manifest.json',
   '/icons/icon-192x192.svg',
-  '/icons/icon-512x512.svg'
+  '/icons/icon-512x512.svg',
+  '/icons/icon-144x144.svg',
+  '/icons/icon-96x96.svg'
 ];
 
 // API endpoints to cache

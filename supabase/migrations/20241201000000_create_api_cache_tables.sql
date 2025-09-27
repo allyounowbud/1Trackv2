@@ -142,3 +142,4 @@ CREATE POLICY "Authenticated users can read cached_expansions" ON cached_expansi
 CREATE POLICY "Authenticated users can read cached_market_data" ON cached_market_data
     FOR SELECT USING (auth.role() = 'authenticated');
 
+

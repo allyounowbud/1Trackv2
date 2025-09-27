@@ -217,3 +217,4 @@ curl -X GET "your-supabase-url/functions/v1/api-proxy/search/cards?q=pikachu&lim
   -H "Authorization: Bearer your-anon-key"
 ```
 
+

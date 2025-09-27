@@ -23,31 +23,31 @@ class SmartSearchService {
     // API priorities and fallbacks
     this.apiConfig = {
       expansions: {
-        primary: 'tcgGo',
-        fallbacks: []
+        primary: 'scrydex',
+        fallbacks: ['tcgGo']
       },
       cards: {
-        primary: 'tcgGo',
-        fallbacks: ['marketData']
-      },
-      products: {
-        primary: 'tcgGo', 
-        fallbacks: ['marketData']
-      },
-      pricing: {
-        primary: 'tcgGo', // TCG Go has TCGPlayer + CardMarket data
-        fallbacks: ['priceCharting', 'marketData']
-      },
-      sealedPricing: {
-        primary: 'priceCharting', // PriceCharting has most accurate sealed product pricing
+        primary: 'scrydex',
         fallbacks: ['tcgGo', 'marketData']
       },
+      products: {
+        primary: 'scrydex', 
+        fallbacks: ['tcgGo', 'marketData']
+      },
+      pricing: {
+        primary: 'scrydex', // Scrydex has comprehensive pricing data
+        fallbacks: ['tcgGo', 'priceCharting', 'marketData']
+      },
+      sealedPricing: {
+        primary: 'scrydex', // Scrydex for sealed products
+        fallbacks: ['priceCharting', 'tcgGo', 'marketData']
+      },
       singlesPricing: {
-        primary: 'tcgGo', // TCG Go for singles, but include PriceCharting for comparison
-        fallbacks: ['priceCharting', 'marketData']
+        primary: 'scrydex', // Scrydex for singles
+        fallbacks: ['tcgGo', 'priceCharting', 'marketData']
       },
       images: {
-        primary: 'hybrid', // Hybrid service with multiple sources
+        primary: 'scrydex', // Scrydex has high-quality images
         fallbacks: []
       }
     };
@@ -56,18 +56,18 @@ class SmartSearchService {
   /**
    * Get all available expansions with complete metadata
    */
-  async getAllExpansions() {
-    const cacheKey = 'all_expansions';
+  async getAllExpansions(game = 'pokemon') {
+    const cacheKey = `all_expansions_${game}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) {
-      console.log('📦 Using cached expansions');
+      console.log(`📦 Using cached ${game} expansions`);
       return cached;
     }
 
     try {
-      console.log('🔍 Fetching all expansions...');
-      const expansions = await internalApiService.getAllExpansions();
-      console.log('📊 Got expansions from internal API service:', expansions?.length || 0);
+      console.log(`🔍 Fetching all ${game} expansions...`);
+      const expansions = await internalApiService.getAllExpansions(game);
+      console.log(`📊 Got ${game} expansions from internal API service:`, expansions?.length || 0);
       
       // Enhance with additional metadata
       const enhancedExpansions = expansions.map(expansion => ({
@@ -491,11 +491,11 @@ class SmartSearchService {
     try {
       console.log(`🔍 Searching all content for "${query}"...`);
       
-      // Search across all content types in parallel
+      // Search across all content types in parallel using Scrydex API
       const [expansionsResult, cardsResult, productsResult] = await Promise.allSettled([
-        tcgGoApiService.searchExpansions(query),
-        tcgGoApiService.searchCards(query, sort, Math.floor(maxResults * 0.6)), // 60% cards
-        tcgGoApiService.searchProducts(query, sort, Math.floor(maxResults * 0.4)) // 40% products
+        internalApiService.getAllExpansions('pokemon'), // Get all expansions for filtering
+        internalApiService.searchCards(query, Math.floor(maxResults * 0.6), 'pokemon'), // 60% cards
+        internalApiService.searchProducts(query, Math.floor(maxResults * 0.4)) // 40% products
       ]);
 
       const expansions = expansionsResult.status === 'fulfilled' ? expansionsResult.value : [];

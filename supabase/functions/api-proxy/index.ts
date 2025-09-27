@@ -13,6 +13,11 @@ const corsHeaders = {
 }
 
 interface ApiConfig {
+  scrydex: {
+    baseUrl: string
+    apiKey: string
+    teamId: string
+  }
   tcgGo: {
     baseUrl: string
     apiKey: string
@@ -46,6 +51,11 @@ class ApiProxyService {
    */
   private getApiConfig(): ApiConfig {
     return {
+      scrydex: {
+        baseUrl: 'https://api.scrydex.com',
+        apiKey: Deno.env.get('SCRYDEX_API_KEY') ?? '',
+        teamId: Deno.env.get('SCRYDEX_TEAM_ID') ?? ''
+      },
       tcgGo: {
         baseUrl: 'https://cardmarket-api-tcg.p.rapidapi.com',
         apiKey: Deno.env.get('RAPIDAPI_KEY') ?? ''
@@ -257,56 +267,145 @@ class ApiProxyService {
   }
 
   /**
+   * Scrydex API proxy
+   */
+  async proxyScrydexRequest(endpoint: string, params: any = {}): Promise<any> {
+    const config = this.getApiConfig()
+    const cacheKey = this.getCacheKey('scrydex', endpoint, params)
+    
+    // Check cache first
+    const cached = this.getFromCache(cacheKey)
+    if (cached) {
+      console.log(`📦 Cache hit for Scrydex: ${endpoint}`)
+      return cached
+    }
+
+    // Check rate limiting
+    if (!this.checkRateLimit('scrydex', 60, 60000)) {
+      throw new Error('Rate limit exceeded for Scrydex API')
+    }
+
+    try {
+      const url = new URL(`${config.scrydex.baseUrl}${endpoint}`)
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          url.searchParams.set(key, String(value))
+        }
+      })
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          'X-Api-Key': config.scrydex.apiKey,
+          'X-Team-ID': config.scrydex.teamId,
+          'Content-Type': 'application/json',
+          'User-Agent': 'OneTrack/2.2.0'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Scrydex API error: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      // Cache the result
+      this.setCache(cacheKey, data, 3600000) // 1 hour cache
+      
+      // Store in database for persistence
+      await this.storeInDatabase('scrydex_search_cache', {
+        id: cacheKey,
+        game: params.game || 'pokemon',
+        search_type: endpoint.includes('cards') ? 'cards' : 'expansions',
+        query: params.q || '',
+        page: params.page || 1,
+        page_size: params.pageSize || 20,
+        results: data,
+        total_count: data.totalCount || 0,
+        created_at: new Date().toISOString()
+      })
+
+      return data
+    } catch (error) {
+      console.error('Scrydex API error:', error)
+      throw error
+    }
+  }
+
+  /**
    * Search cards endpoint
    */
-  async searchCards(query: string, limit: number = 20): Promise<any> {
+  async searchCards(query: string, limit: number = 20, game: string = 'pokemon'): Promise<any> {
     try {
       // Try to get from database cache first
-      const cachedResults = await this.getFromDatabase('cached_cards', { 
-        search_term: query.toLowerCase() 
+      const cachedResults = await this.getFromDatabase('scrydex_search_cache', { 
+        game: game,
+        search_type: 'cards',
+        query: query.toLowerCase()
       })
       
       if (cachedResults.length > 0) {
         console.log(`📦 Database cache hit for cards: ${query}`)
         return {
           success: true,
-          data: cachedResults.slice(0, limit),
+          data: cachedResults[0].results.data || [],
           source: 'database_cache'
         }
       }
 
-      // Fetch from TCG Go API
-      const tcgGoData = await this.proxyTcgGoRequest('/pokemon/cards', {
-        search: query,
-        limit: limit,
-        sort: 'price_lowest'
-      })
-
-      // Store in database
-      if (tcgGoData && Array.isArray(tcgGoData)) {
-        const cardsToStore = tcgGoData.map((card: any) => ({
-          id: `tcg_${card.id || card.product_id}`,
-          search_term: query.toLowerCase(),
-          name: card.name,
-          set: card.set,
-          rarity: card.rarity,
-          price: card.price,
-          image_url: card.image_url,
-          product_id: card.id || card.product_id,
-          data: card,
-          created_at: new Date().toISOString()
-        }))
-
-        await this.storeInDatabase('cached_cards', cardsToStore)
-      }
+                // Fetch from Scrydex API
+                const scrydexData = await this.proxyScrydexRequest(`/${game}/v1/cards`, {
+                  q: query,
+                  pageSize: limit
+                })
 
       return {
         success: true,
-        data: tcgGoData || [],
-        source: 'tcgGo_api'
+        data: scrydexData.data || [],
+        source: 'scrydex_api'
       }
     } catch (error) {
       console.error('Search cards error:', error)
+      return {
+        success: false,
+        error: error.message,
+        data: []
+      }
+    }
+  }
+
+  /**
+   * Get all expansions endpoint
+   */
+  async getAllExpansions(limit: number = 1000, game: string = 'pokemon'): Promise<any> {
+    try {
+      // Try to get from database cache first
+      const cachedResults = await this.getFromDatabase('scrydex_search_cache', { 
+        game: game,
+        search_type: 'expansions',
+        query: 'all'
+      })
+      
+      if (cachedResults.length > 0) {
+        console.log(`📦 Database cache hit for expansions`)
+        return {
+          success: true,
+          data: cachedResults[0].results.data || [],
+          source: 'database_cache'
+        }
+      }
+
+                // Fetch from Scrydex API
+                const scrydexData = await this.proxyScrydexRequest(`/${game}/v1/expansions`, {
+                  pageSize: limit
+                })
+
+      return {
+        success: true,
+        data: scrydexData.data || [],
+        source: 'scrydex_api'
+      }
+    } catch (error) {
+      console.error('Get all expansions error:', error)
       return {
         success: false,
         error: error.message,
@@ -528,12 +627,44 @@ serve(async (req) => {
 
     // Route requests to appropriate handlers
     switch (path) {
+      case '/':
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'API Proxy is working',
+            path: path,
+            searchParams: searchParams
+          }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      
       case '/search/cards':
-        result = await apiService.searchCards(searchParams.q, parseInt(searchParams.limit) || 20)
+        result = await apiService.searchCards(
+          searchParams.q, 
+          parseInt(searchParams.limit) || 20,
+          searchParams.game || 'pokemon'
+        )
+        break
+      
+      case '/search/expansions':
+        result = await apiService.getAllExpansions(
+          parseInt(searchParams.limit) || 1000,
+          searchParams.game || 'pokemon'
+        )
         break
       
       case '/search/products':
-        result = await apiService.searchProducts(searchParams.q, parseInt(searchParams.limit) || 20)
+        // Check if this is an expansion request
+        if (searchParams.q === 'expansion') {
+          result = await apiService.getAllExpansions(
+            parseInt(searchParams.limit) || 1000,
+            searchParams.game || 'pokemon'
+          )
+        } else {
+          result = await apiService.searchProducts(searchParams.q, parseInt(searchParams.limit) || 20)
+        }
         break
       
       case '/expansion':

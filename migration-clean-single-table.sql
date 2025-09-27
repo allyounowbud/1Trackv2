@@ -239,6 +239,7 @@ SELECT
     i.card_number,
     i.market_value_cents,
     i.image_url,
+    i.source,
     -- Marketplace details
     m_buy.display_name as buy_marketplace_name,
     m_sell.display_name as sell_marketplace_name,

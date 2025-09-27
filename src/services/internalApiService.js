@@ -67,11 +67,16 @@ class InternalApiService {
 
       if (error) {
         console.error(`Error storing in ${table}:`, error);
+        // Don't throw error - just log it and continue
+        return false;
       } else {
         console.log(`✅ Stored data in ${table}`);
+        return true;
       }
     } catch (error) {
       console.error(`Database storage error for ${table}:`, error);
+      // Don't throw error - just log it and continue
+      return false;
     }
   }
 
@@ -130,10 +135,10 @@ class InternalApiService {
   }
 
   /**
-   * Search cards
+   * Search cards using Scrydex API
    */
-  async searchCards(query, limit = 20) {
-    const cacheKey = this.getCacheKey('/search/cards', { q: query, limit });
+  async searchCards(query, limit = 20, game = 'pokemon') {
+    const cacheKey = this.getCacheKey('/search/cards', { q: query, limit, game });
     const cached = this.getFromCache(cacheKey);
     if (cached) {
       console.log('📦 Client cache hit for cards:', query);
@@ -141,7 +146,7 @@ class InternalApiService {
     }
 
     try {
-      const result = await this.makeRequest('/search/cards', { q: query, limit });
+      const result = await this.makeRequest('/search/cards', { q: query, limit, game });
       this.setCache(cacheKey, result);
       return result;
     } catch (error) {
@@ -256,47 +261,50 @@ class InternalApiService {
   }
 
   /**
-   * Get all expansions (cached from TCG Go)
+   * Get all expansions (cached from Scrydex)
    */
-  async getAllExpansions() {
-    const cacheKey = this.getCacheKey('/search/products', { q: 'expansion', limit: 1000 });
+  async getAllExpansions(game = 'pokemon') {
+    const cacheKey = this.getCacheKey('/search/expansions', { game: game, limit: 1000 });
     const cached = this.getFromCache(cacheKey);
     if (cached) {
-      console.log('📦 Client cache hit for all expansions');
+      console.log(`📦 Client cache hit for all ${game} expansions`);
       return cached.data || [];
     }
 
     try {
       // Try database cache first
-      console.log('🔍 Checking database cache for expansions...');
-      const dbCached = await this.getFromDatabase('cached_products', { 
-        search_term: 'expansion' 
+      console.log(`🔍 Checking database cache for ${game} expansions...`);
+      const dbCached = await this.getFromDatabase('scrydex_search_cache', { 
+        game: game,
+        search_type: 'expansions',
+        query: 'all'
       });
       
       if (dbCached && dbCached.length > 0) {
-        console.log('📦 Database cache hit for expansions, got', dbCached.length, 'items');
-        const expansions = dbCached.map(item => item.data).filter(Boolean);
+        console.log(`📦 Database cache hit for ${game} expansions, got`, dbCached.length, 'items');
+        const expansions = dbCached[0].results.data || [];
         this.setCache(cacheKey, { success: true, data: expansions, source: 'database_cache' });
         return expansions;
       }
 
       // Try backend API first
-      const result = await this.makeRequest('/search/products', { 
-        q: 'expansion', 
+      const result = await this.makeRequest('/search/expansions', { 
+        game: game,
         limit: 1000 
       });
       this.setCache(cacheKey, result);
       return result.data || [];
     } catch (error) {
-      console.warn('Backend API failed, falling back to direct TCG Go API:', error.message);
+      console.warn(`Backend API failed for ${game} expansions, falling back to direct API:`, error.message);
       
       try {
-        // Fallback to direct TCG Go API
-        console.log('🔄 Attempting fallback to TCG Go API...');
-        const expansions = await tcgGoApiService.getAllExpansions();
-        console.log('✅ TCG Go API fallback successful, got', expansions?.length || 0, 'expansions');
+        // Fallback to direct TCG Go API for Pokemon only
+        if (game === 'pokemon') {
+          console.log('🔄 Attempting fallback to TCG Go API...');
+          const expansions = await tcgGoApiService.getAllExpansions();
+          console.log('✅ TCG Go API fallback successful, got', expansions?.length || 0, 'expansions');
         
-        // Store in database for future use
+        // Store in database for future use (non-blocking)
         if (expansions && expansions.length > 0) {
           const dataToStore = expansions.map((expansion, index) => ({
             id: `expansion_${expansion.id || index}`,
@@ -310,18 +318,26 @@ class InternalApiService {
             created_at: new Date().toISOString()
           }));
           
-          await this.storeInDatabase('cached_products', dataToStore);
+          // Store in database asynchronously without blocking
+          this.storeInDatabase('cached_products', dataToStore).catch(dbError => {
+            console.warn('Failed to store expansions in database:', dbError.message);
+          });
         }
         
-        const fallbackResult = {
-          success: true,
-          data: expansions,
-          source: 'tcgGo_direct_fallback'
-        };
-        this.setCache(cacheKey, fallbackResult);
-        return expansions || [];
+          const fallbackResult = {
+            success: true,
+            data: expansions,
+            source: 'tcgGo_direct_fallback'
+          };
+          this.setCache(cacheKey, fallbackResult);
+          return expansions || [];
+        } else {
+          // For other games, return empty array for now
+          console.log(`No fallback available for ${game} expansions`);
+          return [];
+        }
       } catch (fallbackError) {
-        console.error('❌ Both backend and fallback failed:', fallbackError);
+        console.error(`❌ Both backend and fallback failed for ${game} expansions:`, fallbackError);
         console.error('Fallback error details:', {
           message: fallbackError.message,
           stack: fallbackError.stack

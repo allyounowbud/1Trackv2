@@ -51,3 +51,4 @@ curl -X POST "https://your-project.supabase.co/functions/v1/background-sync?acti
 - **Static Data**: Cached forever (names, images, etc.)
 - **Cleanup**: Removes old market data after 30 days
 
+

@@ -143,6 +143,7 @@
     z-index: 1000;
     display: flex;
     flex-direction: column;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
   }
 
   .desktop-main-content {
@@ -150,9 +151,40 @@
     overflow-y: auto;
     overflow-x: hidden;
     background-color: #111827;
-    padding: 0;
-    /* Remove mobile-specific padding */
-    padding-bottom: 0;
+    padding: 2rem;
+    /* Desktop-optimized padding */
+    padding-bottom: 2rem;
+    transition: all 0.3s ease;
+  }
+
+  /* Sidebar state classes */
+  .desktop-main-content.sidebar-expanded {
+    margin-left: 0;
+  }
+
+  .desktop-main-content.sidebar-collapsed {
+    margin-left: 0;
+  }
+
+  /* Desktop-specific content improvements */
+  @media (min-width: 1024px) {
+    .desktop-main-content {
+      padding: 3rem 4rem;
+    }
+    
+    .desktop-main-content.sidebar-expanded {
+      margin-left: 0;
+    }
+    
+    .desktop-main-content.sidebar-collapsed {
+      margin-left: 0;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .desktop-main-content {
+      padding: 4rem 6rem;
+    }
   }
 
   /* Hide scrollbars for mobile app-like experience */

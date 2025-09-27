@@ -4,10 +4,12 @@ import smartSearchService from '../services/smartSearchService';
 import internalApiService from '../services/internalApiService';
 import ProductPreviewModal from '../components/ProductPreviewModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
+import CustomItemModal from '../components/CustomItemModal';
 import { getCleanItemName, getCardDisplayName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryClient';
+import { supabase } from '../lib/supabaseClient';
 
 const Search = () => {
   const { openModal, closeModal } = useModal();
@@ -17,12 +19,18 @@ const Search = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [searchType, setSearchType] = useState('all'); // 'all', 'cards', 'products'
+  const [searchType, setSearchType] = useState('categories'); // 'categories', 'search', 'expansions'
   const [totalResults, setTotalResults] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [productToAdd, setProductToAdd] = useState(null);
+  const [isCustomItemModalOpen, setIsCustomItemModalOpen] = useState(false);
+  const [customItems, setCustomItems] = useState([]);
+  const [showCustomItemMenu, setShowCustomItemMenu] = useState(null);
+  const [customItemToEdit, setCustomItemToEdit] = useState(null);
+  const [showCustomItemDeleteModal, setShowCustomItemDeleteModal] = useState(false);
+  const [customItemToDelete, setCustomItemToDelete] = useState(null);
   const [trendingProducts, setTrendingProducts] = useState([]);
   const [isLoadingTrending, setIsLoadingTrending] = useState(false);
   const [allExpansions, setAllExpansions] = useState([]);
@@ -133,8 +141,16 @@ const Search = () => {
       console.log(`✅ Loaded ${allExpansionsData.length} expansions, showing first ${firstPageExpansions.length}`);
     } catch (error) {
       console.error('❌ Error loading popular expansions:', error);
+      // Set empty arrays to prevent UI errors
+      setAllExpansions([]);
+      setDisplayedExpansions([]);
+      setTrendingProducts([]);
       // Fallback to regular API
-      await loadAllExpansions();
+      try {
+        await loadAllExpansions();
+      } catch (fallbackError) {
+        console.error('❌ Fallback API also failed:', fallbackError);
+      }
     } finally {
       setIsLoadingTrending(false);
     }
@@ -442,8 +458,8 @@ const Search = () => {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    // If search query is empty or too short, show trending products
-    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+    // If search query is empty or too short, or not in search mode, clear results
+    if (!searchQuery.trim() || searchQuery.trim().length < 2 || searchType !== 'search') {
       setSearchResults([]);
       setAllResults([]);
       setTotalResults(0);
@@ -531,7 +547,7 @@ const Search = () => {
                 includeImages: false, // Disabled due to 503 errors from Supabase
                 includePricing: false // Disabled to reduce API spam // Re-enabled with PriceCharting data for all items
               });
-              result = [...searchResult.cards, ...searchResult.products];
+              result = [...(searchResult.cards || []), ...(searchResult.products || [])];
             }
           } catch (expansionError) {
             console.log('⚠️ Expansion search failed, falling back to regular search:', expansionError);
@@ -541,17 +557,54 @@ const Search = () => {
               includeImages: false, // Disabled due to 503 errors from Supabase
               includePricing: false // Disabled to reduce API spam // Re-enabled with PriceCharting priority for sealed products
             });
-            result = [...searchResult.cards, ...searchResult.products];
+            result = [...(searchResult.cards || []), ...(searchResult.products || [])];
           }
         } else {
-          // Use SmartSearchService for comprehensive search
-          const searchResult = await smartSearchService.searchAll(searchQuery, {
-            sort: sortBy,
-            maxResults: 100,
-            includeImages: false, // Disabled due to 503 errors from Supabase
-            includePricing: false // Disabled to reduce API spam // Re-enabled with PriceCharting priority for sealed products
-          });
-          result = [...searchResult.cards, ...searchResult.products];
+          // Use Scrydex API for comprehensive search
+          console.log(`🔍 Searching with Scrydex API for: "${searchQuery}"`);
+          
+          try {
+            // Search cards using Scrydex API
+            const cardsResult = await internalApiService.searchCards(searchQuery, 50, 'pokemon');
+            const cards = cardsResult.success ? cardsResult.data : [];
+            
+            // Search products using fallback API
+            const productsResult = await internalApiService.searchProducts(searchQuery, 30);
+            const products = productsResult.success ? productsResult.data : [];
+            
+            // Combine and format results
+            const formattedCards = cards.map(card => ({
+              ...card,
+              type: 'singles',
+              marketValue: card.prices?.usd || card.marketValue || 0,
+              imageUrl: card.image_uris?.normal || card.imageUrl || card.images?.small || '',
+              name: card.name,
+              set: card.set_name || card.set,
+              rarity: card.rarity,
+              cardNumber: card.collector_number || card.number
+            }));
+            
+            const formattedProducts = products.map(product => ({
+              ...product,
+              type: 'sealed',
+              marketValue: product.price || product.marketValue || 0,
+              imageUrl: product.image_url || product.imageUrl || '',
+              name: product.name,
+              set: product.set_name || product.set
+            }));
+            
+            result = [...formattedCards, ...formattedProducts];
+            console.log(`✅ Scrydex search complete: ${formattedCards.length} cards, ${formattedProducts.length} products`);
+          } catch (scrydexError) {
+            console.warn('⚠️ Scrydex search failed, falling back to SmartSearchService:', scrydexError);
+            const searchResult = await smartSearchService.searchAll(searchQuery, {
+              sort: sortBy,
+              maxResults: 100,
+              includeImages: false,
+              includePricing: false
+            });
+            result = [...(searchResult.cards || []), ...(searchResult.products || [])];
+          }
         }
         
         if (result && Array.isArray(result)) {
@@ -609,10 +662,73 @@ const Search = () => {
     };
   }, [searchQuery, searchType, filterBy, sortBy]);
 
-  // Load all expansions on component mount
+  // Load all expansions and custom items on component mount
   useEffect(() => {
     loadAllExpansionsFromSmartSearch();
+    loadCustomItems();
   }, []);
+
+  // Close custom item menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showCustomItemMenu && !event.target.closest('.custom-item-menu')) {
+        setShowCustomItemMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCustomItemMenu]);
+
+  // Load custom items from the database
+  const loadCustomItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('items')
+        .select('*')
+        .eq('source', 'manual')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCustomItems(data || []);
+    } catch (error) {
+      console.error('Error loading custom items:', error);
+    }
+  };
+
+  const handleDeleteCustomItem = (item) => {
+    setCustomItemToDelete(item);
+    setShowCustomItemDeleteModal(true);
+    setShowCustomItemMenu(null);
+  };
+
+  const confirmDeleteCustomItem = async () => {
+    if (!customItemToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('items')
+        .delete()
+        .eq('id', customItemToDelete.id);
+
+      if (error) throw error;
+      
+      // Reload custom items
+      loadCustomItems();
+      setShowCustomItemDeleteModal(false);
+      setCustomItemToDelete(null);
+    } catch (error) {
+      console.error('Error deleting custom item:', error);
+    }
+  };
+
+  const handleEditCustomItem = (item) => {
+    setCustomItemToEdit(item);
+    setShowCustomItemMenu(null);
+    // Open edit modal (you can implement this)
+  };
 
   const handleSearch = async () => {
     // This function is now mainly for manual search triggers
@@ -810,6 +926,9 @@ const Search = () => {
       });
     }
     
+    // Refresh custom items when a new one is added
+    loadCustomItems();
+    
     // Navigate to collection page with success data as URL parameters
     const params = new URLSearchParams({
       successItem: result.item,
@@ -817,11 +936,229 @@ const Search = () => {
       successPrice: result.price,
       ...(result.set && { successSet: result.set })
     });
-    navigate(`/?${params.toString()}`);
+    navigate(`/collection?${params.toString()}`);
     
     setIsAddModalOpen(false);
     closeModal();
     setProductToAdd(null);
+  };
+
+  // Category card component
+  const CategoryCard = ({ title, description, icon, onClick, count }) => (
+    <div 
+      onClick={onClick}
+      className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:bg-gray-800/70 hover:border-gray-600/50 transition-all duration-200 group"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
+            {icon}
+          </div>
+          <div>
+            <h3 className="text-white font-medium text-sm">{title}</h3>
+            <p className="text-gray-400 text-xs">{description}</p>
+          </div>
+        </div>
+        {count !== undefined && (
+          <span className="text-blue-400 text-xs font-medium">{count} items</span>
+        )}
+      </div>
+    </div>
+  );
+
+  // Render category grid
+  const renderCategoryGrid = () => {
+    const categories = [
+      {
+        title: 'Pokemon',
+        description: 'Pokemon TCG cards and products',
+        icon: (
+          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+          </svg>
+        ),
+        onClick: () => {
+          setSearchQuery('pokemon');
+          setSearchType('search');
+        }
+      },
+      {
+        title: 'Magic The Gathering',
+        description: 'MTG cards and products',
+        icon: (
+          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+          </svg>
+        ),
+        onClick: () => {
+          setSearchQuery('magic');
+          setSearchType('search');
+        }
+      },
+      {
+        title: 'Loracana',
+        description: 'Disney Loracana cards',
+        icon: (
+          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+          </svg>
+        ),
+        onClick: () => {
+          setSearchQuery('loracana');
+          setSearchType('search');
+        }
+      },
+      {
+        title: 'Gundam',
+        description: 'Gundam model kits and products',
+        icon: (
+          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+          </svg>
+        ),
+        onClick: () => {
+          setSearchQuery('gundam');
+          setSearchType('search');
+        }
+      },
+      {
+        title: 'Other Items',
+        description: 'Your custom collectibles',
+        icon: (
+          <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        ),
+        onClick: () => {
+          setSearchType('custom');
+        },
+        count: customItems.length
+      }
+    ];
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {categories.map((category, index) => (
+          <CategoryCard
+            key={index}
+            title={category.title}
+            description={category.description}
+            icon={category.icon}
+            onClick={category.onClick}
+            count={category.count}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  // Render custom items
+  const renderCustomItems = () => {
+    if (customItems.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-gray-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          </div>
+          <h3 className="text-white font-medium text-sm mb-2">No Custom Items Yet</h3>
+          <p className="text-gray-400 text-xs mb-4">Add your own collectibles to track them here</p>
+          <button
+            onClick={() => setIsCustomItemModalOpen(true)}
+            className="px-4 py-2 bg-blue-500/20 border border-blue-400/30 rounded-lg text-sm text-blue-400 hover:bg-blue-500/30 transition-colors"
+          >
+            Add Custom Item
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        {customItems.map((item) => (
+          <div
+            key={item.id}
+            className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3 hover:bg-gray-800/70 hover:border-gray-600/50 transition-all duration-200 group relative"
+          >
+            <div className="aspect-square bg-gray-700/50 rounded-lg mb-3 overflow-hidden">
+              {item.image_url ? (
+                <img
+                  src={item.image_url}
+                  alt={item.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div className="w-full h-full flex items-center justify-center text-gray-400" style={{ display: item.image_url ? 'none' : 'flex' }}>
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-white font-medium text-[11px] md:text-xs leading-tight line-clamp-2">{item.name}</h3>
+              {item.set_name && (
+                <p className="text-gray-400 text-[11px] md:text-xs">{item.set_name}</p>
+              )}
+              {item.market_value_cents && (
+                <p className="text-blue-400 text-[11px] md:text-xs font-medium">
+                  ${(item.market_value_cents / 100).toFixed(2)}
+                </p>
+              )}
+            </div>
+
+            {/* Menu Button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCustomItemMenu(showCustomItemMenu === item.id ? null : item.id);
+              }}
+              className="custom-item-menu absolute top-2 right-2 p-1 bg-gray-900/80 hover:bg-gray-800/80 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+              </svg>
+            </button>
+
+            {/* Menu Dropdown */}
+            {showCustomItemMenu === item.id && (
+              <div className="custom-item-menu absolute top-8 right-2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-20 min-w-[120px]">
+                <div className="py-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditCustomItem(item);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-white hover:bg-gray-800 transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Edit Price
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteCustomItem(item);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-gray-800 transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const handleCloseAddModal = () => {
@@ -831,23 +1168,23 @@ const Search = () => {
   };
 
   return (
-    <div className="text-white">
+    <div>
       {/* Search Interface */}
-      <div className="px-3 py-2">
-        <div className="p-3">
+      <div className="px-4 md:px-6 lg:px-8 py-3">
+        <div className="p-4 md:p-10 lg:p-12">
           {/* Search Bar */}
-          <div className="relative mb-3">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="relative mb-4 md:mb-6">
+            <div className="absolute inset-y-0 left-0 pl-3 md:pl-4 flex items-center pointer-events-none">
+              <svg className="h-4 w-4 md:h-5 md:w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
             <input
               type="text"
-              placeholder="Search your items..."
+              placeholder="Search for cards, products, or sets..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-8 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full pl-10 md:pl-12 pr-3 md:pr-4 py-2 md:py-3 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
             />
             {searchQuery && (
               <button
@@ -864,6 +1201,49 @@ const Search = () => {
 
           {/* Filter Buttons */}
           <div className="flex gap-2 mb-3">
+            {/* View Mode Buttons */}
+            <button
+              onClick={() => setSearchType('categories')}
+              className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors ${
+                searchType === 'categories' 
+                  ? 'bg-blue-500/20 border border-blue-400/30 text-blue-400' 
+                  : 'bg-gray-800/30 border border-gray-700/30 text-gray-400 hover:bg-gray-700/40 hover:text-gray-300'
+              }`}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              Categories
+            </button>
+            
+            <button
+              onClick={() => setSearchType('expansions')}
+              className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors ${
+                searchType === 'expansions' 
+                  ? 'bg-blue-500/20 border border-blue-400/30 text-blue-400' 
+                  : 'bg-gray-800/30 border border-gray-700/30 text-gray-400 hover:bg-gray-700/40 hover:text-gray-300'
+              }`}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              Expansions
+            </button>
+            
+            {/* Custom Item Button */}
+            <button
+              onClick={() => setSearchType('custom')}
+              className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors ${
+                searchType === 'custom' 
+                  ? 'bg-blue-500/20 border border-blue-400/30 text-blue-400' 
+                  : 'bg-gray-800/30 border border-gray-700/30 text-gray-400 hover:bg-gray-700/40 hover:text-gray-300'
+              }`}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Add Custom Item
+            </button>
             {/* Sort By Dropdown */}
             <div className="relative" ref={sortDropdownRef}>
               <button 
@@ -898,7 +1278,7 @@ const Search = () => {
                         }}
                         className={`w-full text-left px-3 py-2 text-xs transition-colors ${
                           sortBy === option.value
-                            ? 'bg-indigo-500/20 text-indigo-400'
+                            ? 'bg-blue-500/20 text-blue-400'
                             : 'text-white hover:bg-gray-800'
                         }`}
                       >
@@ -942,7 +1322,7 @@ const Search = () => {
                         }}
                         className={`w-full text-left px-3 py-2 text-xs transition-colors ${
                           filterBy === option.value
-                            ? 'bg-indigo-500/20 text-indigo-400'
+                            ? 'bg-blue-500/20 text-blue-400'
                             : 'text-white hover:bg-gray-800'
                         }`}
                       >
@@ -965,8 +1345,99 @@ const Search = () => {
         </div>
       )}
 
+      {/* Main Content Area */}
+      {searchType === 'categories' && (
+        <div className="px-4 md:px-6 lg:px-8">
+          <div className="p-4 md:p-10 lg:p-12">
+            <h2 className="text-white font-medium text-sm mb-6">Browse by Category</h2>
+            {renderCategoryGrid()}
+          </div>
+        </div>
+      )}
+
+      {searchType === 'custom' && (
+        <div className="px-4 md:px-6 lg:px-8">
+          <div className="p-4 md:p-10 lg:p-12">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-white font-medium text-sm">Custom Items</h2>
+              <button
+                onClick={() => setIsCustomItemModalOpen(true)}
+                className="px-3 py-1 bg-blue-500/20 border border-blue-400/30 rounded-lg text-xs text-blue-400 hover:bg-blue-500/30 transition-colors"
+              >
+                Add Item
+              </button>
+            </div>
+            {renderCustomItems()}
+          </div>
+        </div>
+      )}
+
+      {searchType === 'expansions' && displayedExpansions.length > 0 && (
+        <div className="px-4 md:px-6 lg:px-8">
+          <div className="p-4 md:p-10 lg:p-12">
+            <h2 className="text-white font-medium text-sm mb-6">Browse by Expansion</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {displayedExpansions.map((expansion, index) => (
+                <div 
+                  key={`expansion-${index}`} 
+                  className="relative bg-gray-900 border border-gray-800 rounded-xl overflow-hidden transition-all duration-200 cursor-pointer hover:border-gray-700 hover:shadow-gray-900/50"
+                  onClick={() => {
+                    browseExpansionCards(expansion);
+                  }}
+                >
+                  {/* Expansion Logo/Image */}
+                  <div className="aspect-[1/1] flex items-center justify-center p-4 relative">
+                    {(expansion?.imageUrl || expansion?.image || expansion?.logo) ? (
+                      <img
+                        src={expansion.imageUrl || expansion.image || expansion.logo}
+                        alt={expansion.name}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div className="w-full h-full flex items-center justify-center text-gray-400" style={{ display: (expansion?.imageUrl || expansion?.image || expansion?.logo) ? 'none' : 'flex' }}>
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  {/* Expansion Info */}
+                  <div className="p-3">
+                    <h3 className="text-white font-medium text-xs leading-tight line-clamp-2 mb-1">
+                      {expansion.name}
+                    </h3>
+                    {expansion.releaseDate && (
+                      <p className="text-gray-400 text-xs">
+                        {new Date(expansion.releaseDate).getFullYear()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            {/* Load More Expansions */}
+            {hasMoreExpansions && (
+              <div className="flex justify-center mt-6">
+                <button
+                  onClick={loadMoreExpansions}
+                  disabled={isLoadingMoreExpansions}
+                  className="px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-sm text-gray-300 hover:bg-gray-700/50 transition-colors disabled:opacity-50"
+                >
+                  {isLoadingMoreExpansions ? 'Loading...' : 'Load More Expansions'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Search Results */}
-      {searchQuery.trim() && searchResults.length > 0 && (
+      {searchType === 'search' && searchQuery.trim() && searchResults.length > 0 && (
         <div className="px-4">
           {/* Results Header */}
           <div className="flex items-center justify-between mb-4">
@@ -979,43 +1450,43 @@ const Search = () => {
                 Showing {searchResults.length} of {totalResults.toLocaleString()}
               </div>
               {hasMoreResults && (
-                <div className="text-xs text-indigo-400 mt-1">
+                <div className="text-xs text-blue-400 mt-1">
                   Scroll down for more
                 </div>
               )}
             </div>
           </div>
           
-          {/* Card Grid - 2 columns matching collection page styling */}
-          <div className="grid grid-cols-2 gap-3 pb-20">
+          {/* Card Grid - Responsive columns matching collection page styling */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8 pb-4">
             {searchResults
               .filter(card => card && typeof card === 'object') // Filter out null/undefined results
               .map((card, index) => {
                 return (
                   <div 
                     key={index} 
-                    className="relative border border-gray-700 rounded-lg overflow-hidden hover:border-gray-600 transition-all duration-200 cursor-pointer"
+                    className="relative bg-gray-900 border border-gray-800 rounded-xl overflow-hidden transition-all duration-200 cursor-pointer hover:border-gray-700 hover:shadow-gray-900/50"
                     onClick={() => handleProductClick(card)}
                   >
                     {/* Add Button - Top Right */}
                     <button 
-                      className="absolute top-2 right-2 w-5 h-5 bg-indigo-500/20 rounded-full flex items-center justify-center hover:bg-indigo-500/30 transition-colors z-10 border border-indigo-400/30"
+                      className="absolute top-2 right-2 w-5 h-5 bg-blue-400/20 rounded-full flex items-center justify-center hover:bg-blue-400/30 transition-colors z-10 border border-blue-300/30"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleAddToCollection({ ...card, quantity: 1 });
                       }}
                     >
-                      <svg className="w-2.5 h-2.5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-2.5 h-2.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
                     </button>
                     {/* Card Image */}
-                    <div className="aspect-[4/3] flex items-center justify-center py-2 relative">
+                    <div className="aspect-[1/1] flex items-center justify-center p-4 relative">
                       {card?.imageUrl ? (
                         <img
                           src={card.imageUrl}
                           alt={card?.name || 'Card'}
-                          className="w-full h-full object-contain"
+                          className="w-3/4 h-3/4 object-contain"
                           onError={(e) => {
                             e.target.style.display = 'none';
                             e.target.nextSibling.style.display = 'flex';
@@ -1024,17 +1495,17 @@ const Search = () => {
                       ) : null}
                       <div className={`w-full h-full flex items-center justify-center bg-gray-800 ${card?.imageUrl ? 'hidden' : 'flex'}`}>
                         <div className="text-center">
-                          <div className="text-2xl mb-1">📦</div>
+                          <div className="text-xl mb-1">📦</div>
                           <div className="text-gray-400 text-xs">No Image</div>
                         </div>
                       </div>
                     </div>
                     
                     {/* Card Details */}
-                    <div className="p-3 space-y-2">
+                    <div className="p-3 space-y-1">
                       {/* Header Section */}
                       <div className="space-y-1">
-                        <h3 className="text-white font-semibold leading-tight" style={{fontSize: '11px'}}>
+                        <h3 className="text-white font-semibold leading-tight text-[11px] md:text-xs">
                           {(() => {
                             const displayName = getCardDisplayName(card) || 'Unknown Card';
                             const cleanName = getCleanItemName(card?.name, card?.set) || 'Unknown Card';
@@ -1043,7 +1514,7 @@ const Search = () => {
                             if (card?.type !== 'product' && card?.details?.cardNumber) {
                               return (
                                 <>
-                                  {cleanName} <span className="text-indigo-400">#{card.details.cardNumber}</span>
+                                  {cleanName} <span className="text-blue-400">#{card.details.cardNumber}</span>
                                 </>
                               );
                             }
@@ -1052,42 +1523,42 @@ const Search = () => {
                             return displayName;
                           })()}
                         </h3>
-                        <p className="text-gray-400" style={{fontSize: '9px'}}>
+                        <p className="text-gray-400 text-[11px] md:text-xs">
                           {card?.set || 'Unknown Set'}
                         </p>
                       </div>
-                      
-                        <div className="flex justify-start mb-1">
-                          <span className="bg-indigo-600/70 text-white px-0.5 py-0.5 rounded text-xs font-medium" style={{fontSize: '9px'}}>
-                            {card?.type === 'product' ? 'Sealed' : (card?.rarity || 'Card')}
-                          </span>
-                        </div>
+                        
+                      <div className="flex justify-start mb-1">
+                        <span className="bg-blue-500/70 text-white px-0.5 py-0.5 rounded text-[11px] md:text-xs font-medium">
+                          {card?.type === 'product' ? 'Sealed' : (card?.rarity || 'Card')}
+                        </span>
+                      </div>
                       
                       {/* Financial Section - Simplified */}
                       <div className="space-y-1">
                         {/* Market Value */}
                         <div className="flex items-center space-x-2">
-                            <span className="text-white font-semibold" style={{fontSize: '12px'}}>
-                              {card?.marketValue ? formatPrice(card.marketValue) : 'N/A'} Value
-                              {card?.priceSource && (
-                                <span className="ml-1 text-indigo-400" style={{fontSize: '8px'}}>
-                                  ({card.priceSource === 'pricecharting' ? 'PC' : card.priceSource === 'tcgGo' ? 'TCG' : card.priceSource === 'marketData' ? 'CM' : card.priceSource})
-                                </span>
-                              )}
-                            </span>
+                          <span className="text-white font-semibold text-[11px] md:text-xs">
+                            {card?.marketValue ? formatPrice(card.marketValue) : 'N/A'} Value
+                            {card?.priceSource && (
+                              <span className="ml-1 text-blue-400 text-[11px] md:text-xs">
+                                ({card.priceSource === 'pricecharting' ? 'PC' : card.priceSource === 'tcgGo' ? 'TCG' : card.priceSource === 'marketData' ? 'CM' : card.priceSource})
+                              </span>
+                            )}
+                          </span>
                         </div>
                         
                         {/* Additional Pricing Sources */}
                         {card?.prices?.priceCharting && (
-                          <div className="text-gray-400" style={{fontSize: '9px'}}>
-                            PC: {card.prices.priceCharting.loose > 0 ? formatPrice(card.prices.priceCharting.loose) : 'N/A'}
-                            {card.prices.priceCharting.cib > 0 && ` | CIB: ${formatPrice(card.prices.priceCharting.cib)}`}
-                            {card.prices.priceCharting.new > 0 && ` | New: ${formatPrice(card.prices.priceCharting.new)}`}
+                          <div className="text-gray-400 text-[11px] md:text-xs">
+                          PC: {card.prices.priceCharting.loose > 0 ? formatPrice(card.prices.priceCharting.loose) : 'N/A'}
+                          {card.prices.priceCharting.cib > 0 && ` | CIB: ${formatPrice(card.prices.priceCharting.cib)}`}
+                          {card.prices.priceCharting.new > 0 && ` | New: ${formatPrice(card.prices.priceCharting.new)}`}
                           </div>
                         )}
                         
                         {/* Trend Data */}
-                        <div className="text-gray-400" style={{fontSize: '9px'}}>
+                        <div className="text-gray-400 text-[11px] md:text-xs">
                           {(() => {
                             // Show trend data if we have valid trend or dollar change values
                             if (card.trend !== undefined && card.trend !== null && card.dollarChange !== undefined && card.dollarChange !== null) {
@@ -1113,8 +1584,8 @@ const Search = () => {
             <div className="flex justify-center py-6">
               <div className="flex items-center gap-3 text-gray-400">
                 <div className="relative">
-                  <div className="w-5 h-5 border-2 border-gray-400 border-t-indigo-600 rounded-full animate-spin"></div>
-                  <div className="absolute top-0.5 left-0.5 w-4 h-4 border border-transparent border-t-indigo-400 rounded-full animate-spin" style={{animationDirection: 'reverse', animationDuration: '0.8s'}}></div>
+                  <div className="w-5 h-5 border-2 border-gray-400 border-t-blue-400 rounded-full animate-spin"></div>
+                  <div className="absolute top-0.5 left-0.5 w-4 h-4 border border-transparent border-t-blue-300 rounded-full animate-spin" style={{animationDirection: 'reverse', animationDuration: '0.8s'}}></div>
                 </div>
                 <span className="text-sm">Loading more results...</span>
               </div>
@@ -1137,9 +1608,9 @@ const Search = () => {
         <div className="flex flex-col items-center justify-center py-16 px-4">
           <div className="relative">
             {/* iPhone-style spinner */}
-            <div className="w-12 h-12 border-4 border-gray-200 border-t-indigo-600 rounded-full animate-spin"></div>
+            <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-400 rounded-full animate-spin"></div>
             {/* Inner ring for extra visual appeal */}
-            <div className="absolute top-1 left-1 w-10 h-10 border-2 border-transparent border-t-indigo-400 rounded-full animate-spin" style={{animationDirection: 'reverse', animationDuration: '0.8s'}}></div>
+            <div className="absolute top-1 left-1 w-10 h-10 border-2 border-transparent border-t-blue-300 rounded-full animate-spin" style={{animationDirection: 'reverse', animationDuration: '0.8s'}}></div>
           </div>
           <div className="mt-4 text-center">
             <div className="text-white font-medium mb-1">Searching...</div>
@@ -1158,8 +1629,18 @@ const Search = () => {
         </div>
       )}
 
-      {/* Help Text */}
-      {!searchQuery && (
+      {/* Default State - Show when no search query and not in specific modes */}
+      {!searchQuery && searchType === 'categories' && (
+        <div className="px-4 py-8">
+          <div className="text-center">
+            <div className="text-gray-400 mb-2">Select a category to browse or search for specific items</div>
+            <div className="text-sm text-gray-500">Use the search bar above to find cards and products</div>
+          </div>
+        </div>
+      )}
+
+      {/* Help Text - Legacy expansions section (now moved to expansions mode) */}
+      {!searchQuery && searchType !== 'categories' && searchType !== 'custom' && searchType !== 'expansions' && (
         <div className="px-4 py-8">
           {/* Loading State */}
           {isLoadingTrending && (
@@ -1188,7 +1669,7 @@ const Search = () => {
                 <div className="text-gray-400 mb-2">Unable to load expansions</div>
                 <button 
                   onClick={loadAllExpansionsFromSmartSearch}
-                  className="text-indigo-400 hover:text-indigo-300 text-sm"
+                  className="text-blue-400 hover:text-blue-400 text-sm"
                 >
                   Try again
                 </button>
@@ -1206,23 +1687,23 @@ const Search = () => {
                 </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-3 pb-20">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8 pb-4">
                 {trendingProducts.map((expansion, index) => {
                   return (
                     <div 
                       key={`expansion-${index}`} 
-                      className="relative border border-gray-700 rounded-lg overflow-hidden hover:border-indigo-500 hover:bg-indigo-900/10 transition-all duration-200 cursor-pointer"
+                      className="relative bg-gray-900 border border-gray-800 rounded-xl overflow-hidden transition-all duration-200 cursor-pointer hover:border-gray-700 hover:shadow-gray-900/50"
                       onClick={() => {
                         browseExpansionCards(expansion);
                       }}
                     >
                       {/* Expansion Logo/Image */}
-                      <div className="aspect-[4/3] flex items-center justify-center p-4 relative">
+                      <div className="aspect-[1/1] flex items-center justify-center p-4 relative">
                         {(expansion?.imageUrl || expansion?.image || expansion?.logo) ? (
                           <img
                             src={expansion.imageUrl || expansion.image || expansion.logo}
                             alt={expansion?.name || 'Expansion'}
-                            className="w-full h-full object-contain"
+                            className="w-3/4 h-3/4 object-contain"
                             onError={(e) => {
                               e.target.style.display = 'none';
                               e.target.nextSibling.style.display = 'flex';
@@ -1238,10 +1719,10 @@ const Search = () => {
                       </div>
                       
                       {/* Expansion Details */}
-                      <div className="p-2 space-y-1">
+                      <div className="p-3 space-y-1">
                         {/* Expansion Name */}
                         <div>
-                          <h3 className="text-white leading-tight line-clamp-2 font-bold" style={{fontSize: '12px'}}>
+                          <h3 className="text-white leading-tight line-clamp-2 font-bold text-xs">
                             {expansion?.name || 'Unknown Expansion'}
                           </h3>
                         </div>
@@ -1311,11 +1792,11 @@ const Search = () => {
                 <h2 className="text-lg font-semibold text-white">🔥 Trending Now</h2>
                 <div className="text-xs text-gray-400">Loading...</div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="border border-gray-700 rounded-lg overflow-hidden animate-pulse">
-                    <div className="aspect-[4/3] bg-gray-800"></div>
-                    <div className="p-2 space-y-1">
+                    <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden animate-pulse">
+                    <div className="aspect-[1/1] bg-gray-800"></div>
+                    <div className="p-3 space-y-1">
                       <div className="h-3 bg-gray-700 rounded w-3/4"></div>
                       <div className="h-2 bg-gray-700 rounded w-1/2"></div>
                       <div className="h-2 bg-gray-700 rounded w-1/3"></div>
@@ -1344,6 +1825,84 @@ const Search = () => {
         onClose={handleCloseAddModal}
         onSuccess={handleAddSuccess}
       />
+
+      {/* Custom Item Modal */}
+      <CustomItemModal
+        isOpen={isCustomItemModalOpen}
+        onClose={() => setIsCustomItemModalOpen(false)}
+        onSuccess={handleAddSuccess}
+      />
+
+      {/* Delete Custom Item Confirmation Modal */}
+      {showCustomItemDeleteModal && customItemToDelete && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-end modal-overlay"
+          onClick={() => {
+            setShowCustomItemDeleteModal(false);
+            setCustomItemToDelete(null);
+          }}
+        >
+          <div 
+            className="w-full bg-gray-900 border border-gray-700 rounded-t-2xl max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4">
+              <h2 className="text-sm font-semibold text-white">Delete Custom Item</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                This action cannot be undone. The item will be permanently removed from your collection.
+              </p>
+              
+              {/* Item Preview */}
+              <div className="flex items-center gap-3 mt-4 p-3 bg-gray-800 rounded-lg border border-gray-600">
+                {customItemToDelete.image_url && (
+                  <div className="w-12 h-12 flex-shrink-0">
+                    <img
+                      src={customItemToDelete.image_url}
+                      alt={customItemToDelete.name}
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-white truncate">
+                    {customItemToDelete.name}
+                  </div>
+                  <div className="text-xs text-gray-400 truncate">
+                    {customItemToDelete.set_name || 'Custom Item'}
+                  </div>
+                  {customItemToDelete.market_value_cents && (
+                    <div className="text-xs text-blue-400">
+                      ${(customItemToDelete.market_value_cents / 100).toFixed(2)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="px-6 pb-6">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowCustomItemDeleteModal(false);
+                    setCustomItemToDelete(null);
+                  }}
+                  className="flex-1 px-4 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteCustomItem}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete Item
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

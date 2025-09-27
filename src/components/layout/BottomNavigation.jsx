@@ -54,11 +54,11 @@ const BottomNavigation = ({ currentPath }) => {
             onClick={() => navigate(item.path)}
             className={`flex flex-col items-center gap-1 flex-1 py-2 transition-colors relative ${
               isActive(item.path)
-                ? 'text-indigo-500'
+                ? 'text-blue-400'
                 : 'text-gray-400 hover:text-gray-300'
             }`}
           >
-            <div className={`relative ${isActive(item.path) ? 'text-indigo-500' : 'text-gray-400'}`}>
+            <div className={`relative ${isActive(item.path) ? 'text-blue-400' : 'text-gray-400'}`}>
               {item.icon}
               {item.id === 'settings' && (
                 <NotificationBadge 
@@ -69,7 +69,7 @@ const BottomNavigation = ({ currentPath }) => {
             </div>
             <span className="text-xs">{item.label}</span>
             {isActive(item.path) && (
-              <div className="absolute -top-0.5 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-indigo-500 rounded-full"></div>
+              <div className="absolute -top-0.5 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-blue-400 rounded-full"></div>
             )}
           </button>
         ))}

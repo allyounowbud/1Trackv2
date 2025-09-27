@@ -74,3 +74,4 @@ echo   - Background Sync: /functions/v1/background-sync?action=full
 
 pause
 
+
