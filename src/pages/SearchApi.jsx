@@ -103,6 +103,7 @@ const SearchApi = () => {
   // Expansions state
   const [expansions, setExpansions] = useState([]);
   const [selectedExpansion, setSelectedExpansion] = useState(null);
+  const [expansionViewMode, setExpansionViewMode] = useState('singles'); // 'singles' or 'sealed'
   
   // Filter state
   const [filters, setFilters] = useState({
@@ -395,7 +396,7 @@ const SearchApi = () => {
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [hasMore, isLoadingMore, currentPage, searchQuery]);
+  }, [hasMore, isLoadingMore, currentPage, searchQuery, selectedExpansion, expansionViewMode]);
 
   // Load custom items when manual view is accessed
   useEffect(() => {
@@ -557,7 +558,7 @@ const SearchApi = () => {
   };
 
   // Perform search for cards in a specific expansion
-  const performExpansionSearch = async (expansionId, page = 1) => {
+  const performExpansionSearch = async (expansionId, page = 1, append = false) => {
     setIsLoading(true);
     setError(null);
 
@@ -573,28 +574,108 @@ const SearchApi = () => {
         sortOrder: filters.sortOrder
       };
 
-      const result = await scrydexApiService.searchCards('', searchOptions);
+      let results;
       
-      // Debug logging
-      console.log('Expansion search result:', result);
-      console.log('Total count from API:', result.totalCount || result.total);
-      console.log('Cards data:', result.data);
-      
-      // Format cards for display - Keep variants grouped together
-      const formattedCards = formatCardsWithVariants(result.data || []);
-      
-      // Note: Sorting is now handled server-side by the API
-
-      if (page === 1) {
-        setSearchResults(formattedCards);
+      if (expansionViewMode === 'sealed') {
+        // Search for sealed products from PriceCharting for this expansion
+        const expansionName = selectedExpansion?.name || '';
+        const expansionCode = selectedExpansion?.code || '';
+        
+        // Create a more specific search query that targets the actual expansion
+        let sealedQuery;
+        if (expansionCode) {
+          // Use set code for more precise matching (e.g., "MEG" for Mega Evolution)
+          sealedQuery = `pokemon ${expansionCode} sealed booster box elite trainer box`;
+        } else {
+          // Fallback to expansion name with pokemon prefix
+          sealedQuery = `pokemon ${expansionName} sealed booster box elite trainer box`;
+        }
+        
+        console.log(`🔍 Searching sealed products for expansion: ${expansionName} (${expansionCode})`);
+        console.log(`🔍 Full expansion object:`, selectedExpansion);
+        console.log(`🔍 Search query: ${sealedQuery}`);
+        results = await hybridSearchService.smartSearch(sealedQuery, selectedGame?.id || 'pokemon', {
+          page,
+          pageSize: 20
+        });
+        
+        // Filter to only show sealed products
+        results = {
+          ...results,
+          singles: [],
+          sealed: results.sealed || []
+        };
       } else {
-        setSearchResults(prev => [...prev, ...formattedCards]);
+        // Search for singles from Scrydex for this expansion
+        console.log(`🔍 Searching singles for expansion: ${expansionId}`);
+        const result = await scrydexApiService.searchCards('', searchOptions);
+        
+        // Format the results to match expected structure
+        results = {
+          singles: result.data || [],
+          sealed: [],
+          total: result.total || result.totalCount || 0
+        };
+      }
+      
+      // Process results based on view mode
+      let allResults = [];
+      
+      if (expansionViewMode === 'sealed') {
+        // Add sealed products from PriceCharting
+        if (results.sealed && results.sealed.length > 0) {
+          console.log('📦 Adding PriceCharting sealed products:', results.sealed.length);
+          
+          // Filter results to only include products that match the expansion
+          const expansionName = selectedExpansion?.name?.toLowerCase() || '';
+          const expansionCode = selectedExpansion?.code?.toLowerCase() || '';
+          
+          const filteredSealed = results.sealed.filter(product => {
+            const productName = product.name?.toLowerCase() || '';
+            const productSetName = product.set_name?.toLowerCase() || '';
+            
+            // Check if the product name or set name contains the expansion name or code
+            return productName.includes(expansionName) || 
+                   productName.includes(expansionCode) ||
+                   productSetName.includes(expansionName) ||
+                   productSetName.includes(expansionCode);
+          });
+          
+          console.log(`📦 Filtered sealed products for ${expansionName}: ${filteredSealed.length} of ${results.sealed.length}`);
+          
+          allResults.push(...filteredSealed.map(product => ({
+            ...product,
+            source: 'pricecharting'
+          })));
+        }
+      } else {
+        // Add singles from Scrydex
+        if (results.singles && results.singles.length > 0) {
+          console.log('📱 Adding Scrydex singles:', results.singles.length);
+          const formattedSingles = formatCardsWithVariants(results.singles);
+          allResults.push(...formattedSingles.map(card => ({
+            ...card,
+            source: 'scrydex'
+          })));
+        }
+      }
+      
+      console.log('📦 Combined results:', allResults.length);
+      console.log('📦 Result sources:', allResults.map(r => r.source));
+
+      // Enhance results with TCGGo images (only for PriceCharting items)
+      const enhancedResults = await enhanceResultsWithTcgGoImages(allResults);
+
+      if (append) {
+        setSearchResults(prev => [...prev, ...enhancedResults]);
+      } else {
+        setSearchResults(enhancedResults);
       }
 
-      const totalCount = result.total || result.totalCount || 0;
-      console.log('Setting total results to:', totalCount);
-      setTotalResults(totalCount);
-      setHasMore(formattedCards.length === searchOptions.pageSize);
+      // Set pagination info
+      const totalFromResults = results.total || (results.singles?.length || 0) + (results.sealed?.length || 0);
+      setTotalResults(totalFromResults);
+      setHasMore(enhancedResults.length >= 20 && (page * 20) < totalFromResults);
       setCurrentPage(page);
 
     } catch (error) {
@@ -742,11 +823,17 @@ const SearchApi = () => {
 
   // Load more results for infinite scroll
   const loadMoreResults = async () => {
-    if (!hasMore || isLoadingMore || !searchQuery.trim()) return;
+    if (!hasMore || isLoadingMore) return;
     
     setIsLoadingMore(true);
     try {
-      await performSearch(searchQuery, currentPage + 1, true);
+      if (selectedExpansion) {
+        // Load more results for expansion search
+        await performExpansionSearch(selectedExpansion.id, currentPage + 1, true);
+      } else if (searchQuery.trim()) {
+        // Load more results for regular search
+        await performSearch(searchQuery, currentPage + 1, true);
+      }
     } catch (error) {
       console.error('Error loading more results:', error);
     } finally {
@@ -1147,11 +1234,45 @@ const SearchApi = () => {
                     onClick={() => {
                       setSelectedExpansion(null);
                       setCurrentView('expansions');
+                      setExpansionViewMode('singles'); // Reset to singles view
                     }}
                     className="text-gray-400 hover:text-white transition-colors"
                   >
                     <X size={20} />
                   </button>
+                </div>
+                
+                {/* Singles/Sealed Toggle */}
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="text-sm text-gray-400">View:</span>
+                  <div className="flex bg-gray-800 rounded-lg p-1">
+                    <button
+                      onClick={() => {
+                        setExpansionViewMode('singles');
+                        performExpansionSearch(selectedExpansion.id, 1, false);
+                      }}
+                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                        expansionViewMode === 'singles'
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      Singles
+                    </button>
+                    <button
+                      onClick={() => {
+                        setExpansionViewMode('sealed');
+                        performExpansionSearch(selectedExpansion.id, 1, false);
+                      }}
+                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                        expansionViewMode === 'sealed'
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      Sealed
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
