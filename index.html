@@ -30,9 +30,14 @@
     <!-- Preconnect to external domains -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Prevent external services from scanning -->
+    <meta name="robots" content="noindex, nofollow, nosnippet, noarchive" />
+    <meta name="googlebot" content="noindex, nofollow, nosnippet, noarchive" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+

@@ -9,7 +9,9 @@
  * @returns {string} - Cleaned item name without redundant set name
  */
 export const getCleanItemName = (itemName, setName) => {
-  if (!itemName || !setName) return itemName;
+  // Ensure both parameters are strings
+  if (!itemName || typeof itemName !== 'string') return itemName || '';
+  if (!setName || typeof setName !== 'string') return itemName;
   
   // Check if the item name starts with the set name
   if (itemName.toLowerCase().startsWith(setName.toLowerCase())) {
@@ -30,18 +32,22 @@ export const getCleanItemName = (itemName, setName) => {
 export const getItemDisplayName = (item) => {
   if (!item) return '';
   
+  // Ensure item.name is a string
+  const itemName = typeof item.name === 'string' ? item.name : '';
+  if (!itemName) return '';
+  
   // If item has both name and set, try to clean the name
-  if (item.name && item.set) {
-    return getCleanItemName(item.name, item.set);
+  if (itemName && item.set && typeof item.set === 'string') {
+    return getCleanItemName(itemName, item.set);
   }
   
   // If item has set_name instead of set, use that
-  if (item.name && item.set_name) {
-    return getCleanItemName(item.name, item.set_name);
+  if (itemName && item.set_name && typeof item.set_name === 'string') {
+    return getCleanItemName(itemName, item.set_name);
   }
   
   // Fallback to original name
-  return item.name || '';
+  return itemName;
 };
 
 /**
@@ -51,7 +57,10 @@ export const getItemDisplayName = (item) => {
  */
 export const getItemSetName = (item) => {
   if (!item) return '';
-  return item.set || item.set_name || '';
+  
+  // Ensure we return a string
+  const setName = item.set || item.set_name || '';
+  return typeof setName === 'string' ? setName : '';
 };
 
 /**
@@ -66,8 +75,13 @@ export const getCardDisplayName = (card) => {
   const cleanName = getItemDisplayName(card);
   
   // Check if it's a single card (not a sealed product) and has a card number
-  if (card.type !== 'product' && card.details?.cardNumber) {
+  if (card.type !== 'product' && card.details?.cardNumber && typeof card.details.cardNumber === 'string') {
     return `${cleanName} #${card.details.cardNumber}`;
+  }
+  
+  // Also check for cardNumber directly on the card object
+  if (card.type !== 'product' && card.cardNumber && typeof card.cardNumber === 'string') {
+    return `${cleanName} #${card.cardNumber}`;
   }
   
   // For sealed products or cards without numbers, return clean name

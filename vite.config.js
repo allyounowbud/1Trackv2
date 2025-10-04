@@ -7,18 +7,9 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true, // Fail if port 5173 is not available
-    proxy: {
-      '/api/pokemon-tcg': {
-        target: 'https://api.pokemontcg.io/v2',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/pokemon-tcg/, ''),
-        configure: (proxy, options) => {
-          proxy.on('proxyReq', (proxyReq, req, res) => {
-            // Add API key header
-            proxyReq.setHeader('X-Api-Key', '96734358-0300-4fdd-a895-140a21f95a50');
-          });
-        }
-      }
+    hmr: {
+      port: 5173,
+      host: 'localhost'
     }
   },
   build: {

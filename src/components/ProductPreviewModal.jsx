@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
 import { getCleanItemName } from '../utils/nameUtils';
+import translationUtils from '../utils/translationUtils.js';
+const { processLocalizedCard, getLocalizedImageUrl } = translationUtils;
+import { useLanguage } from '../contexts/LanguageContext';
 import DesktopSideMenu from './DesktopSideMenu';
+import CachedImage from './CachedImage';
 
 const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) => {
   const [quantity, setQuantity] = useState(1);
   const [selectedTimeRange, setSelectedTimeRange] = useState('1M');
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'prices', 'details'
+  const { preferredLanguage } = useLanguage();
 
   const formatPrice = (value) => {
     if (!value || value === 0) return 'Unavailable';
@@ -16,14 +21,6 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
     if (!cents || cents === 0) return 'Unavailable';
     return `$${(cents / 100).toFixed(2)}`;
   };
-
-  // Debug logging for market value
-  console.log(`🔍 ProductPreviewModal - Product:`, product);
-  console.log(`🔍 ProductPreviewModal - Product name: "${product?.name || product?.product_name || 'undefined'}"`);
-  console.log(`🔍 ProductPreviewModal - marketValue: $${product?.marketValue || product?.price || 'undefined'}`);
-  console.log(`🔍 ProductPreviewModal - prices source: ${product?.prices?.source || 'undefined'}`);
-  console.log(`🔍 ProductPreviewModal - priceCharting loose: $${product?.prices?.priceCharting?.loose || 'undefined'}`);
-  console.log(`🔍 ProductPreviewModal - priceCharting new: $${product?.prices?.priceCharting?.new || 'undefined'}`);
 
   const handleAddToCollection = () => {
     if (onAddToCollection) {
@@ -49,13 +46,78 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
 
   if (!isOpen || !product) return null;
 
+  // Process the card with localization
+  const localizedProduct = processLocalizedCard(product, preferredLanguage);
+  
+  // Use localized display names
+  const productName = localizedProduct?.displayName || localizedProduct?.name || 'Unknown Product';
+  const productSet = localizedProduct?.displayExpansion || localizedProduct?.set_name || 'Unknown Set';
+  const itemName = getCleanItemName(productName, productSet);
+  
+  // Get localized image URL
+  const imageUrl = getLocalizedImageUrl(localizedProduct, 'large');
+
+  // Extract comprehensive pricing data from product
+  const prices = product.prices || {};
+  const cardMarketPrices = prices.cardMarket || {};
+  const tcgPlayerPrices = prices.tcgPlayer || {};
+  const priceChartingPrices = prices.priceCharting || {};
+
+  // Get market value from different possible sources
+  let marketValue = product.marketValue || product.price || product.loose_price || product.new_price || 0;
+  let priceSource = prices.source || 'unknown';
+  
+  // Handle Scrydex pricing structure if available
+  if (product.priceData) {
+    marketValue = product.priceData.market || product.priceData.low || product.priceData.price || marketValue;
+    priceSource = 'scrydex';
+  }
+  
+  // Handle variants pricing structure
+  if (product.variants && Array.isArray(product.variants)) {
+    for (const variant of product.variants) {
+      if (variant.prices && Array.isArray(variant.prices) && variant.prices.length > 0) {
+        const variantPrice = variant.prices[0];
+        marketValue = variantPrice.market || variantPrice.low || variantPrice.price || marketValue;
+        priceSource = 'scrydex-variants';
+        break;
+      }
+    }
+  }
+  
+  // Handle raw_prices and graded_prices arrays
+  if (product.raw_prices && Array.isArray(product.raw_prices) && product.raw_prices.length > 0) {
+    const rawPrice = product.raw_prices[0];
+    marketValue = rawPrice.market || rawPrice.low || rawPrice.price || marketValue;
+    priceSource = 'scrydex-raw';
+  }
+  
+  if (product.graded_prices && Array.isArray(product.graded_prices) && product.graded_prices.length > 0) {
+    const gradedPrice = product.graded_prices[0];
+    marketValue = gradedPrice.market || gradedPrice.low || gradedPrice.price || marketValue;
+    priceSource = 'scrydex-graded';
+  }
+  
+  // Debug: Log what we actually have
+  console.log('🔍 ProductPreviewModal - Product data:', {
+    name: product.name,
+    prices: product.prices,
+    priceData: product.priceData,
+    marketValue: marketValue,
+    priceSource: priceSource
+  });
+  
+  // Check if we have valid pricing data
+  const hasPricing = marketValue > 0 || (product.raw_prices && product.raw_prices.length > 0);
+  const hasDetailedPricing = product.raw_prices && product.raw_prices.length > 0;
+
+  // Price change calculation
+  const priceChange = product.trend || 0;
+  const dollarChange = product.dollarChange || 0;
+  const isPositive = priceChange > 0;
+
   // Check if we're on desktop
   const isDesktop = window.innerWidth >= 1024;
-
-  // Get clean item name and set name - handle different possible field names
-  const productName = product?.name || product?.product_name || product?.title || 'Unknown Product';
-  const productSet = product?.set || product?.set_name || product?.expansion || '';
-  const itemName = getCleanItemName(productName, productSet);
 
   if (isDesktop) {
     return (
@@ -64,9 +126,9 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
           {/* Product Image */}
           <div className="flex justify-center">
             <div className="w-32 h-32 bg-gray-800 rounded-xl flex items-center justify-center">
-              {product.imageUrl ? (
-                <img 
-                  src={product.imageUrl} 
+              {imageUrl ? (
+                <CachedImage 
+                  src={imageUrl} 
                   alt={itemName}
                   className="w-full h-full object-contain rounded-xl"
                 />
@@ -80,16 +142,20 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
           <div className="text-center space-y-2">
             <h3 className="text-xl font-semibold text-white">{itemName}</h3>
             <p className="text-gray-400">{productSet}</p>
-            {marketValue > 0 && (
-              <div className="flex items-center justify-center space-x-2">
-                <span className="text-2xl font-bold text-blue-400">${marketValue.toFixed(2)}</span>
-                {priceChange !== 0 && (
-                  <span className={`text-sm ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                    {isPositive ? '+' : ''}{priceChange.toFixed(1)}%
-                  </span>
-                )}
-              </div>
-            )}
+            <div className="flex items-center justify-center space-x-2">
+              {marketValue > 0 ? (
+                <>
+                  <span className="text-2xl font-bold text-blue-400">${marketValue.toFixed(2)}</span>
+                  {priceChange !== 0 && (
+                    <span className={`text-sm ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                      {isPositive ? '+' : ''}{priceChange.toFixed(1)}%
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-lg text-gray-400">Price not available</span>
+              )}
+            </div>
           </div>
 
           {/* Quantity Selector */}
@@ -125,21 +191,7 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
   }
 
   // Mobile version (original modal)
-  const setName = productSet;
-
-  // Extract comprehensive pricing data from product
-  const prices = product.prices || {};
-  const cardMarketPrices = prices.cardMarket || {};
-  const tcgPlayerPrices = prices.tcgPlayer || {};
-  const priceChartingPrices = prices.priceCharting || {};
-
-  // Get market value from different possible sources
-  const marketValue = product.marketValue || product.price || product.loose_price || product.new_price || 0;
-
-  // Price change calculation
-  const priceChange = product.trend || 0;
-  const dollarChange = product.dollarChange || 0;
-  const isPositive = priceChange > 0;
+  // setName is already declared above, using productSet directly
 
   // Generate realistic price history data
   const generatePriceHistory = (timeRange) => {
@@ -236,15 +288,11 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
         {/* Product Image */}
         <div className="flex justify-center pt-6 pb-4">
           <div className="w-80 h-96 overflow-hidden">
-            {(product.imageUrl || product.image_url || product.image) ? (
-              <img
-                src={product.imageUrl || product.image_url || product.image}
+            {imageUrl ? (
+              <CachedImage
+                src={imageUrl}
                 alt={productName || 'Product'}
                 className="w-full h-full object-contain"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'flex';
-                }}
               />
             ) : null}
             <div className="hidden w-full h-full items-center justify-center text-gray-400">
@@ -264,7 +312,7 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
           
           {/* Set Name and Type */}
           <div className="text-sm text-gray-400 mb-6">
-            {setName} • {product.type === 'product' ? 'Sealed Product' : (product.rarity || 'Card')}
+            {productSet} • {product.type === 'product' ? 'Sealed Product' : (product.rarity || 'Card')}
           </div>
 
           {/* Current Market Price and Trend */}
@@ -272,12 +320,12 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm text-gray-400">
                 Current Market Value
-                {prices.source === 'pricecharting' && priceChartingPrices.loose > 0 && (
+                {priceSource === 'pricecharting' && priceChartingPrices.loose > 0 && (
                   <span className="ml-2 text-xs text-indigo-400">(Loose Price)</span>
                 )}
               </span>
               <span className="text-2xl font-bold text-white">
-                {formatPrice(marketValue)}
+                {marketValue > 0 ? formatPrice(marketValue) : 'Price not available'}
               </span>
             </div>
             
@@ -293,9 +341,9 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
               </div>
             )}
             
-            {prices.source && (
+            {priceSource && priceSource !== 'unknown' && (
               <div className="mt-2 text-xs text-gray-500">
-                Data source: {prices.source}
+                Data source: {priceSource}
               </div>
             )}
           </div>
@@ -487,6 +535,186 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
                 </div>
               )}
 
+              {/* Raw Prices */}
+              {product.raw_prices && product.raw_prices.length > 0 && (
+                <div className="bg-gray-900 rounded-lg p-5 border border-gray-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">Raw Prices</h3>
+                    <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">Ungraded</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {product.raw_prices.map((price, index) => (
+                      <div key={index} className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-400 mb-1">
+                          {price.condition || 'Condition'} {price.grade ? `Grade ${price.grade}` : ''}
+                        </div>
+                        <div className="space-y-1">
+                          {price.market > 0 && (
+                            <div className="text-sm font-bold text-white">Market: {formatPrice(price.market)}</div>
+                          )}
+                          {price.low > 0 && (
+                            <div className="text-xs text-gray-300">Low: {formatPrice(price.low)}</div>
+                          )}
+                          {price.high > 0 && (
+                            <div className="text-xs text-gray-300">High: {formatPrice(price.high)}</div>
+                          )}
+                          {price.mid > 0 && (
+                            <div className="text-xs text-gray-300">Mid: {formatPrice(price.mid)}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Graded Prices */}
+              {product.graded_prices && product.graded_prices.length > 0 && (
+                <div className="bg-gray-900 rounded-lg p-5 border border-gray-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">Graded Prices</h3>
+                    <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">PSA/BGS/CGC</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {product.graded_prices.map((price, index) => (
+                      <div key={index} className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-400 mb-1">
+                          {price.company || 'Grading Co'} {price.grade ? `Grade ${price.grade}` : ''}
+                        </div>
+                        <div className="space-y-1">
+                          {price.market > 0 && (
+                            <div className="text-sm font-bold text-white">Market: {formatPrice(price.market)}</div>
+                          )}
+                          {price.low > 0 && (
+                            <div className="text-xs text-gray-300">Low: {formatPrice(price.low)}</div>
+                          )}
+                          {price.high > 0 && (
+                            <div className="text-xs text-gray-300">High: {formatPrice(price.high)}</div>
+                          )}
+                          {price.mid > 0 && (
+                            <div className="text-xs text-gray-300">Mid: {formatPrice(price.mid)}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Variants Pricing */}
+              {product.variants && product.variants.some(v => v.prices && v.prices.length > 0) && (
+                <div className="bg-gray-900 rounded-lg p-5 border border-gray-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">Variants</h3>
+                    <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">Different Versions</span>
+                  </div>
+                  <div className="space-y-3">
+                    {product.variants.filter(v => v.prices && v.prices.length > 0).map((variant, index) => (
+                      <div key={index} className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-sm font-medium text-white mb-2">{variant.name}</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {variant.prices.map((price, priceIndex) => (
+                            <div key={priceIndex} className="text-xs">
+                              <div className="text-gray-400">
+                                {price.condition || 'Condition'} {price.grade ? `Grade ${price.grade}` : ''}
+                              </div>
+                              <div className="text-white font-medium">
+                                {price.market > 0 ? formatPrice(price.market) : 
+                                 price.low > 0 ? formatPrice(price.low) : 
+                                 price.high > 0 ? formatPrice(price.high) : 'No Price'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Scrydex Prices */}
+              {product.priceData && (
+                <div className="bg-gray-900 rounded-lg p-5 border border-gray-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">Scrydex Summary</h3>
+                    <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">{product.priceData.currency || 'USD'}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {product.priceData.market > 0 && (
+                      <div className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-400 mb-1">Market Price</div>
+                        <div className="text-lg font-bold text-white">{formatPrice(product.priceData.market)}</div>
+                      </div>
+                    )}
+                    {product.priceData.low > 0 && (
+                      <div className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-400 mb-1">Low Price</div>
+                        <div className="text-lg font-bold text-white">{formatPrice(product.priceData.low)}</div>
+                      </div>
+                    )}
+                    {product.priceData.mid > 0 && (
+                      <div className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-400 mb-1">Mid Price</div>
+                        <div className="text-lg font-bold text-white">{formatPrice(product.priceData.mid)}</div>
+                      </div>
+                    )}
+                    {product.priceData.high > 0 && (
+                      <div className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-400 mb-1">High Price</div>
+                        <div className="text-lg font-bold text-white">{formatPrice(product.priceData.high)}</div>
+                      </div>
+                    )}
+                    {product.priceData.condition && (
+                      <div className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-400 mb-1">Condition</div>
+                        <div className="text-lg font-bold text-white">{product.priceData.condition}</div>
+                      </div>
+                    )}
+                    {product.priceData.grade && (
+                      <div className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-400 mb-1">Grade</div>
+                        <div className="text-lg font-bold text-white">{product.priceData.grade}</div>
+                      </div>
+                    )}
+                    {product.priceData.company && (
+                      <div className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-400 mb-1">Grading Company</div>
+                        <div className="text-lg font-bold text-white">{product.priceData.company}</div>
+                      </div>
+                    )}
+                    {product.priceData.type && (
+                      <div className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-400 mb-1">Type</div>
+                        <div className="text-lg font-bold text-white">{product.priceData.type}</div>
+                      </div>
+                    )}
+                  </div>
+                  {product.priceData.trends && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-semibold text-white mb-2">Price Trends</h4>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {product.priceData.trends.days_7 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">7 days:</span>
+                            <span className={`${product.priceData.trends.days_7.percent_change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {product.priceData.trends.days_7.percent_change >= 0 ? '+' : ''}{product.priceData.trends.days_7.percent_change.toFixed(2)}%
+                            </span>
+                          </div>
+                        )}
+                        {product.priceData.trends.days_30 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">30 days:</span>
+                            <span className={`${product.priceData.trends.days_30.percent_change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {product.priceData.trends.days_30.percent_change >= 0 ? '+' : ''}{product.priceData.trends.days_30.percent_change.toFixed(2)}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* PriceCharting Prices (for sealed products) */}
               {(priceChartingPrices.new > 0 || priceChartingPrices.cib > 0 || priceChartingPrices.loose > 0 || priceChartingPrices.used > 0 || priceChartingPrices.complete > 0) && (
                 <div className="bg-gray-900 rounded-lg p-5 border border-gray-700">
@@ -638,6 +866,17 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
 
           {activeTab === 'details' && (
             <div className="space-y-6">
+              {/* Debug Information */}
+              <div className="bg-gray-900 rounded-lg p-5 border border-gray-700">
+                <h3 className="text-lg font-semibold text-white mb-4">Debug Information</h3>
+                <div className="space-y-2 text-xs">
+                  <div className="text-gray-400">Raw Product Data:</div>
+                  <pre className="text-gray-300 bg-gray-800 p-2 rounded text-xs overflow-auto max-h-40">
+                    {JSON.stringify(product, null, 2)}
+                  </pre>
+                </div>
+              </div>
+
               {/* Product Details */}
               <div className="bg-gray-900 rounded-lg p-5 border border-gray-700">
                 <h3 className="text-lg font-semibold text-white mb-4">Product Information</h3>
@@ -648,7 +887,7 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-400">Set</span>
-                    <span className="text-sm text-white">{setName}</span>
+                    <span className="text-sm text-white">{productSet}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-400">Type</span>

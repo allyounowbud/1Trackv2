@@ -1,14 +1,13 @@
 import { QueryClient } from '@tanstack/react-query';
-import { API_CONFIG } from '../config/apiConfig.js';
 
 // Create a configured QueryClient with optimized caching
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // Data stays fresh for 10 minutes
-      staleTime: API_CONFIG.reactQueryStaleTime,
+      staleTime: 10 * 60 * 1000, // 10 minutes
       // Cache data for 30 minutes
-      cacheTime: API_CONFIG.reactQueryCacheTime,
+      cacheTime: 30 * 60 * 1000, // 30 minutes
       // Retry failed requests 2 times
       retry: 2,
       // Don't refetch on window focus (reduces unnecessary calls)
@@ -59,7 +58,7 @@ export const prefetchQuery = async (queryKey, queryFn, options = {}) => {
   await queryClient.prefetchQuery({
     queryKey,
     queryFn,
-    staleTime: API_CONFIG.reactQueryStaleTime,
+    staleTime: 10 * 60 * 1000, // 10 minutes
     ...options,
   });
 };

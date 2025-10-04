@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getProductImages } from '../services/hybridImageService.js';
+// Image service removed - using Scrydex API only
 import { supabase } from '../lib/supabaseClient.js';
 
 export default function ProductSearchDropdown({ 
@@ -38,30 +38,10 @@ export default function ProductSearchDropdown({
     }
   };
 
-  // Function to fetch images for a product
+  // Function to fetch images for a product (disabled - using Scrydex API only)
   const fetchProductImages = async (productName, consoleName) => {
-    const cacheKey = `${productName}_${consoleName || ''}`;
-    
-    // Don't fetch if already loading or cached
-    if (loadingImages.has(cacheKey) || productImages.has(cacheKey)) {
-      return;
-    }
-
-    setLoadingImages(prev => new Set(prev).add(cacheKey));
-
-    try {
-      const images = await getProductImages(productName, consoleName);
-      setProductImages(prev => new Map(prev).set(cacheKey, images));
-    } catch (error) {
-      console.error('Error fetching images for', productName, error);
-      setProductImages(prev => new Map(prev).set(cacheKey, []));
-    } finally {
-      setLoadingImages(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(cacheKey);
-        return newSet;
-      });
-    }
+    // Image fetching disabled - will use Scrydex API images when integrated
+    return;
   };
 
   // Function to get cached images for a product

@@ -1,17 +1,17 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModalProvider } from './contexts/ModalContext';
+import { LanguageProvider } from './contexts/LanguageContext';
 import ResponsiveLayout from './components/layout/ResponsiveLayout';
 import Collection from './pages/Collection';
-import Search from './pages/Search';
+import SearchApi from './pages/SearchApi';
+import Shipments from './pages/Shipments';
 import Analytics from './pages/Analytics';
 import Orders from './pages/Orders';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import LoadingScreen from './components/LoadingScreen';
-import badgeService from './services/badgeService';
 import './index.css';
 
 // Auth Guard Component
@@ -30,52 +30,35 @@ function AuthGuard({ children }) {
 }
 
 function App() {
-  useEffect(() => {
-    // Listen for service worker messages
-    const handleMessage = (event) => {
-      if (event.data?.type === 'MARK_NOTIFICATION_READ') {
-        badgeService.markAsRead(event.data.notificationId);
-        // Dispatch custom event to update UI
-        window.dispatchEvent(new CustomEvent('badge-updated'));
-      }
-    };
-
-    // Add message listener
-    navigator.serviceWorker?.addEventListener('message', handleMessage);
-
-    // Cleanup old notifications on app start
-    badgeService.cleanupOldNotifications();
-
-    return () => {
-      navigator.serviceWorker?.removeEventListener('message', handleMessage);
-    };
-  }, []);
 
   return (
     <ThemeProvider>
       <AuthProvider>
-        <ModalProvider>
-          <Router>
-            <div className="min-h-screen transition-colors duration-200">
-              <Routes>
-                <Route path="/login" element={<Login />} />
-                <Route path="/*" element={
-                  <AuthGuard>
-                    <ResponsiveLayout>
-                      <Routes>
-                        <Route path="/" element={<Collection />} />
-                        <Route path="/search" element={<Search />} />
-                        <Route path="/analytics" element={<Analytics />} />
-                        <Route path="/orders" element={<Orders />} />
-                        <Route path="/settings" element={<Settings />} />
-                      </Routes>
-                    </ResponsiveLayout>
-                  </AuthGuard>
-                } />
-              </Routes>
-            </div>
-          </Router>
-        </ModalProvider>
+        <LanguageProvider>
+          <ModalProvider>
+            <Router>
+              <div className="min-h-screen transition-colors duration-200">
+                <Routes>
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/*" element={
+                    <AuthGuard>
+                      <ResponsiveLayout>
+                        <Routes>
+                          <Route path="/" element={<Collection />} />
+                          <Route path="/search" element={<SearchApi />} />
+                          <Route path="/shipments" element={<Shipments />} />
+                          <Route path="/analytics" element={<Analytics />} />
+                          <Route path="/orders" element={<Orders />} />
+                          <Route path="/settings" element={<Settings />} />
+                        </Routes>
+                      </ResponsiveLayout>
+                    </AuthGuard>
+                  } />
+                </Routes>
+              </div>
+            </Router>
+          </ModalProvider>
+        </LanguageProvider>
       </AuthProvider>
     </ThemeProvider>
   );

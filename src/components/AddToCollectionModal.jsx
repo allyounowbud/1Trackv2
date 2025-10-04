@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { marketplaceRetailerService } from '../services/marketplaceRetailerService';
+// Marketplace retailer service removed - using Scrydex API only
 import { getCleanItemName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
-import notificationService from '../services/notificationService';
+// Notification service removed - using Scrydex API only
 import DesktopSideMenu from './DesktopSideMenu';
 
 const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
@@ -241,13 +241,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       
       // Wait for processing animation, then trigger navigation
       setTimeout(() => {
-        // Show notification for successful addition
-        if (notificationService.isEnabled()) {
-          const itemName = product?.source === 'manual' ? product?.name : (getCleanItemName(product?.name, product?.set) || product?.name || 'Item');
-          notificationService.showCollectionUpdate(itemName, 'added').catch(error => {
-            console.warn('Failed to show collection update notification:', error);
-          });
-        }
+        // Notification service removed - using Scrydex API only
         
         // Call onSuccess to trigger collection refresh and navigation
         onSuccess?.(successInfo);

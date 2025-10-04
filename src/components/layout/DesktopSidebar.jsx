@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import NotificationBadge from '../NotificationBadge';
 
 const DesktopSidebar = ({ currentPath, onExpandedChange }) => {
   const navigate = useNavigate();
@@ -135,12 +134,7 @@ const DesktopSidebar = ({ currentPath, onExpandedChange }) => {
                   }`}>
                     {item.icon}
                   </div>
-                  {item.id === 'settings' && (
-                    <NotificationBadge 
-                      className="absolute -top-1 -right-1" 
-                      size="xs"
-                    />
-                  )}
+                  {/* Notification badge removed - using Scrydex API only */}
                 </div>
                 {isExpanded && (
                   <span className="font-semibold text-sm truncate">{item.label}</span>

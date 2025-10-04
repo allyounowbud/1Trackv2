@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { dataServiceV2 as dataService } from '../services/dataServiceV2';
+// Data service removed - using direct Supabase calls
 
 export const useCollection = () => {
   const queryClient = useQueryClient();
