@@ -75,6 +75,19 @@ const Collection = () => {
   };
 
   const handleLongPress = (itemId) => {
+    const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+    
+    // If there's only 1 item, show the normal menu instead of entering selection mode
+    if (totalItems === 1) {
+      console.log('📱 Single item - showing normal menu instead of selection mode');
+      setSelectedItemId(itemId);
+      setShowItemMenu(true);
+      openModal();
+      return;
+    }
+    
+    // For multiple items, enter selection mode
+    console.log('✅ Multiple items - entering selection mode');
     setIsSelectionMode(true);
     handleItemSelect(itemId);
   };
@@ -85,9 +98,14 @@ const Collection = () => {
   };
 
   const selectAll = () => {
-    const allItemIds = new Set((collectionData.items || []).map(item => item.id));
-    setSelectedItems(allItemIds);
-    setIsSelectionMode(true);
+    const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+    
+    // Only allow select all if there are multiple items
+    if (totalItems > 1) {
+      const allItemIds = new Set((collectionData.items || []).map(item => item.id));
+      setSelectedItems(allItemIds);
+      setIsSelectionMode(true);
+    }
   };
 
   // Click outside handler for dropdowns
@@ -100,6 +118,7 @@ const Collection = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
 
   // Fetch data with cache-busting for PWA
   const { data: orders = [], isLoading: ordersLoading, isFetching: ordersFetching, refetch: refetchOrders } = useQuery({
@@ -481,6 +500,16 @@ const Collection = () => {
       items
     };
   })();
+
+  // Exit selection mode if there's only 1 item
+  useEffect(() => {
+    const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+    if (totalItems <= 1 && isSelectionMode) {
+      console.log('🚫 Exiting selection mode - only 1 item available');
+      setIsSelectionMode(false);
+      setSelectedItems(new Set());
+    }
+  }, [collectionData.items, selectedFilter, isSelectionMode]);
 
   // Generate real chart data based on actual order history
   const generateChartData = () => {
@@ -975,17 +1004,20 @@ const Collection = () => {
                    <div 
                      key={item.id} 
                      className={`relative bg-gray-900 border border-gray-800 rounded-xl overflow-hidden transition-all duration-200 ${
-                       isSelected 
+                       isSelected && isSelectionMode && (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length > 1
                          ? 'border-indigo-400 bg-indigo-900/20 shadow-indigo-400/25' 
                          : 'hover:bg-indigo-900/30 hover:border-indigo-400 hover:shadow-indigo-400/25'
                      }`}
                      onTouchStart={(e) => {
-                       longPressTriggeredRef.current = false;
-                       longPressRef.current = setTimeout(() => {
-                         handleLongPress(item.id);
-                         longPressTriggeredRef.current = true;
-                         longPressRef.current = null;
-                       }, 500);
+                       const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+                       if (totalItems > 1) {
+                         longPressTriggeredRef.current = false;
+                         longPressRef.current = setTimeout(() => {
+                           handleLongPress(item.id);
+                           longPressTriggeredRef.current = true;
+                           longPressRef.current = null;
+                         }, 500);
+                       }
                      }}
                      onTouchEnd={(e) => {
                        if (longPressRef.current) {
@@ -994,7 +1026,8 @@ const Collection = () => {
                        }
                      }}
                      onMouseDown={(e) => {
-                       if (e.button === 0) { // Left click
+                       const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+                       if (e.button === 0 && totalItems > 1) { // Left click and multiple items
                          longPressTriggeredRef.current = false;
                          longPressRef.current = setTimeout(() => {
                            handleLongPress(item.id);
@@ -1018,8 +1051,9 @@ const Collection = () => {
                          return;
                        }
                        
-                       // Only handle click if we're already in selection mode
-                       if (isSelectionMode) {
+                       // Only handle click if we're already in selection mode AND there are multiple items
+                       const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+                       if (isSelectionMode && totalItems > 1) {
                          e.preventDefault();
                          handleItemSelect(item.id);
                        }
@@ -1085,7 +1119,7 @@ const Collection = () => {
                     </div>
                     
                     {/* Menu Button / Check Icon - Bottom Right */}
-                    {isSelected ? (
+                    {isSelected && isSelectionMode && (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length > 1 ? (
                       <div className="text-blue-400">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -1161,8 +1195,13 @@ const Collection = () => {
         />
       )}
 
-      {/* Bulk Actions Bar - Fixed at bottom */}
-      {isSelectionMode && (
+      {/* Bulk Actions Bar - Fixed at bottom - Only show if more than 1 item */}
+      {(() => {
+        const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+        const shouldShow = isSelectionMode && totalItems > 1;
+        console.log('🔍 Bulk bar check:', { isSelectionMode, totalItems, shouldShow });
+        return shouldShow;
+      })() && (
         <div className="fixed bottom-16 left-0 right-0 modal-overlay">
           <div className="bg-blue-500 border-t border-blue-400 px-4 py-3">
             <div className="flex items-center justify-between">
@@ -1263,8 +1302,8 @@ const Collection = () => {
         </div>
       )}
 
-      {/* Individual Item Menu Overlay */}
-      {showItemMenu && (
+      {/* Individual Item Menu Overlay - Hide when bulk actions bar is showing */}
+      {showItemMenu && !isSelectionMode && (
         <div 
           className="fixed inset-0 bg-black/50 flex items-end modal-overlay"
           onClick={() => {
