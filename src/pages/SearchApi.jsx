@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Loader2, Star, X, ChevronDown, Plus, MoreVertical } from 'lucide-react';
 import scrydexApiService from '../services/scrydexApiService';
+import hybridSearchService from '../services/hybridSearchService';
+import tcggoImageService from '../services/tcggoImageService';
 import CardPreviewModal from '../components/CardPreviewModal';
 import CustomItemModal from '../components/CustomItemModal';
 import { supabase } from '../lib/supabaseClient';
@@ -72,11 +74,13 @@ const SearchApi = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [servicesInitialized, setServicesInitialized] = useState(false);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   
   // Modal state
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
@@ -112,9 +116,10 @@ const SearchApi = () => {
   // Language filter state
   const [languageFilter, setLanguageFilter] = useState('english'); // 'english', 'japanese'
 
-  // Refs for infinite scroll
+  // Refs for infinite scroll and search debounce
   const loadingRef = useRef(null);
   const observerRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
 
   // Helper function to render game icon
   const renderGameIcon = (iconUrl, className = "w-4 h-4") => {
@@ -272,6 +277,57 @@ const SearchApi = () => {
     return formattedCards;
   };
 
+  // Enhance search results with TCGGo images for better image quality
+  const enhanceResultsWithTcgGoImages = async (results) => {
+    console.log('🖼️ Enhancing results with TCGGo images...');
+    console.log('🖼️ Input results:', results.length, 'items');
+    console.log('🖼️ Selected game:', selectedGame);
+    
+    const enhancedResults = await Promise.all(results.map(async (card, index) => {
+      console.log(`🖼️ Processing card ${index + 1}/${results.length}: ${card.name}`);
+      console.log(`🖼️ Card source: ${card.source}, image_url: ${card.image_url}`);
+      
+      // Only enhance PriceCharting results (sealed products) with TCGGo images
+      if (card.source !== 'pricecharting') {
+        console.log(`🖼️ Skipping card ${card.name} - not a PriceCharting result (source: ${card.source})`);
+        return card;
+      }
+
+      // Skip if already has a good image from TCGGo
+      if (card.image_url?.includes('tcggo.com')) {
+        console.log(`🖼️ Skipping card ${card.name} - already has TCGGo image`);
+        return card;
+      }
+
+      try {
+        // Try to find a better image from TCGGo for PriceCharting items
+        console.log(`🖼️ Searching TCGGo for PriceCharting item: ${card.name}`);
+        const setName = card.set_name || card.expansion_name;
+        const tcgGoImage = await tcggoImageService.findBestImage(card.name, selectedGame?.id || 'pokemon', setName);
+        
+        if (tcgGoImage && tcgGoImage.image_url) {
+          console.log(`✅ Found TCGGo image for ${card.name}: ${tcgGoImage.image_url}`);
+          return {
+            ...card,
+            image_url: tcgGoImage.image_url,
+            image_url_large: tcgGoImage.image_url_large,
+            image_source: 'tcggo'
+          };
+        } else {
+          console.log(`⚠️ No TCGGo image found for ${card.name}`);
+        }
+      } catch (error) {
+        console.log(`⚠️ Could not enhance image for ${card.name}:`, error.message);
+      }
+
+      return card;
+    }));
+
+    console.log('🖼️ Image enhancement complete');
+    console.log('🖼️ Enhanced results:', enhancedResults.length, 'items');
+    return enhancedResults;
+  };
+
   // Fetch custom items from database
   const fetchCustomItems = async () => {
     setIsLoadingCustomItems(true);
@@ -295,20 +351,51 @@ const SearchApi = () => {
     }
   };
 
-  // Initialize component - initialize API service and load expansions on mount
+  // Initialize component - initialize API services and load expansions on mount
   useEffect(() => {
     const initializeAndLoad = async () => {
-      try {
-        await scrydexApiService.initialize();
-        await loadExpansions();
-      } catch (error) {
-        console.error('Failed to initialize SearchApi:', error);
-        setError('Failed to connect to card database. Please try again later.');
-      }
-    };
+             try {
+               // Initialize all services
+               await scrydexApiService.initialize();
+               await hybridSearchService.initialize();
+               await tcggoImageService.initialize();
+               await loadExpansions();
+               
+               // Mark services as initialized
+               setServicesInitialized(true);
+               console.log('✅ All services initialized successfully');
+             } catch (error) {
+               console.error('Failed to initialize SearchApi:', error);
+               setError('Failed to connect to card database. Please try again later.');
+             }
+           };
     
     initializeAndLoad();
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
   }, []);
+
+  // Infinite scroll effect
+  useEffect(() => {
+    const handleScroll = () => {
+      if (
+        window.innerHeight + document.documentElement.scrollTop >= 
+        document.documentElement.offsetHeight - 1000 && 
+        hasMore && 
+        !isLoadingMore
+      ) {
+        loadMoreResults();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [hasMore, isLoadingMore, currentPage, searchQuery]);
 
   // Load custom items when manual view is accessed
   useEffect(() => {
@@ -367,6 +454,14 @@ const SearchApi = () => {
     setError(null);
 
     try {
+      // Check if services are initialized
+      if (!servicesInitialized) {
+        console.log('⏳ Services not ready, waiting for initialization...');
+        setError('Search services are still initializing. Please wait a moment and try again.');
+        setIsLoading(false);
+        return;
+      }
+
       const searchOptions = {
         page,
         pageSize: 20, // Smaller page size for smoother infinite scroll
@@ -378,21 +473,55 @@ const SearchApi = () => {
         sortOrder: filters.sortOrder
       };
 
-      const result = await scrydexApiService.searchCards(query, searchOptions);
+      // Use hybrid search service to search both singles and sealed products
+      const results = await hybridSearchService.smartSearch(query, selectedGame?.id || 'pokemon', {
+        page,
+        pageSize: 20
+      });
       
-      // Format cards for display - Keep variants grouped together
-      const formattedCards = formatCardsWithVariants(result.data || []);
+      console.log('🔍 Hybrid search results:', results);
+      console.log('🔍 Singles count:', results.singles?.length || 0);
+      console.log('🔍 Sealed count:', results.sealed?.length || 0);
       
-      // Note: Sorting is now handled server-side by the API
+      // Combine singles and sealed products
+      const allResults = [];
+      
+      // Add singles from Scrydex
+      if (results.singles && results.singles.length > 0) {
+        console.log('📱 Adding Scrydex singles:', results.singles.length);
+        const formattedSingles = formatCardsWithVariants(results.singles);
+        allResults.push(...formattedSingles.map(card => ({
+          ...card,
+          source: 'scrydex'
+        })));
+      }
+      
+      // Add sealed products from PriceCharting
+      if (results.sealed && results.sealed.length > 0) {
+        console.log('📦 Adding PriceCharting sealed products:', results.sealed.length);
+        console.log('📦 First sealed product:', results.sealed[0]);
+        allResults.push(...results.sealed.map(product => ({
+          ...product,
+          source: 'pricecharting'
+        })));
+      }
+      
+      console.log('📦 Combined results:', allResults.length);
+      console.log('📦 Result sources:', allResults.map(r => r.source));
+
+      // Enhance results with TCGGo images (only for PriceCharting items)
+      const enhancedResults = await enhanceResultsWithTcgGoImages(allResults);
 
       if (append) {
-        setSearchResults(prev => [...prev, ...formattedCards]);
+        setSearchResults(prev => [...prev, ...enhancedResults]);
       } else {
-        setSearchResults(formattedCards);
+        setSearchResults(enhancedResults);
       }
 
-      setTotalResults(result.total || result.totalCount || 0);
-      setHasMore(formattedCards.length === searchOptions.pageSize);
+      // Set pagination info
+      const totalFromResults = results.total || (results.singles?.total || 0) + (results.sealed?.total || 0);
+      setTotalResults(totalFromResults);
+      setHasMore(enhancedResults.length >= 20 && (page * 20) < totalFromResults);
       setCurrentPage(page);
 
     } catch (error) {
@@ -479,26 +608,15 @@ const SearchApi = () => {
     }
   };
 
-  // Load more results (infinite scroll)
-  const loadMoreResults = () => {
-    if (!isLoading && hasMore) {
-      const nextPage = currentPage + 1;
-      if (selectedExpansion) {
-        performExpansionSearch(selectedExpansion.id, nextPage);
-      } else {
-        performSearch(searchQuery, nextPage, true);
-      }
-    }
-  };
 
-  // Infinite scroll setup
-  useEffect(() => {
+  // Infinite scroll setup - DISABLED (using new implementation)
+  /* useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect();
     
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !isLoading) {
-          loadMoreResults();
+          // loadMoreResults(); // Removed - using new implementation
         }
       },
       { 
@@ -514,7 +632,7 @@ const SearchApi = () => {
     return () => {
       if (observerRef.current) observerRef.current.disconnect();
     };
-  }, [hasMore, isLoading, currentPage]);
+  */ 
 
   // Handle card click
   const handleCardClick = (card) => {
@@ -620,6 +738,20 @@ const SearchApi = () => {
       sortBy: 'Default',
       sortOrder: 'asc'
     });
+  };
+
+  // Load more results for infinite scroll
+  const loadMoreResults = async () => {
+    if (!hasMore || isLoadingMore || !searchQuery.trim()) return;
+    
+    setIsLoadingMore(true);
+    try {
+      await performSearch(searchQuery, currentPage + 1, true);
+    } catch (error) {
+      console.error('Error loading more results:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
   };
 
   // Format price for display
@@ -767,7 +899,7 @@ const SearchApi = () => {
   return (
     <div className="min-h-screen bg-gray-900 text-white" data-no-cornhusk="true">
       {/* Fixed Header - Scrydex Style */}
-      <div className="sticky top-0 z-40 bg-gray-950 border-b border-gray-800">
+      <div className="fixed top-0 left-0 right-0 z-40 bg-gray-950 border-b border-gray-800">
         <div className="w-full pl-4 pr-0 h-[50px] flex items-center gap-1">
           {/* Game Selector - Outside search bar */}
           <div className="relative game-dropdown">
@@ -788,7 +920,21 @@ const SearchApi = () => {
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  // Auto-search when user types (with debounce) - only if services are ready
+                  if (e.target.value.trim() && servicesInitialized) {
+                    setCurrentView('search');
+                    clearTimeout(searchTimeoutRef.current);
+                    searchTimeoutRef.current = setTimeout(() => {
+                      performSearch(e.target.value, 1, false);
+                    }, 500); // 500ms debounce
+                  } else if (!servicesInitialized) {
+                    setError('Search services are still initializing. Please wait a moment and try again.');
+                  } else {
+                    clearSearch();
+                  }
+                }}
                 placeholder="Search cards..."
                 className="w-full h-full px-4 bg-transparent text-white placeholder-gray-400 focus:outline-none"
               />
@@ -839,7 +985,7 @@ const SearchApi = () => {
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-6">
+      <div className="container mx-auto px-4 py-6 pt-[66px]">
         
         {/* Game Selection View */}
         {currentView === 'games' && (
@@ -1111,8 +1257,13 @@ const SearchApi = () => {
         {searchResults.length > 0 && (
           <div className="mb-4">
             <p className="text-sm text-gray-400">
-              {totalResults} cards found
+              {searchResults.length} of {totalResults} cards found
             </p>
+            {hasMore && (
+              <p className="text-xs text-gray-500 mt-1">
+                Scroll down to load more results...
+              </p>
+            )}
           </div>
         )}
 
@@ -1159,10 +1310,10 @@ const SearchApi = () => {
                     <h3 className="font-semibold text-white text-xs">{card.name}</h3>
                     
                     {/* Set Name */}
-                    <p className="text-gray-400 text-xs">{card.expansion_name || 'Unknown Set'}</p>
+                    <p className="text-gray-400 text-xs">{card.expansion_name || card.set_name || 'Unknown Set'}</p>
                     
                     {/* Rarity */}
-                    <p className="text-blue-400 text-xs">{card.rarity || 'No Rarity'}</p>
+                    <p className="text-blue-400 text-xs">{card.rarity || card.item_type || 'No Rarity'}</p>
                   </div>
                   
                   {/* Pricing and Add Button */}
@@ -1188,7 +1339,12 @@ const SearchApi = () => {
                           )}
                         </>
                       )}
-                      {!formatPrice(card.raw_price) && !formatPrice(card.graded_price) && (
+                      {!formatPrice(card.raw_price) && !formatPrice(card.graded_price) && card.market_value_cents && (
+                        <span className="text-blue-400">
+                          ${(card.market_value_cents / 100).toFixed(2)}
+                        </span>
+                      )}
+                      {!formatPrice(card.raw_price) && !formatPrice(card.graded_price) && !formatPrice(card.market_value_cents / 100) && (
                         <span className="text-gray-400">Pricing N/A</span>
                       )}
                     </div>

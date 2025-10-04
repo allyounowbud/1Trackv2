@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../contexts/ModalContext';
 import ThemeSettings from '../components/ThemeSettings';
+import PriceChartingSettings from '../components/PriceChartingSettings';
 import AccountDeletionModal from '../components/AccountDeletionModal';
 
 const Settings = () => {
@@ -125,6 +126,9 @@ const Settings = () => {
             <div className="space-y-4">
               {/* Theme Settings */}
               <ThemeSettings />
+              
+              {/* PriceCharting API Settings */}
+              <PriceChartingSettings />
             </div>
           </div>
 
