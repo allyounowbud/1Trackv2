@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 // Image service removed - using Scrydex API only
 import { supabase } from '../lib/supabaseClient.js';

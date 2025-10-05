@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 
 const DesktopSideMenu = ({ isOpen, onClose, children, title }) => {
   // Prevent body scroll when menu is open

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import translationUtils from '../utils/translationUtils.js';
 const { getLanguagePreference, setLanguagePreference } = translationUtils;
 

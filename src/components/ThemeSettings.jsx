@@ -1,3 +1,4 @@
+import React from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
 const ThemeSettings = () => {

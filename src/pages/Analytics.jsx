@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 const Analytics = () => {
   const [timeRange, setTimeRange] = useState('30d');

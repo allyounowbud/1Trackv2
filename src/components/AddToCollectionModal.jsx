@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 // Marketplace retailer service removed - using Scrydex API only
 import { getCleanItemName } from '../utils/nameUtils';

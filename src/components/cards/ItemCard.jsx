@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 const ItemCard = ({ item, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);

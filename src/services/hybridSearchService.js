@@ -8,6 +8,7 @@
 import scrydexApiService from './scrydexApiService'
 import priceChartingApiService from './priceChartingApiService'
 import rapidApiService from './rapidApiService'
+import searchCacheService from './searchCacheService'
 
 class HybridSearchService {
   constructor() {
@@ -75,6 +76,23 @@ class HybridSearchService {
 
     try {
       const { page = 1, pageSize = 20, expansionId = null } = options
+      
+      // Check cache first
+      const cacheKey = searchCacheService.generateCacheKey(query, game, 'general', expansionId, page, pageSize)
+      const cachedResults = await searchCacheService.getCachedResults(cacheKey)
+      
+      if (cachedResults) {
+        return {
+          singles: cachedResults.results.singles || [],
+          sealed: cachedResults.results.sealed || [],
+          total: cachedResults.total,
+          page: cachedResults.page,
+          pageSize: cachedResults.pageSize,
+          source: 'cache',
+          cached: true
+        }
+      }
+
       const results = {
         singles: [],
         sealed: [],
@@ -162,6 +180,19 @@ class HybridSearchService {
         const totalSealed = results.sealed.length
         results.total = totalSingles + totalSealed
       }
+
+      // Cache the results
+      await searchCacheService.setCachedResults(
+        cacheKey, 
+        query, 
+        game, 
+        'general', 
+        results, 
+        results.total, 
+        page, 
+        pageSize, 
+        expansionId
+      )
 
       return results
     } catch (error) {
@@ -267,6 +298,23 @@ class HybridSearchService {
     }
 
     try {
+      const { page = 1, pageSize = 20 } = options
+      
+      // Check cache first
+      const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'expansion', expansionId, page, pageSize)
+      const cachedResults = await searchCacheService.getCachedResults(cacheKey)
+      
+      if (cachedResults) {
+        return {
+          data: cachedResults.results.data || [],
+          total: cachedResults.total,
+          page: cachedResults.page,
+          pageSize: cachedResults.pageSize,
+          hasMore: cachedResults.results.hasMore || false,
+          source: 'cache'
+        }
+      }
+
       console.log('🔍 Getting Scrydex sealed products for expansion:', expansionId)
       
       // Try to get sealed products from Scrydex first
@@ -274,7 +322,7 @@ class HybridSearchService {
       
       if (scrydexSealed && scrydexSealed.data && scrydexSealed.data.length > 0) {
         console.log(`📦 Found ${scrydexSealed.data.length} Scrydex sealed products for expansion ${expansionId}`)
-        return {
+        const result = {
           data: scrydexSealed.data,
           total: scrydexSealed.total,
           page: scrydexSealed.page,
@@ -282,6 +330,21 @@ class HybridSearchService {
           hasMore: scrydexSealed.hasMore,
           source: 'scrydex'
         }
+        
+        // Cache the result
+        await searchCacheService.setCachedResults(
+          cacheKey, 
+          '', 
+          'pokemon', 
+          'expansion', 
+          result, 
+          result.total, 
+          page, 
+          pageSize, 
+          expansionId
+        )
+        
+        return result
       } else {
         console.log('📦 No Scrydex sealed products found, falling back to PriceCharting')
         
@@ -372,7 +435,7 @@ class HybridSearchService {
           }
         }
         
-        return {
+        const emptyResult = {
           data: [],
           total: 0,
           page: 1,
@@ -380,6 +443,21 @@ class HybridSearchService {
           hasMore: false,
           source: 'none'
         }
+        
+        // Cache empty result too
+        await searchCacheService.setCachedResults(
+          cacheKey, 
+          '', 
+          'pokemon', 
+          'expansion', 
+          emptyResult, 
+          0, 
+          page, 
+          pageSize, 
+          expansionId
+        )
+        
+        return emptyResult
       }
     } catch (error) {
       console.error('❌ Error getting sealed products for expansion:', error)

@@ -62,6 +62,15 @@ const SearchApi = () => {
       icon: 'https://i.ibb.co/FLvRvfGM/other-icon.png',
       description: 'Manually added products',
       color: 'from-purple-400 to-purple-600'
+    },
+    {
+      id: 'coming-soon',
+      name: 'More Coming Soon',
+      logo: null,
+      icon: null,
+      description: 'Additional trading card games',
+      color: 'from-gray-400 to-gray-500',
+      badge: 'SOON'
     }
   ];
 
@@ -168,6 +177,28 @@ const SearchApi = () => {
             <div className="w-2.5 h-2.5 rounded-full bg-white"></div>
           </div>
         );
+    }
+  };
+
+  // Helper function to get search placeholder based on selected game
+  const getSearchPlaceholder = () => {
+    switch (selectedGame?.id) {
+      case 'all':
+        return 'Search for anything...';
+      case 'pokemon':
+        return 'Search for Pokémon...';
+      case 'lorcana':
+        return 'Search for Lorcana...';
+      case 'magic':
+        return 'Search for Magic: The Gathering...';
+      case 'gundam':
+        return 'Search for Gundam...';
+      case 'other':
+        return 'Search everything else...';
+      case 'coming-soon':
+        return 'More games coming soon...';
+      default:
+        return 'Search cards...';
     }
   };
 
@@ -1079,7 +1110,7 @@ const SearchApi = () => {
                     clearSearch();
                   }
                 }}
-                placeholder="Search cards..."
+                placeholder={getSearchPlaceholder()}
                 className="w-full h-full px-4 bg-transparent text-white placeholder-gray-400 focus:outline-none"
               />
               {/* Clear button inside search bar */}
@@ -1108,7 +1139,7 @@ const SearchApi = () => {
         {showGameDropdown && (
           <div className="game-dropdown absolute top-[50px] left-0 right-0 bg-gray-950 border-b border-gray-600 shadow-lg z-50">
             <div className="px-4 py-3 text-[11px] text-gray-400 border-b border-gray-600 font-medium">TCGs</div>
-            {games.map((game) => (
+            {games.filter(game => game.id !== 'coming-soon').map((game) => (
                 <button
                   key={game.id}
                   type="button"
@@ -1141,7 +1172,7 @@ const SearchApi = () => {
                   className="rounded-lg p-2 hover:bg-indigo-900/30 transition-colors cursor-pointer border border-gray-600 hover:border-indigo-400 aspect-square"
                   onClick={() => handleGameSelect(game)}
                 >
-                  <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-full h-full flex items-center justify-center relative">
                     {game.logo ? (
                       <SafeImage
                         src={game.logo}
@@ -1163,9 +1194,14 @@ const SearchApi = () => {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-gray-400 text-xs font-medium">
-                          {game.name.charAt(0)}
+                        <span className="text-gray-400 text-xs font-medium text-center">
+                          {game.name}
                         </span>
+                      </div>
+                    )}
+                    {game.badge && (
+                      <div className="absolute top-1 right-1 bg-indigo-600 text-white text-[8px] px-1 py-0.5 rounded">
+                        {game.badge}
                       </div>
                     )}
                   </div>

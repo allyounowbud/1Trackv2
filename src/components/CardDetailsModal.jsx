@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import translationUtils from '../utils/translationUtils.js';
 const { processLocalizedCard, getLocalizedImageUrl } = translationUtils;
 import { useLanguage } from '../contexts/LanguageContext';
