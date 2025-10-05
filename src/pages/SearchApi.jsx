@@ -108,6 +108,11 @@ const SearchApi = () => {
 
   // Language filter state
   const [languageFilter, setLanguageFilter] = useState('english'); // 'english', 'japanese'
+  
+  // Series filter state
+  const [selectedSeries, setSelectedSeries] = useState([]); // Array of selected series
+  const [seriesSearchQuery, setSeriesSearchQuery] = useState(''); // Search query for series filter
+  const [isSeriesFilterOpen, setIsSeriesFilterOpen] = useState(false); // Mobile filter drawer state
 
   // Refs for infinite scroll and search debounce
   const loadingRef = useRef(null);
@@ -180,12 +185,12 @@ const SearchApi = () => {
   };
 
   // Safe image component
-  const SafeImage = ({ src, alt, className, onError, onLoad, fallback }) => {
+  const SafeImage = ({ src, alt, className, style, onError, onLoad, fallback }) => {
     const [hasError, setHasError] = useState(false);
     
     if (!src || !isValidUrl(src) || hasError) {
       return fallback || (
-        <div className={`${className} flex items-center justify-center bg-transparent`}>
+        <div className={`${className} flex items-center justify-center bg-transparent`} style={style}>
           <div className="text-gray-400 text-center">
             <div className="text-2xl mb-2">🃏</div>
             <div className="text-sm">No Image</div>
@@ -199,6 +204,7 @@ const SearchApi = () => {
         src={src}
         alt={alt || 'Card'}
         className={className}
+        style={style}
         onError={(e) => {
           setHasError(true);
           if (onError) onError(e);
@@ -449,6 +455,72 @@ const SearchApi = () => {
     }
   };
 
+  // Get unique series from expansions (only those with counts > 0)
+  const getUniqueSeries = () => {
+    const seriesCounts = getSeriesCounts();
+    return Object.keys(seriesCounts).sort();
+  };
+
+  // Get filtered expansions based on current filters
+  const getFilteredExpansions = () => {
+    return expansions.filter(expansion => {
+      // Language filter
+      if (languageFilter === 'english' && expansion.language_code !== 'EN') return false;
+      if (languageFilter === 'japanese' && expansion.language_code !== 'JA') return false;
+      
+      // Series filter
+      if (selectedSeries.length > 0 && !selectedSeries.includes(expansion.series)) return false;
+      
+      return true;
+    });
+  };
+
+  // Get series count for each series
+  const getSeriesCounts = () => {
+    const counts = {};
+    const filteredExpansions = expansions.filter(expansion => {
+      // Apply language filter for counts
+      if (languageFilter === 'english' && expansion.language_code !== 'EN') return false;
+      if (languageFilter === 'japanese' && expansion.language_code !== 'JA') return false;
+      return true;
+    });
+    
+    filteredExpansions.forEach(expansion => {
+      if (expansion.series) {
+        counts[expansion.series] = (counts[expansion.series] || 0) + 1;
+      }
+    });
+    
+    // Remove series with 0 counts
+    Object.keys(counts).forEach(series => {
+      if (counts[series] === 0) {
+        delete counts[series];
+      }
+    });
+    
+    return counts;
+  };
+
+  // Handle series selection
+  const handleSeriesToggle = (series) => {
+    setSelectedSeries(prev => {
+      if (prev.includes(series)) {
+        return prev.filter(s => s !== series);
+      } else {
+        return [...prev, series];
+      }
+    });
+  };
+
+  // Clear all series filters
+  const clearSeriesFilters = () => {
+    setSelectedSeries([]);
+    setSeriesSearchQuery('');
+  };
+
+  // Check if we're on mobile
+  const isMobile = window.innerWidth < 1024;
+
   // Perform search
   const performSearch = async (query, page = 1, append = false) => {
     setIsLoading(true);
@@ -486,7 +558,25 @@ const SearchApi = () => {
       if (results.singles && results.singles.length > 0) {
         console.log('📱 Adding Scrydex singles:', results.singles.length);
         const formattedSingles = formatCardsWithVariants(results.singles);
-        allResults.push(...formattedSingles.map(card => ({
+        
+        // Filter out TCG Pocket cards
+        const filteredSingles = formattedSingles.filter(card => {
+          const expansionName = card.expansion_name?.toLowerCase() || '';
+          const cardName = card.name?.toLowerCase() || '';
+          const isTCGPocket = expansionName.includes('pocket') || 
+                             expansionName.includes('tcg pocket') ||
+                             cardName.includes('pocket promo') ||
+                             cardName.includes('pocket');
+          if (isTCGPocket) {
+            console.log('🚫 Filtering out TCG Pocket card:', card.name, 'from expansion:', card.expansion_name);
+          }
+          return !isTCGPocket;
+        });
+        
+        console.log('🚫 Filtered out TCG Pocket cards:', formattedSingles.length - filteredSingles.length);
+        console.log('✅ Final singles count:', filteredSingles.length);
+        
+        allResults.push(...filteredSingles.map(card => ({
           ...card,
           source: 'scrydex'
         })));
@@ -642,7 +732,25 @@ const SearchApi = () => {
         if (results.singles && results.singles.length > 0) {
           console.log('📱 Adding Scrydex singles:', results.singles.length);
           const formattedSingles = formatCardsWithVariants(results.singles);
-          allResults.push(...formattedSingles.map(card => ({
+          
+          // Filter out TCG Pocket cards
+          const filteredSingles = formattedSingles.filter(card => {
+            const expansionName = card.expansion_name?.toLowerCase() || '';
+            const cardName = card.name?.toLowerCase() || '';
+            const isTCGPocket = expansionName.includes('pocket') || 
+                               expansionName.includes('tcg pocket') ||
+                               cardName.includes('pocket promo') ||
+                               cardName.includes('pocket');
+            if (isTCGPocket) {
+              console.log('🚫 Filtering out TCG Pocket card:', card.name, 'from expansion:', card.expansion_name);
+            }
+            return !isTCGPocket;
+          });
+          
+          console.log('🚫 Filtered out TCG Pocket cards:', formattedSingles.length - filteredSingles.length);
+          console.log('✅ Final singles count:', filteredSingles.length);
+          
+          allResults.push(...filteredSingles.map(card => ({
             ...card,
             source: 'scrydex'
           })));
@@ -1109,87 +1217,371 @@ const SearchApi = () => {
         {/* Expansions View */}
         {currentView === 'expansions' && (
           <div>
-            {isLoading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="animate-spin" size={48} />
+            {/* Mobile Header with Pokémon Logo */}
+            {isMobile && (
+              <div className="mb-6">
+                {/* Pokémon Logo and Title Row */}
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="font-bold text-white mb-0" style={{ fontSize: '17px' }}>
+                      {languageFilter === 'english' ? 'English Expansions' : 'Japanese Expansions'}
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      {getFilteredExpansions().length} expansions
+                    </p>
+                  </div>
+                  <img 
+                    src="https://scrydex.com/assets/tcgs/logo_pokemon-8a159e17ae61d5720bfe605ab12acde3a8d7e5ff986e9979c353f66396b500f2.png"
+                    alt="Pokémon"
+                    className="h-10 w-auto"
+                    onError={(e) => {
+                      console.log('Pokémon logo failed to load');
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
+                
+                {/* Controls Row - Above Grid */}
+                <div className="flex items-center justify-between mb-4">
+                  {/* Left Side - Language Toggle */}
+                  <div className="flex bg-gray-700 rounded-lg p-1">
+                    <button
+                      onClick={() => setLanguageFilter('english')}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        languageFilter === 'english'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      ENG
+                    </button>
+                    <button
+                      onClick={() => setLanguageFilter('japanese')}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        languageFilter === 'japanese'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      JPN
+                    </button>
+                  </div>
+                  
+                  {/* Right Side - Filter Button */}
+                  <div className="bg-gray-700 rounded-lg p-1">
+                    <button
+                      onClick={() => setIsSeriesFilterOpen(true)}
+                      className="flex items-center gap-2 px-3 py-1 text-xs text-white hover:bg-gray-600 rounded transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                      </svg>
+                      <span>Filter</span>
+                      {selectedSeries.length > 0 && (
+                        <span className="bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                          {selectedSeries.length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Active Filter Chips - Below Controls */}
+                {selectedSeries.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {selectedSeries.map(series => (
+                      <div
+                        key={series}
+                        className="flex items-center gap-1 bg-indigo-600 text-white px-2 py-1 rounded-full text-xs"
+                      >
+                        <span>{series}</span>
+                        <button
+                          onClick={() => handleSeriesToggle(series)}
+                          className="hover:bg-indigo-700 rounded-full p-0.5"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={clearSeriesFilters}
+                      className="text-xs text-gray-400 hover:text-white px-2 py-1"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div>
-                <div className="mb-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-bold text-white mb-0">
-                        {languageFilter === 'english' ? 'English Expansions' : 'Japanese Expansions'}
-                      </h2>
-                      <p className="text-sm text-gray-500">
-                        {expansions.filter(expansion => {
-                          if (languageFilter === 'english') return expansion.language_code === 'EN';
-                          if (languageFilter === 'japanese') return expansion.language_code === 'JA';
-                          return true;
-                        }).length} expansions
-                      </p>
+            )}
+
+            {/* Desktop Layout */}
+            {!isMobile && (
+              <div className="flex gap-6">
+                {/* Series Filter Sidebar */}
+                <div className="w-64 flex-shrink-0">
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold text-white">Filters</h3>
+                      {selectedSeries.length > 0 && (
+                        <button
+                          onClick={clearSeriesFilters}
+                          className="text-xs text-indigo-400 hover:text-indigo-300"
+                        >
+                          Clear
+                        </button>
+                      )}
                     </div>
-                    {/* Language Toggle */}
-                    <div className="flex items-center">
-                      <div className="flex bg-gray-700 rounded-lg p-1">
-                        <button
-                          onClick={() => setLanguageFilter('english')}
-                          className={`px-3 py-1 text-xs rounded transition-colors ${
-                            languageFilter === 'english'
-                              ? 'bg-blue-600 text-white'
-                              : 'text-gray-300 hover:text-white'
-                          }`}
-                        >
-                          ENG
-                        </button>
-                        <button
-                          onClick={() => setLanguageFilter('japanese')}
-                          className={`px-3 py-1 text-xs rounded transition-colors ${
-                            languageFilter === 'japanese'
-                              ? 'bg-blue-600 text-white'
-                              : 'text-gray-300 hover:text-white'
-                          }`}
-                        >
-                          JPN
-                        </button>
+                    
+                    {/* Series Filter */}
+                    <div className="mb-4">
+                      <h4 className="text-xs font-medium text-gray-300 mb-2">Series</h4>
+                      
+                      {/* Series Search */}
+                      <div className="mb-3">
+                        <input
+                          type="text"
+                          placeholder="Search series..."
+                          value={seriesSearchQuery}
+                          onChange={(e) => setSeriesSearchQuery(e.target.value)}
+                          className="w-full px-2 py-1 text-xs bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      
+                      {/* Series List */}
+                      <div className="max-h-64 overflow-y-auto space-y-1">
+                        {getUniqueSeries()
+                          .filter(series => 
+                            series.toLowerCase().includes(seriesSearchQuery.toLowerCase())
+                          )
+                          .map(series => {
+                            const count = getSeriesCounts()[series] || 0;
+                            const isSelected = selectedSeries.includes(series);
+                            
+                            return (
+                              <div
+                                key={series}
+                                className="flex items-center justify-between p-1 hover:bg-gray-700 rounded cursor-pointer"
+                                onClick={() => handleSeriesToggle(series)}
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => handleSeriesToggle(series)}
+                                    className="w-3 h-3 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                  />
+                                  <span className="text-xs text-gray-300 truncate">{series}</span>
+                                </div>
+                                <span className="text-xs text-gray-500">{count}</span>
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {expansions
-                    .filter(expansion => {
-                      if (languageFilter === 'english') return expansion.language_code === 'EN';
-                      if (languageFilter === 'japanese') return expansion.language_code === 'JA';
-                      return true;
-                    })
-                    .sort((a, b) => {
-                      // Sort by release date (newest first)
-                      const dateA = new Date(a.release_date);
-                      const dateB = new Date(b.release_date);
-                      return dateB - dateA;
-                    })
-                    .map((expansion, index) => (
-                    <div
-                      key={`${expansion.id}-${index}`}
-                      className="rounded-lg pt-1 pb-6 px-1 hover:bg-indigo-900/30 transition-colors cursor-pointer border border-gray-600 hover:border-indigo-400"
-                      onClick={() => handleExpansionSelect(expansion)}
-                    >
-                      <div className="aspect-[4/3] bg-transparent rounded-lg mb-0.5 overflow-hidden">
-                        <SafeImage
-                          src={expansion.logo}
-                          alt={expansion.name}
-                          className="w-full h-full object-contain scale-75"
-                          onError={(e) => {
-                            console.log('Expansion logo failed to load:', expansion.logo);
-                            e.target.style.display = 'none';
-                          }}
-                        />
+
+                {/* Expansions Grid */}
+                <div className="flex-1">
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-lg font-bold text-white mb-0">
+                          {languageFilter === 'english' ? 'English Expansions' : 'Japanese Expansions'}
+                        </h2>
+                        <p className="text-sm text-gray-500">
+                          {getFilteredExpansions().length} expansions
+                          {selectedSeries.length > 0 && (
+                            <span className="text-indigo-400 ml-1">
+                              (filtered by {selectedSeries.length} series)
+                            </span>
+                          )}
+                        </p>
                       </div>
-                      <h3 className="font-medium text-white text-sm mb-0 text-center">{expansion.name}</h3>
-                      <p className="text-xs text-gray-400 text-center">{expansion.total} cards</p>
+                      {/* Language Toggle */}
+                      <div className="flex items-center">
+                        <div className="flex bg-gray-700 rounded-lg p-1">
+                          <button
+                            onClick={() => setLanguageFilter('english')}
+                            className={`px-3 py-1 text-xs rounded transition-colors ${
+                              languageFilter === 'english'
+                                ? 'bg-blue-600 text-white'
+                                : 'text-gray-300 hover:text-white'
+                            }`}
+                          >
+                            ENG
+                          </button>
+                          <button
+                            onClick={() => setLanguageFilter('japanese')}
+                            className={`px-3 py-1 text-xs rounded transition-colors ${
+                              languageFilter === 'japanese'
+                                ? 'bg-blue-600 text-white'
+                                : 'text-gray-300 hover:text-white'
+                            }`}
+                          >
+                            JPN
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {getFilteredExpansions()
+                      .sort((a, b) => {
+                        // Sort by release date (newest first)
+                        const dateA = new Date(a.release_date);
+                        const dateB = new Date(b.release_date);
+                        return dateB - dateA;
+                      })
+                      .map((expansion, index) => (
+                      <div
+                        key={`${expansion.id}-${index}`}
+                        className="rounded-lg pt-1 pb-6 px-1 hover:bg-indigo-900/30 transition-colors cursor-pointer border border-gray-600 hover:border-indigo-400"
+                        onClick={() => handleExpansionSelect(expansion)}
+                      >
+                        <div className="aspect-[4/3] bg-transparent rounded-lg mb-0.5 overflow-hidden">
+                          <SafeImage
+                            src={expansion.logo}
+                            alt={expansion.name}
+                            className="w-full h-full object-contain scale-75"
+                            onError={(e) => {
+                              console.log('Expansion logo failed to load:', expansion.logo);
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                        <h3 className="font-medium text-white text-sm mb-0 text-center">{expansion.name}</h3>
+                        <p className="text-xs text-gray-400 text-center">{expansion.total} cards</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Expansions Grid */}
+            {isMobile && (
+              <div>
+                {isLoading ? (
+                  <div className="flex justify-center py-12">
+                    <Loader2 className="animate-spin" size={48} />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {getFilteredExpansions()
+                      .sort((a, b) => {
+                        // Sort by release date (newest first)
+                        const dateA = new Date(a.release_date);
+                        const dateB = new Date(b.release_date);
+                        return dateB - dateA;
+                      })
+                      .map((expansion, index) => (
+                      <div
+                        key={`${expansion.id}-${index}`}
+                        className="rounded-lg pt-1 pb-6 px-1 hover:bg-indigo-900/30 transition-colors cursor-pointer border border-gray-600 hover:border-indigo-400"
+                        onClick={() => handleExpansionSelect(expansion)}
+                      >
+                        <div className="aspect-[4/3] bg-transparent rounded-lg mb-0.5 overflow-hidden">
+                          <SafeImage
+                            src={expansion.logo}
+                            alt={expansion.name}
+                            className="w-full h-full object-contain scale-75"
+                            onError={(e) => {
+                              console.log('Expansion logo failed to load:', expansion.logo);
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                        <h3 className="font-medium text-white text-sm mb-0 text-center">{expansion.name}</h3>
+                        <p className="text-xs text-gray-400 text-center">{expansion.total} cards</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Mobile Series Filter Drawer */}
+            {isMobile && (
+              <div className={`fixed inset-0 z-50 transition-all duration-500 ease-in-out ${isSeriesFilterOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                {/* Backdrop */}
+                <div 
+                  className={`absolute inset-0 bg-black transition-opacity duration-500 ease-in-out ${isSeriesFilterOpen ? 'bg-opacity-50' : 'bg-opacity-0'}`}
+                  onClick={() => setIsSeriesFilterOpen(false)}
+                />
+                
+                {/* Drawer */}
+                <div className={`absolute right-0 top-0 h-full w-80 bg-gray-900 border-l border-gray-800 flex flex-col transition-transform duration-500 ease-in-out ${isSeriesFilterOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                    <h3 className="text-sm font-medium text-white">Filter by Series</h3>
+                    <button
+                      onClick={() => setIsSeriesFilterOpen(false)}
+                      className="p-1.5 hover:bg-gray-800 rounded-md transition-colors"
+                    >
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  
+                  {/* Search */}
+                  <div className="px-4 py-3 border-b border-gray-800">
+                    <input
+                      type="text"
+                      placeholder="Search series..."
+                      value={seriesSearchQuery}
+                      onChange={(e) => setSeriesSearchQuery(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    />
+                  </div>
+                  
+                  {/* Series List */}
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="px-4 py-2">
+                      {getUniqueSeries()
+                        .filter(series => 
+                          series.toLowerCase().includes(seriesSearchQuery.toLowerCase())
+                        )
+                        .map(series => {
+                          const count = getSeriesCounts()[series] || 0;
+                          const isSelected = selectedSeries.includes(series);
+                          
+                          return (
+                            <div
+                              key={series}
+                              className="flex items-center justify-between py-2.5 px-2 hover:bg-gray-800 rounded-md cursor-pointer transition-colors"
+                              onClick={() => handleSeriesToggle(series)}
+                            >
+                              <div className="flex items-center space-x-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleSeriesToggle(series)}
+                                  className="w-3.5 h-3.5 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                />
+                                <span className="text-xs text-white font-light">{series}</span>
+                              </div>
+                              <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">
+                                {count}
+                              </span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                  
+                  {/* Footer */}
+                  <div className="px-4 py-3 border-t border-gray-800">
+                    <button
+                      onClick={clearSeriesFilters}
+                      className="w-full py-2 px-3 text-xs bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-colors font-light"
+                    >
+                      Clear All Filters
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1209,32 +1601,43 @@ const SearchApi = () => {
                       setSelectedExpansion(null);
                       setExpansionViewMode('singles');
                     }}
-                    className="text-gray-400 hover:text-white transition-colors"
+                    className="text-indigo-400 hover:text-indigo-300 transition-colors"
                   >
                     Expansions
                   </button>
                   <span className="text-gray-500">/</span>
-                  <span className="text-indigo-400 font-medium">{selectedExpansion.name}</span>
+                  <span className="text-gray-400 font-medium">{selectedExpansion.name}</span>
                 </nav>
               </div>
             )}
 
             {/* Expansion Details - Above card containers */}
             {selectedExpansion && (
-              <div className="mb-4">
-                <div className="flex items-center gap-4">
-                  <SafeImage
-                    src={selectedExpansion.logo}
-                    alt={selectedExpansion.name}
-                    className="w-20 h-20 object-contain"
-                    onError={(e) => {
-                      console.log('Expansion logo failed to load:', selectedExpansion.logo);
-                      e.target.style.display = 'none';
-                    }}
-                  />
+              <div className="mb-4 border border-gray-700 rounded-lg p-4">
+                <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-semibold text-white mb-1">{selectedExpansion.name}</h2>
-                    <p className="text-gray-400 text-sm">{selectedExpansion.total} cards • Released {selectedExpansion.release_date}</p>
+                    <h2 className="font-bold text-white" style={{ fontSize: '17px' }}>
+                      {selectedExpansion.name}
+                    </h2>
+                    <p className="text-gray-400" style={{ fontSize: '13px' }}>
+                      {selectedExpansion.total} cards • Released {selectedExpansion.release_date}
+                    </p>
+                  </div>
+                  <div style={{ height: '100%', maxWidth: '120px', overflow: 'hidden' }}>
+                    <SafeImage
+                      src={selectedExpansion.logo}
+                      alt={selectedExpansion.name}
+                      className="object-contain"
+                      style={{ 
+                        height: '100%', 
+                        maxWidth: '120px',
+                        width: 'auto'
+                      }}
+                      onError={(e) => {
+                        console.log('Expansion logo failed to load:', selectedExpansion.logo);
+                        e.target.style.display = 'none';
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -1244,7 +1647,7 @@ const SearchApi = () => {
 
         {/* Results Header with Toggle */}
         {searchResults.length > 0 && (
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-400">
                 {searchResults.length}/{totalResults} {selectedExpansion && expansionViewMode === 'sealed' ? 'products' : 'cards'} found
