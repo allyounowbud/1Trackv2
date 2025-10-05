@@ -5,6 +5,7 @@ import scrydexApiService from '../services/scrydexApiService';
 import hybridSearchService from '../services/hybridSearchService';
 import priceChartingApiService from '../services/priceChartingApiService';
 import tcggoImageService from '../services/tcggoImageService';
+import SafeImage from '../components/SafeImage';
 import CardPreviewModal from '../components/CardPreviewModal';
 import CustomItemModal from '../components/CustomItemModal';
 import { supabase } from '../lib/supabaseClient';
@@ -202,49 +203,6 @@ const SearchApi = () => {
     }
   };
 
-  // Helper function to validate URLs
-  const isValidUrl = (url) => {
-    if (!url || typeof url !== 'string' || url.trim() === '') {
-      return false;
-    }
-    try {
-      new URL(url);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  // Safe image component
-  const SafeImage = ({ src, alt, className, style, onError, onLoad, fallback }) => {
-    const [hasError, setHasError] = useState(false);
-    
-    if (!src || !isValidUrl(src) || hasError) {
-      return fallback || (
-        <div className={`${className} flex items-center justify-center bg-transparent`} style={style}>
-          <div className="text-gray-400 text-center">
-            <div className="text-2xl mb-2">🃏</div>
-            <div className="text-sm">No Image</div>
-          </div>
-        </div>
-      );
-    }
-    
-    return (
-      <img
-        src={src}
-        alt={alt || 'Card'}
-        className={className}
-        style={style}
-        onError={(e) => {
-          setHasError(true);
-          if (onError) onError(e);
-        }}
-        onLoad={onLoad}
-        data-no-cornhusk="true"
-      />
-    );
-  };
 
   // Format cards from API response - Keep variants grouped together
   const formatCardsWithVariants = (cards) => {
@@ -403,12 +361,21 @@ const SearchApi = () => {
   // Infinite scroll effect
   useEffect(() => {
     const handleScroll = () => {
-      if (
-        window.innerHeight + document.documentElement.scrollTop >= 
-        document.documentElement.offsetHeight - 1000 && 
-        hasMore && 
-        !isLoadingMore
-      ) {
+      const scrollPosition = window.innerHeight + document.documentElement.scrollTop;
+      const documentHeight = document.documentElement.offsetHeight;
+      const threshold = 1000;
+      
+      console.log('🔄 Scroll check:', { 
+        scrollPosition, 
+        documentHeight, 
+        threshold, 
+        hasMore, 
+        isLoadingMore,
+        shouldLoad: scrollPosition >= documentHeight - threshold && hasMore && !isLoadingMore
+      });
+      
+      if (scrollPosition >= documentHeight - threshold && hasMore && !isLoadingMore) {
+        console.log('🔄 Scroll threshold reached, calling loadMoreResults');
         loadMoreResults();
       }
     };
@@ -767,10 +734,17 @@ const SearchApi = () => {
       // Set pagination info
       let totalFromResults;
       if (currentViewMode === 'sealed') {
-        totalFromResults = results.total || results.sealed?.length || 0;
+        totalFromResults = results.total || results.sealed?.total || 0;
       } else {
-        totalFromResults = results.total || results.singles?.length || 0;
+        totalFromResults = results.total || results.singles?.total || 0;
       }
+      console.log('🔄 Pagination info:', { 
+        page, 
+        enhancedResultsLength: enhancedResults.length, 
+        totalFromResults, 
+        hasMore: enhancedResults.length >= 20 && (page * 20) < totalFromResults,
+        calculation: `${enhancedResults.length} >= 20 && (${page} * 20) < ${totalFromResults}`
+      });
       setTotalResults(totalFromResults);
       setHasMore(enhancedResults.length >= 20 && (page * 20) < totalFromResults);
       setCurrentPage(page);
@@ -906,14 +880,20 @@ const SearchApi = () => {
 
   // Load more results for infinite scroll
   const loadMoreResults = async () => {
-    if (!hasMore || isLoadingMore) return;
+    console.log('🔄 loadMoreResults called:', { hasMore, isLoadingMore, currentPage, selectedExpansion: selectedExpansion?.id });
+    if (!hasMore || isLoadingMore) {
+      console.log('🔄 loadMoreResults skipped:', { hasMore, isLoadingMore });
+      return;
+    }
     
     setIsLoadingMore(true);
     try {
       if (selectedExpansion) {
+        console.log('🔄 Loading more expansion results for:', selectedExpansion.id, 'page:', currentPage + 1);
         // Load more results for expansion search
         await performExpansionSearch(selectedExpansion.id, currentPage + 1, true);
       } else if (searchQuery.trim()) {
+        console.log('🔄 Loading more search results for:', searchQuery, 'page:', currentPage + 1);
         // Load more results for regular search
         await performSearch(searchQuery, currentPage + 1, true);
       }
@@ -1239,8 +1219,26 @@ const SearchApi = () => {
                 </div>
                 
                 {/* Controls Row - Above Grid */}
-                <div className="flex items-center justify-between mb-4">
-                  {/* Left Side - Language Toggle */}
+                <div className="flex items-center justify-between">
+                  {/* Left Side - Filter Button */}
+                  <div className="bg-gray-700 rounded-lg p-1">
+                    <button
+                      onClick={() => setIsSeriesFilterOpen(true)}
+                      className="flex items-center gap-2 px-3 py-1 text-xs text-white hover:bg-gray-600 rounded transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                      </svg>
+                      <span>Filter</span>
+                      {selectedSeries.length > 0 && (
+                        <span className="bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                          {selectedSeries.length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                  
+                  {/* Right Side - Language Toggle */}
                   <div className="flex bg-gray-700 rounded-lg p-1">
                     <button
                       onClick={() => setLanguageFilter('english')}
@@ -1263,29 +1261,11 @@ const SearchApi = () => {
                       JPN
                     </button>
                   </div>
-                  
-                  {/* Right Side - Filter Button */}
-                  <div className="bg-gray-700 rounded-lg p-1">
-                    <button
-                      onClick={() => setIsSeriesFilterOpen(true)}
-                      className="flex items-center gap-2 px-3 py-1 text-xs text-white hover:bg-gray-600 rounded transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                      </svg>
-                      <span>Filter</span>
-                      {selectedSeries.length > 0 && (
-                        <span className="bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded-full">
-                          {selectedSeries.length}
-                        </span>
-                      )}
-                    </button>
-                  </div>
                 </div>
                 
                 {/* Active Filter Chips - Below Controls */}
                 {selectedSeries.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4">
+                  <div className="flex flex-wrap gap-2">
                     {selectedSeries.map(series => (
                       <div
                         key={series}
@@ -1460,7 +1440,7 @@ const SearchApi = () => {
 
             {/* Mobile Expansions Grid */}
             {isMobile && (
-              <div>
+              <div className="mt-0">
                 {isLoading ? (
                   <div className="flex justify-center py-12">
                     <Loader2 className="animate-spin" size={48} />

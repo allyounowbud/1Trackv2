@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import translationUtils from '../utils/translationUtils.js';
 import { useLanguage } from '../contexts/LanguageContext';
-import CachedImage from './CachedImage';
+import SafeImage from './SafeImage';
 
 // Use functions from the default export
 const { processLocalizedExpansion, getExpansionLogoUrl } = translationUtils;
@@ -134,7 +134,7 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
             <div className="flex items-end gap-4">
               {logoUrl && (
                 <div className="w-20 h-20 bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg">
-                  <CachedImage
+                  <SafeImage
                     src={logoUrl}
                     alt={`${localizedExpansion.displayName} logo`}
                     className="w-full h-full object-contain"
@@ -266,7 +266,7 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
                     {logoUrl && (
                       <div className="text-center">
                         <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden mb-2">
-                          <CachedImage
+                          <SafeImage
                             src={logoUrl}
                             alt={`${localizedExpansion.displayName} logo`}
                             className="w-full h-full object-contain"
@@ -278,7 +278,7 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
                     {symbolUrl && (
                       <div className="text-center">
                         <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden mb-2">
-                          <CachedImage
+                          <SafeImage
                             src={symbolUrl}
                             alt={`${localizedExpansion.displayName} symbol`}
                             className="w-full h-full object-contain"

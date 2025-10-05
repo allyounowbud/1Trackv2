@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { getItemDisplayName, getItemSetName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
 import { queryKeys } from '../lib/queryClient';
-import CachedImage from '../components/CachedImage';
+import SafeImage from '../components/SafeImage';
 
 
 // Simple data fetching - just one table!
@@ -1062,7 +1062,7 @@ const Collection = () => {
               {/* Card Image */}
               <div className="aspect-[1/1] flex items-center justify-center p-4 relative">
                 {item.image ? (
-                  <CachedImage 
+                  <SafeImage 
                     src={item.image} 
                     alt={item.name}
                     className="w-full h-full object-contain"
@@ -1388,7 +1388,7 @@ const Collection = () => {
                 <div className="flex items-center gap-3 mt-4 p-3 bg-gray-800 rounded-lg border border-gray-600">
                   {ordersToDelete[0].image_url && (
                     <div className="w-12 h-12 flex-shrink-0">
-                      <CachedImage 
+                      <SafeImage 
                         src={ordersToDelete[0].image_url} 
                         alt={ordersToDelete[0].item_name}
                         className="w-full h-full object-contain rounded"

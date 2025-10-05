@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Star, ExternalLink, DollarSign, Package, Hash, X, TrendingUp, TrendingDown } from 'lucide-react';
-import CachedImage from './CachedImage';
+import SafeImage from './SafeImage';
 
 const CardPreviewModal = ({ card, isOpen, onClose, onAddToCollection }) => {
   const [quantity, setQuantity] = useState(1);
@@ -107,7 +107,7 @@ const CardPreviewModal = ({ card, isOpen, onClose, onAddToCollection }) => {
           <div className="bg-gray-800 rounded-xl p-4">
             <div className="aspect-[488/680] max-w-sm mx-auto bg-gray-700 rounded-lg overflow-hidden">
               {(card.image_url_large && isValidUrl(card.image_url_large)) || (card.image_url && isValidUrl(card.image_url)) ? (
-                <CachedImage
+                <SafeImage
                   src={card.image_url_large || card.image_url}
                   alt={card.name}
                   className="w-full h-full object-contain"

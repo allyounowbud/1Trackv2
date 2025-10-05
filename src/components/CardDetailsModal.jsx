@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import translationUtils from '../utils/translationUtils.js';
 const { processLocalizedCard, getLocalizedImageUrl } = translationUtils;
 import { useLanguage } from '../contexts/LanguageContext';
-import CachedImage from './CachedImage';
+import SafeImage from './SafeImage';
 import PriceDisplay from './PriceDisplay';
 
 const CardDetailsModal = ({ card, isOpen, onClose }) => {
@@ -89,7 +89,7 @@ const CardDetailsModal = ({ card, isOpen, onClose }) => {
           <div className="flex items-center gap-4">
             {imageUrl && (
               <div className="w-16 h-20 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
-                <CachedImage
+                <SafeImage
                   src={imageUrl}
                   alt={localizedCard.displayName}
                   className="w-full h-full object-contain"

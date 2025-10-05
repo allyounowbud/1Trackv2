@@ -4,7 +4,7 @@ import translationUtils from '../utils/translationUtils.js';
 const { processLocalizedCard, getLocalizedImageUrl } = translationUtils;
 import { useLanguage } from '../contexts/LanguageContext';
 import DesktopSideMenu from './DesktopSideMenu';
-import CachedImage from './CachedImage';
+import SafeImage from './SafeImage';
 
 const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) => {
   const [quantity, setQuantity] = useState(1);
@@ -127,7 +127,7 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
           <div className="flex justify-center">
             <div className="w-32 h-32 bg-gray-800 rounded-xl flex items-center justify-center">
               {imageUrl ? (
-                <CachedImage 
+                <SafeImage 
                   src={imageUrl} 
                   alt={itemName}
                   className="w-full h-full object-contain rounded-xl"
@@ -289,7 +289,7 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
         <div className="flex justify-center pt-6 pb-4">
           <div className="w-80 h-96 overflow-hidden">
             {imageUrl ? (
-              <CachedImage
+              <SafeImage
                 src={imageUrl}
                 alt={productName || 'Product'}
                 className="w-full h-full object-contain"
