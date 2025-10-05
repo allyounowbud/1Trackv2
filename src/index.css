@@ -1,0 +1,237 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .hover\:scale-102:hover {
+    transform: scale(1.02);
+  }
+}
+
+@layer base {
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+    font-weight: 200;
+    background-color: #111827;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent html scroll - app container handles it */
+  }
+  
+  body {
+    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white;
+    font-weight: 200;
+    background-color: #111827;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent body scroll - app container handles it */
+  }
+  
+  /* Make all text elements use thin font by default */
+  h1, h2, h3, h4, h5, h6, p, span, div, button, input, textarea, select {
+    font-weight: 200;
+  }
+  
+  /* Override for specific elements that need more weight */
+  .font-medium {
+    font-weight: 300;
+  }
+  
+  .font-semibold {
+    font-weight: 400;
+  }
+  
+  .font-bold {
+    font-weight: 500;
+  }
+}
+
+@layer components {
+  /* iPhone-style app container */
+  .app-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: #111827;
+    overflow: hidden;
+  }
+
+  /* Main content area - takes up space above bottom nav */
+  .main-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 80px; /* Space for bottom navigation */
+    background-color: #111827;
+  }
+
+  /* iPhone-style bottom navigation */
+  .bottom-nav-fixed {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
+    background-color: #030712;
+    border-top: 1px solid #374151;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    /* Ensure it never moves */
+    transform: none;
+    -webkit-transform: none;
+  }
+
+  /* Modal overlay fixes - must be higher than bottom navigation */
+  .modal-overlay {
+    z-index: 10000 !important;
+  }
+
+  /* PWA-specific fixes */
+  @media (display-mode: standalone) {
+    .app-container {
+      /* PWA mode - ensure full viewport coverage */
+      height: 100vh;
+      height: 100dvh; /* Dynamic viewport height for mobile */
+    }
+    
+    .bottom-nav-fixed {
+      /* PWA mode - ensure safe area support */
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+  
+  /* Mobile-specific fixes */
+  @media (max-width: 768px) {
+    .app-container {
+      /* Mobile - ensure proper height */
+      height: 100vh;
+      height: 100dvh;
+    }
+    
+    .main-content {
+      /* Mobile - ensure proper scrolling */
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  /* Desktop-specific styles */
+  .desktop-app-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    background-color: #111827;
+    overflow: hidden;
+  }
+
+  .desktop-sidebar {
+    position: relative;
+    height: 100vh;
+    flex-shrink: 0;
+    background-color: #030712;
+    border-right: 1px solid #374151;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+  }
+
+  .desktop-main-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background-color: #111827;
+    padding: 2rem;
+    /* Desktop-optimized padding */
+    padding-bottom: 2rem;
+    transition: all 0.3s ease;
+  }
+
+  /* Sidebar state classes */
+  .desktop-main-content.sidebar-expanded {
+    margin-left: 0;
+  }
+
+  .desktop-main-content.sidebar-collapsed {
+    margin-left: 0;
+  }
+
+  /* Desktop-specific content improvements */
+  @media (min-width: 1024px) {
+    .desktop-main-content {
+      padding: 3rem 4rem;
+    }
+    
+    .desktop-main-content.sidebar-expanded {
+      margin-left: 0;
+    }
+    
+    .desktop-main-content.sidebar-collapsed {
+      margin-left: 0;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .desktop-main-content {
+      padding: 4rem 6rem;
+    }
+  }
+
+  /* Hide scrollbars for mobile app-like experience */
+  * {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* Internet Explorer 10+ */
+  }
+  
+  *::-webkit-scrollbar {
+    display: none; /* Webkit browsers */
+  }
+
+  /* Line clamp utilities */
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+  
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  
+  .line-clamp-3 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+}
+
+/* Fix date input sizing on mobile */
+input[type="date"] {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* Ensure date inputs don't cause horizontal scroll */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  width: 16px;
+  height: 16px;
+}

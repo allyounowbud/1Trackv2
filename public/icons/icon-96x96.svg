@@ -1,0 +1,7 @@
+<svg width="96" height="96" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Full square background - no rounded corners to prevent white edges when cropped -->
+  <rect width="512" height="512" fill="#6366f1"/>
+  
+  <!-- "1T" text centered and sized for full square -->
+  <text x="256" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="240" font-weight="bold" fill="white">1T</text>
+</svg>
