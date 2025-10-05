@@ -278,39 +278,28 @@ const SearchApi = () => {
 
   // Enhance search results with TCGGo images for better image quality
   const enhanceResultsWithTcgGoImages = async (results) => {
-    console.log('🖼️ Enhancing results with TCGGo images...');
-    console.log('🖼️ Input results:', results.length, 'items');
-    console.log('🖼️ Selected game:', selectedGame);
-    
     // Skip TCGGo image enhancement for now due to 401 errors
     // TODO: Re-enable when TCGGo service is fixed
-    console.log('⚠️ TCGGo image enhancement disabled due to 401 errors');
     return results;
     
     const enhancedResults = await Promise.all(results.map(async (card, index) => {
-      console.log(`🖼️ Processing card ${index + 1}/${results.length}: ${card.name}`);
-      console.log(`🖼️ Card source: ${card.source}, image_url: ${card.image_url}`);
       
       // Only enhance PriceCharting results (sealed products) with TCGGo images
       if (card.source !== 'pricecharting') {
-        console.log(`🖼️ Skipping card ${card.name} - not a PriceCharting result (source: ${card.source})`);
         return card;
       }
 
       // Skip if already has a good image from TCGGo
       if (card.image_url?.includes('tcggo.com')) {
-        console.log(`🖼️ Skipping card ${card.name} - already has TCGGo image`);
         return card;
       }
 
       try {
         // Try to find a better image from TCGGo for PriceCharting items
-        console.log(`🖼️ Searching TCGGo for PriceCharting item: ${card.name}`);
         const setName = card.set_name || card.expansion_name;
         const tcgGoImage = await tcggoImageService.findBestImage(card.name, selectedGame?.id || 'pokemon', setName);
         
         if (tcgGoImage && tcgGoImage.image_url) {
-          console.log(`✅ Found TCGGo image for ${card.name}: ${tcgGoImage.image_url}`);
           return {
             ...card,
             image_url: tcgGoImage.image_url,
@@ -318,17 +307,13 @@ const SearchApi = () => {
             image_source: 'tcggo'
           };
         } else {
-          console.log(`⚠️ No TCGGo image found for ${card.name}`);
         }
       } catch (error) {
-        console.log(`⚠️ Could not enhance image for ${card.name}:`, error.message);
       }
 
       return card;
     }));
 
-    console.log('🖼️ Image enhancement complete');
-    console.log('🖼️ Enhanced results:', enhancedResults.length, 'items');
     return enhancedResults;
   };
 
@@ -343,7 +328,6 @@ const SearchApi = () => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching custom items:', error);
         return;
       }
 
@@ -367,9 +351,7 @@ const SearchApi = () => {
                
                // Mark services as initialized
                setServicesInitialized(true);
-               console.log('✅ All services initialized successfully');
              } catch (error) {
-               console.error('Failed to initialize SearchApi:', error);
                setError('Failed to connect to card database. Please try again later.');
              }
            };
@@ -443,15 +425,9 @@ const SearchApi = () => {
       
       // Merge both results
       const allExpansions = [...englishResult, ...japaneseResult];
-      console.log('🌍 Merged expansions:', allExpansions.length, 'total');
-      console.log('🇺🇸 English:', englishResult.length);
-      console.log('🇯🇵 Japanese:', japaneseResult.length);
-      console.log('🔍 Language codes in merged:', [...new Set(allExpansions.map(exp => exp.language_code))]);
-      console.log('🔍 Sample expansions:', allExpansions.slice(0, 3).map(exp => `${exp.name} (${exp.language_code})`));
       
       setExpansions(allExpansions);
     } catch (error) {
-      console.error('Failed to load expansions:', error);
     }
   };
 
@@ -547,16 +523,12 @@ const SearchApi = () => {
         pageSize: 20
       });
       
-      console.log('🔍 Hybrid search results:', results);
-      console.log('🔍 Singles count:', results.singles?.length || 0);
-      console.log('🔍 Sealed count:', results.sealed?.length || 0);
       
       // Combine singles and sealed products
       const allResults = [];
       
       // Add singles from Scrydex
       if (results.singles && results.singles.length > 0) {
-        console.log('📱 Adding Scrydex singles:', results.singles.length);
         const formattedSingles = formatCardsWithVariants(results.singles);
         
         // Filter out TCG Pocket cards
@@ -568,13 +540,10 @@ const SearchApi = () => {
                              cardName.includes('pocket promo') ||
                              cardName.includes('pocket');
           if (isTCGPocket) {
-            console.log('🚫 Filtering out TCG Pocket card:', card.name, 'from expansion:', card.expansion_name);
           }
           return !isTCGPocket;
         });
         
-        console.log('🚫 Filtered out TCG Pocket cards:', formattedSingles.length - filteredSingles.length);
-        console.log('✅ Final singles count:', filteredSingles.length);
         
         allResults.push(...filteredSingles.map(card => ({
           ...card,
@@ -584,16 +553,12 @@ const SearchApi = () => {
       
       // Add sealed products from PriceCharting
       if (results.sealed && results.sealed.length > 0) {
-        console.log('📦 Adding PriceCharting sealed products:', results.sealed.length);
-        console.log('📦 First sealed product:', results.sealed[0]);
         allResults.push(...results.sealed.map(product => ({
           ...product,
           source: 'pricecharting'
         })));
       }
       
-      console.log('📦 Combined results:', allResults.length);
-      console.log('📦 Result sources:', allResults.map(r => r.source));
 
       // Enhance results with TCGGo images (only for PriceCharting items)
       const enhancedResults = await enhanceResultsWithTcgGoImages(allResults);
@@ -730,7 +695,6 @@ const SearchApi = () => {
       } else {
         // Add singles from Scrydex
         if (results.singles && results.singles.length > 0) {
-          console.log('📱 Adding Scrydex singles:', results.singles.length);
           const formattedSingles = formatCardsWithVariants(results.singles);
           
           // Filter out TCG Pocket cards
@@ -742,7 +706,6 @@ const SearchApi = () => {
                                cardName.includes('pocket promo') ||
                                cardName.includes('pocket');
             if (isTCGPocket) {
-              console.log('🚫 Filtering out TCG Pocket card:', card.name, 'from expansion:', card.expansion_name);
             }
             return !isTCGPocket;
           });
@@ -757,8 +720,6 @@ const SearchApi = () => {
         }
       }
       
-      console.log('📦 Combined results:', allResults.length);
-      console.log('📦 Result sources:', allResults.map(r => r.source));
 
       // Enhance results with TCGGo images (only for PriceCharting items)
       const enhancedResults = await enhanceResultsWithTcgGoImages(allResults);

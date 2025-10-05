@@ -93,7 +93,6 @@ class ApiCacheService {
     // Maximum cache size
     this.maxCacheSize = 10000;
     
-    console.log('🗄️ ApiCacheService initialized with Scrydex best practices');
     
     // Start background maintenance
     this.startBackgroundMaintenance();
@@ -158,7 +157,6 @@ class ApiCacheService {
     this.stats.hits++;
     this.stats.apiCallsSaved++;
     this.stats.creditSavings += this.getCreditCost(metadata.type);
-    console.log(`📦 Cache hit: ${cacheKey} (${metadata.type}) - Saved API call`);
     return this.cache.get(cacheKey);
   }
 
@@ -192,7 +190,6 @@ class ApiCacheService {
     this.cacheMetadata.set(cacheKey, metadata);
     
     this.stats.sets++;
-    console.log(`💾 Cache set: ${cacheKey} (${type}, TTL: ${Math.round(ttl / 1000 / 60)}min)`);
     
     // Schedule background refresh if needed
     this.scheduleBackgroundRefresh(cacheKey, type);
@@ -218,7 +215,6 @@ class ApiCacheService {
       this.refreshIntervals.delete(cacheKey);
     }
     
-    console.log(`🗑️ Cache deleted: ${cacheKey}`);
   }
 
   /**
@@ -268,7 +264,6 @@ class ApiCacheService {
    */
   async refreshCacheEntry(cacheKey, type) {
     try {
-      console.log(`🔄 Background refresh: ${cacheKey} (${type})`);
       
       // Mark as refreshed and extend TTL
       const metadata = this.cacheMetadata.get(cacheKey);
@@ -277,11 +272,9 @@ class ApiCacheService {
         // Extend the expiration time by the TTL
         metadata.expiresAt = Date.now() + metadata.ttl;
         this.stats.refreshes++;
-        console.log(`✅ Cache entry refreshed: ${cacheKey}`);
       }
       
     } catch (error) {
-      console.error(`❌ Background refresh failed for ${cacheKey}:`, error);
     }
   }
 
@@ -304,14 +297,12 @@ class ApiCacheService {
       this.refreshCriticalEntries();
     }, 60 * 60 * 1000);
 
-    console.log('🔄 Background cache maintenance started');
   }
 
   /**
    * Refresh critical cache entries
    */
   async refreshCriticalEntries() {
-    console.log('🔄 Refreshing critical cache entries...');
     
     for (const [cacheKey, metadata] of this.cacheMetadata.entries()) {
       // Only refresh entries that are close to expiring (within 25% of TTL)

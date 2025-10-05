@@ -29,14 +29,11 @@ class HybridSearchService {
       // Initialize RapidAPI service for image enhancement (optional - may fail if no API key)
       const rapidApiInitialized = await rapidApiService.initialize()
       if (!rapidApiInitialized) {
-        console.warn('⚠️ RapidAPI not available - image enhancement disabled')
       }
       
       this.isInitialized = true
-      console.log('✅ Hybrid Search Service initialized')
       return true
     } catch (error) {
-      console.error('❌ Failed to initialize Hybrid Search Service:', error)
       return false
     }
   }
@@ -89,14 +86,11 @@ class HybridSearchService {
       const isSealedQuery = this.isSealedProductQuery(query)
       const isSingleQuery = this.isSingleCardQuery(query)
 
-      console.log('🔍 Query analysis:', { query, isSealedQuery, isSingleQuery, page, pageSize, expansionId })
 
       // If it's clearly a sealed product query, only search PriceCharting
       if (isSealedQuery && !isSingleQuery) {
         if (priceChartingApiService.isInitialized) {
-          console.log('🔍 Searching sealed products via PriceCharting')
           const sealedResults = await priceChartingApiService.searchSealedProducts(query, game)
-          console.log('🔍 PriceCharting raw results:', sealedResults)
           
           // Format and sort sealed products by expansion
           let formattedProducts = []
@@ -126,21 +120,18 @@ class HybridSearchService {
       }
       // If it's clearly a single card query, only search Scrydex
       else if (isSingleQuery && !isSealedQuery) {
-        console.log('🔍 Searching singles via Scrydex API')
         const singleResults = await scrydexApiService.searchCards(query, { ...options, page, pageSize })
         results.singles = singleResults.data || []
         results.total = singleResults.total || 0
       }
       // If ambiguous or both types, search both APIs
       else {
-        console.log('🔍 Searching both singles and sealed products')
         
         // Search singles via Scrydex
         try {
           const singleResults = await scrydexApiService.searchCards(query, { ...options, page, pageSize })
           results.singles = singleResults.data || []
         } catch (error) {
-          console.warn('⚠️ Scrydex search failed:', error)
         }
 
         // Search sealed via PriceCharting (if available)
@@ -161,10 +152,8 @@ class HybridSearchService {
             
             results.sealed = formattedProducts
           } catch (error) {
-            console.warn('⚠️ PriceCharting search failed:', error)
           }
         } else {
-          console.log('🔍 PriceCharting not available - skipping sealed product search')
         }
 
         // For combined results, we need to handle pagination differently
