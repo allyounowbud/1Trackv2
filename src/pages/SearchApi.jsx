@@ -5,6 +5,7 @@ import scrydexApiService from '../services/scrydexApiService';
 import hybridSearchService from '../services/hybridSearchService';
 import priceChartingApiService from '../services/priceChartingApiService';
 import tcggoImageService from '../services/tcggoImageService';
+import searchCacheService from '../services/searchCacheService';
 import SafeImage from '../components/SafeImage';
 import CardPreviewModal from '../components/CardPreviewModal';
 import CustomItemModal from '../components/CustomItemModal';
@@ -267,8 +268,7 @@ const SearchApi = () => {
 
   // Enhance search results with TCGGo images for better image quality
   const enhanceResultsWithTcgGoImages = async (results) => {
-    // Skip TCGGo image enhancement for now due to 401 errors
-    // TODO: Re-enable when TCGGo service is fixed
+    // Skip TCGGo image enhancement for performance - return results immediately
     return results;
     
     const enhancedResults = await Promise.all(results.map(async (card, index) => {
@@ -358,31 +358,6 @@ const SearchApi = () => {
     };
   }, []);
 
-  // Infinite scroll effect
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollPosition = window.innerHeight + document.documentElement.scrollTop;
-      const documentHeight = document.documentElement.offsetHeight;
-      const threshold = 1000;
-      
-      console.log('🔄 Scroll check:', { 
-        scrollPosition, 
-        documentHeight, 
-        threshold, 
-        hasMore, 
-        isLoadingMore,
-        shouldLoad: scrollPosition >= documentHeight - threshold && hasMore && !isLoadingMore
-      });
-      
-      if (scrollPosition >= documentHeight - threshold && hasMore && !isLoadingMore) {
-        console.log('🔄 Scroll threshold reached, calling loadMoreResults');
-        loadMoreResults();
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [hasMore, isLoadingMore, currentPage, searchQuery, selectedExpansion, expansionViewMode]);
 
   // Load custom items when manual view is accessed
   useEffect(() => {
@@ -497,8 +472,27 @@ const SearchApi = () => {
 
   // Perform search
   const performSearch = async (query, page = 1, append = false) => {
-    setIsLoading(true);
-    setError(null);
+    // Clear any existing timeouts to prevent multiple searches
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Reset state for new search
+    if (page === 1) {
+      setIsLoading(true);
+      setError(null);
+      if (!append) {
+        setSearchResults([]);
+        setTotalResults(0);
+        setHasMore(false);
+        setCurrentPage(1);
+      }
+    } else {
+      setIsLoadingMore(true);
+    }
 
     try {
       // Check if services are initialized
@@ -506,6 +500,7 @@ const SearchApi = () => {
         console.log('⏳ Services not ready, waiting for initialization...');
         setError('Search services are still initializing. Please wait a moment and try again.');
         setIsLoading(false);
+        setIsLoadingMore(false);
         return;
       }
 
@@ -558,19 +553,32 @@ const SearchApi = () => {
       }
       
 
-      // Enhance results with TCGGo images (only for PriceCharting items)
-      const enhancedResults = await enhanceResultsWithTcgGoImages(allResults);
+      // Skip image enhancement for performance - use results directly
+      const enhancedResults = allResults;
+
+      // Final safety filter to ensure strict separation
+      const finalResults = enhancedResults.filter(item => {
+        if (currentViewMode === 'sealed') {
+          // In sealed mode, only show items marked as sealed or from pricecharting source
+          return item.itemType === 'sealed' || item.source === 'pricecharting';
+        } else {
+          // In singles mode, only show items marked as singles or from scrydex source
+          return item.itemType === 'singles' || item.source === 'scrydex';
+        }
+      });
+
+      console.log(`🔒 FINAL FILTER: ${currentViewMode} mode - showing ${finalResults.length} items (filtered from ${enhancedResults.length})`);
 
       if (append) {
-        setSearchResults(prev => [...prev, ...enhancedResults]);
+        setSearchResults(prev => [...prev, ...finalResults]);
       } else {
-        setSearchResults(enhancedResults);
+        setSearchResults(finalResults);
       }
 
       // Set pagination info
       const totalFromResults = results.total || (results.singles?.total || 0) + (results.sealed?.total || 0);
       setTotalResults(totalFromResults);
-      setHasMore(enhancedResults.length >= 20 && (page * 20) < totalFromResults);
+      setHasMore(finalResults.length >= 20 && (page * 20) < totalFromResults);
       setCurrentPage(page);
 
     } catch (error) {
@@ -578,9 +586,12 @@ const SearchApi = () => {
       setError('Failed to search cards. Please try again.');
       if (page === 1) {
         setSearchResults([]);
+        setTotalResults(0);
+        setHasMore(false);
       }
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
@@ -588,29 +599,27 @@ const SearchApi = () => {
   const handleSearch = (e) => {
     e.preventDefault();
     
-    // Clear any existing timeout
+    // Clear any existing timeouts
     if (searchTimeout) {
       clearTimeout(searchTimeout);
     }
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
     
-    // Set a new timeout to debounce the search
-    const timeout = setTimeout(() => {
-      setCurrentPage(1);
-      setSearchResults([]);
-      setTotalResults(0);
-      setHasMore(false);
-      
-      // Clear expansion selection when using top search bar
-      if (selectedExpansion) {
-        setSelectedExpansion(null);
-        setExpansionViewMode('singles');
-      }
-      
-      // Always perform general search when using top search bar
+    // Clear expansion selection when using top search bar
+    if (selectedExpansion) {
+      setSelectedExpansion(null);
+      setExpansionViewMode('singles');
+    }
+    
+    // Perform search immediately for form submission
+    if (searchQuery.trim()) {
+      setCurrentView('search');
       performSearch(searchQuery, 1, false);
-    }, 300); // 300ms debounce
-    
-    setSearchTimeout(timeout);
+    } else {
+      clearSearch();
+    }
   };
 
   // Handle expansion selection (legacy function - now handled by handleExpansionSelect)
@@ -620,8 +629,27 @@ const SearchApi = () => {
 
   // Perform search for cards in a specific expansion
   const performExpansionSearch = async (expansionId, page = 1, append = false, viewMode = null) => {
-    setIsLoading(true);
-    setError(null);
+    // Clear any existing timeouts
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Reset state for new expansion search
+    if (page === 1) {
+      setIsLoading(true);
+      setError(null);
+      if (!append) {
+        setSearchResults([]);
+        setTotalResults(0);
+        setHasMore(false);
+        setCurrentPage(1);
+      }
+    } else {
+      setIsLoadingMore(true);
+    }
 
     try {
       const searchOptions = {
@@ -634,40 +662,106 @@ const SearchApi = () => {
       const currentViewMode = viewMode || expansionViewMode;
       
       if (currentViewMode === 'sealed') {
-        // Get sealed products for this expansion (Scrydex first, then PriceCharting fallback)
-        console.log(`🔍 Getting sealed products for expansion: ${selectedExpansion?.name} (${selectedExpansion?.code})`);
-        console.log(`🔍 Full expansion object:`, selectedExpansion);
+        // Check cache first for sealed products
+        const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'sealed', expansionId, page, 20);
+        const cachedResults = await searchCacheService.getCachedResults(cacheKey);
         
-        const sealedResults = await hybridSearchService.getSealedProductsForExpansion(expansionId, {
-          page,
-          pageSize: 20
-        });
-        
-        console.log(`📦 Sealed results source: ${sealedResults.source}, count: ${sealedResults.data?.length || 0}`);
-        
-        results = {
-          singles: [],
-          sealed: sealedResults.data || [],
-          total: sealedResults.total || 0
-        };
+        if (cachedResults) {
+          console.log(`📦 Using cached sealed products for: ${expansionId}`);
+          results = {
+            singles: [],
+            sealed: cachedResults.results.sealed || [],
+            total: cachedResults.total || 0
+          };
+        } else {
+          // Get sealed products for this expansion (Scrydex first, then PriceCharting fallback)
+          console.log(`🔍 Getting sealed products for expansion: ${selectedExpansion?.name} (${selectedExpansion?.code})`);
+          console.log(`🔍 Full expansion object:`, selectedExpansion);
+          
+          const sealedResults = await hybridSearchService.getSealedProductsForExpansion(expansionId, {
+            page,
+            pageSize: 20
+          });
+          
+          console.log(`📦 Sealed results source: ${sealedResults.source}, count: ${sealedResults.data?.length || 0}`);
+          
+          results = {
+            singles: [],
+            sealed: sealedResults.data || [],
+            total: sealedResults.total || 0
+          };
+
+          // Cache the sealed products results (async, don't wait for it)
+          if (sealedResults.data && sealedResults.data.length > 0) {
+            console.log(`💾 Caching sealed products for: ${expansionId}`);
+            // Don't await caching to improve performance
+            searchCacheService.setCachedResults(
+              cacheKey,
+              '',
+              'pokemon',
+              'sealed',
+              results,
+              results.total,
+              page,
+              20,
+              expansionId
+            ).catch(error => {
+              console.warn('Cache write failed (non-critical):', error);
+            });
+          }
+        }
       } else {
-        // Search for singles from Scrydex for this expansion
-        console.log(`🔍 Searching singles for expansion: ${expansionId}`);
-        const result = await scrydexApiService.searchCards('', searchOptions);
+        // Check cache first for expansion results
+        const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'expansion', expansionId, page, 20);
+        const cachedResults = await searchCacheService.getCachedResults(cacheKey);
         
-        // Format the results to match expected structure
-        results = {
-          singles: result.data || [],
-          sealed: [],
-          total: result.total || result.totalCount || 0
-        };
+        if (cachedResults) {
+          console.log(`📦 Using cached expansion results for: ${expansionId}`);
+          results = {
+            singles: cachedResults.results.singles || [],
+            sealed: [],
+            total: cachedResults.total || 0
+          };
+        } else {
+          // Search for singles from Scrydex for this expansion
+          console.log(`🔍 Searching singles for expansion: ${expansionId}`);
+          const result = await scrydexApiService.searchCards('', searchOptions);
+          
+          // Format the results to match expected structure
+          results = {
+            singles: result.data || [],
+            sealed: [],
+            total: result.total || result.totalCount || 0
+          };
+
+          // Cache the expansion results (async, don't wait for it)
+          if (result.data && result.data.length > 0) {
+            console.log(`💾 Caching expansion results for: ${expansionId}`);
+            // Don't await caching to improve performance
+            searchCacheService.setCachedResults(
+              cacheKey,
+              '',
+              'pokemon',
+              'expansion',
+              results,
+              results.total,
+              page,
+              20,
+              expansionId
+            ).catch(error => {
+              console.warn('Cache write failed (non-critical):', error);
+            });
+          }
+        }
       }
       
-      // Process results based on view mode
+      // Process results based on view mode - ensure strict separation
       let allResults = [];
       
       if (currentViewMode === 'sealed') {
-        // Add sealed products (already filtered by hybrid service)
+        // SEALED MODE: Only add sealed products, explicitly exclude singles
+        console.log('🔒 SEALED MODE: Processing only sealed products');
+        
         if (results.sealed && results.sealed.length > 0) {
           console.log('📦 Adding filtered sealed products:', results.sealed.length);
           
@@ -677,21 +771,29 @@ const SearchApi = () => {
             if (product.name && product.set_name && product.market_value !== undefined) {
               return {
                 ...product,
-                source: product.source || 'pricecharting'
+                source: product.source || 'pricecharting',
+                itemType: 'sealed' // Explicitly mark as sealed
               };
             }
             
             // Otherwise, format the raw PriceCharting data
             return {
               ...priceChartingApiService.formatProductData(product),
-              source: 'pricecharting'
+              source: 'pricecharting',
+              itemType: 'sealed' // Explicitly mark as sealed
             };
           });
           
           allResults.push(...formattedSealed);
         }
+        
+        // Explicitly ensure no singles are included in sealed mode
+        console.log('🔒 SEALED MODE: Excluding singles - results.singles length:', results.singles?.length || 0);
+        
       } else {
-        // Add singles from Scrydex
+        // SINGLES MODE: Only add singles, explicitly exclude sealed products
+        console.log('🔒 SINGLES MODE: Processing only singles');
+        
         if (results.singles && results.singles.length > 0) {
           const formattedSingles = formatCardsWithVariants(results.singles);
           
@@ -713,21 +815,24 @@ const SearchApi = () => {
           
           allResults.push(...filteredSingles.map(card => ({
             ...card,
-            source: 'scrydex'
+            source: 'scrydex',
+            itemType: 'singles' // Explicitly mark as singles
           })));
         }
+        
+        // Explicitly ensure no sealed products are included in singles mode
+        console.log('🔒 SINGLES MODE: Excluding sealed products - results.sealed length:', results.sealed?.length || 0);
       }
       
 
-      // Enhance results with TCGGo images (only for PriceCharting items)
-      const enhancedResults = await enhanceResultsWithTcgGoImages(allResults);
+      // Skip image enhancement for performance - use results directly
+      const enhancedResults = allResults;
 
       if (append) {
         setSearchResults(prev => [...prev, ...enhancedResults]);
       } else {
         console.log('🔄 Setting search results:', enhancedResults.length, 'items');
         console.log('🔄 View mode:', expansionViewMode);
-        console.log('🔄 Enhanced results:', enhancedResults);
         setSearchResults(enhancedResults);
       }
 
@@ -738,13 +843,7 @@ const SearchApi = () => {
       } else {
         totalFromResults = results.total || results.singles?.total || 0;
       }
-      console.log('🔄 Pagination info:', { 
-        page, 
-        enhancedResultsLength: enhancedResults.length, 
-        totalFromResults, 
-        hasMore: enhancedResults.length >= 20 && (page * 20) < totalFromResults,
-        calculation: `${enhancedResults.length} >= 20 && (${page} * 20) < ${totalFromResults}`
-      });
+      
       setTotalResults(totalFromResults);
       setHasMore(enhancedResults.length >= 20 && (page * 20) < totalFromResults);
       setCurrentPage(page);
@@ -754,20 +853,33 @@ const SearchApi = () => {
       setError('Failed to load expansion cards. Please try again.');
       if (page === 1) {
         setSearchResults([]);
+        setTotalResults(0);
+        setHasMore(false);
       }
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
 
   // Infinite scroll setup
   useEffect(() => {
+    console.log('🔄 Setting up IntersectionObserver:', { hasMore, isLoading, isLoadingMore, loadingRefExists: !!loadingRef.current });
+    
     if (observerRef.current) observerRef.current.disconnect();
     
     observerRef.current = new IntersectionObserver(
       (entries) => {
+        console.log('🔄 IntersectionObserver triggered:', { 
+          isIntersecting: entries[0].isIntersecting, 
+          hasMore, 
+          isLoading, 
+          isLoadingMore 
+        });
+        
         if (entries[0].isIntersecting && hasMore && !isLoading && !isLoadingMore) {
+          console.log('🔄 IntersectionObserver calling loadMoreResults');
           loadMoreResults();
         }
       },
@@ -779,6 +891,9 @@ const SearchApi = () => {
 
     if (loadingRef.current) {
       observerRef.current.observe(loadingRef.current);
+      console.log('🔄 IntersectionObserver observing loadingRef');
+    } else {
+      console.log('🔄 IntersectionObserver: loadingRef not found');
     }
 
     return () => {
@@ -842,8 +957,29 @@ const SearchApi = () => {
   };
 
   const handleExpansionSelect = (expansion) => {
+    // Clear any existing timeouts
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Immediately clear previous results to prevent lingering content
+    setSearchResults([]);
+    setTotalResults(0);
+    setHasMore(false);
+    setCurrentPage(1);
+    setIsLoading(true);
+    setIsLoadingMore(false);
+    setError(null);
+    
+    // Reset view mode to singles for new expansion
+    setExpansionViewMode('singles');
+    
     setSelectedExpansion(expansion);
     setCurrentView('search');
+    
     // Automatically search for cards in this expansion
     performExpansionSearch(expansion.id, 1);
   };
@@ -871,11 +1007,29 @@ const SearchApi = () => {
 
   // Clear search and filters
   const clearSearch = () => {
+    // Clear any existing timeouts
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
     setSearchQuery('');
     setSearchResults([]);
     setTotalResults(0);
     setHasMore(false);
     setCurrentPage(1);
+    setIsLoading(false);
+    setIsLoadingMore(false);
+    setError(null);
+    
+    // Return to appropriate view
+    if (selectedExpansion) {
+      setCurrentView('search');
+    } else {
+      setCurrentView('games');
+    }
   };
 
   // Load more results for infinite scroll
@@ -1072,6 +1226,12 @@ const SearchApi = () => {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
+                  
+                  // Clear any existing timeouts
+                  if (searchTimeoutRef.current) {
+                    clearTimeout(searchTimeoutRef.current);
+                  }
+                  
                   // Auto-search when user types (with debounce) - only if services are ready
                   if (e.target.value.trim() && servicesInitialized) {
                     setCurrentView('search');
@@ -1080,13 +1240,14 @@ const SearchApi = () => {
                       setSelectedExpansion(null);
                       setExpansionViewMode('singles');
                     }
-                    clearTimeout(searchTimeoutRef.current);
+                    // Debounce the search to avoid too many API calls
                     searchTimeoutRef.current = setTimeout(() => {
                       performSearch(e.target.value, 1, false);
                     }, 500); // 500ms debounce
                   } else if (!servicesInitialized) {
                     setError('Search services are still initializing. Please wait a moment and try again.');
-                  } else {
+                  } else if (!e.target.value.trim()) {
+                    // Clear search when input is empty
                     clearSearch();
                   }
                 }}
@@ -1779,17 +1940,21 @@ const SearchApi = () => {
         )}
 
         {/* Loading indicator for infinite scroll */}
-        {hasMore && isLoadingMore && (
+        {hasMore && (
           <div ref={loadingRef} className="flex justify-center py-6">
-            <div className="flex items-center gap-2 text-gray-400">
-              <Loader2 className="animate-spin" size={20} />
-              <span className="text-sm">Loading more cards...</span>
-            </div>
+            {isLoadingMore ? (
+              <div className="flex items-center gap-2 text-gray-400">
+                <Loader2 className="animate-spin" size={20} />
+                <span className="text-sm">Loading more cards...</span>
+              </div>
+            ) : (
+              <div className="text-gray-500 text-sm">Scroll for more cards...</div>
+            )}
           </div>
         )}
 
         {/* No Results Found Section */}
-        {searchResults.length === 0 && !isLoading && searchQuery.trim() && (
+        {searchResults.length === 0 && !isLoading && !isLoadingMore && searchQuery.trim() && (
           <div className="text-center py-12">
             <div className="max-w-md mx-auto">
               <div className="text-6xl mb-4">🔍</div>
@@ -1797,30 +1962,19 @@ const SearchApi = () => {
               <p className="text-gray-400 mb-6">
                 We couldn't find any results for "<span className="text-white font-medium">{searchQuery}</span>"
               </p>
-              <div className="space-y-3">
+              <div className="flex gap-3">
                 <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSearchResults([]);
-                    setTotalResults(0);
-                    setHasMore(false);
-                    setSelectedExpansion(null);
-                    setExpansionViewMode('singles');
-                  }}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                  onClick={clearSearch}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                 >
                   Clear Search
                 </button>
                 <button
                   onClick={() => {
-                    setSearchQuery('');
-                    setSearchResults([]);
-                    setTotalResults(0);
-                    setHasMore(false);
-                    setSelectedExpansion(null);
-                    setExpansionViewMode('singles');
+                    clearSearch();
+                    setCurrentView('expansions');
                   }}
-                  className="w-full bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                  className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                 >
                   Back to Expansions
                 </button>
@@ -2240,10 +2394,13 @@ const SearchApi = () => {
           </div>
         )}
 
-        {/* Loading state */}
+        {/* Loading state - only show one loading indicator */}
         {isLoading && searchResults.length === 0 && !isLoadingMore && (
           <div className="flex justify-center py-12">
-            <Loader2 className="animate-spin" size={48} />
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="animate-spin" size={48} />
+              <p className="text-gray-400 text-sm">Searching...</p>
+            </div>
           </div>
         )}
 

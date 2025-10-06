@@ -16,6 +16,12 @@ const Orders = () => {
   const { data: orders = [], isLoading, error } = useQuery({
     queryKey: ['orders'],
     queryFn: async () => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -40,6 +46,7 @@ const Orders = () => {
             display_name
           )
         `)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -50,10 +57,17 @@ const Orders = () => {
   // Update order mutation
   const updateOrderMutation = useMutation({
     mutationFn: async ({ id, updates }) => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       const { data, error } = await supabase
         .from('orders')
         .update(updates)
         .eq('id', id)
+        .eq('user_id', user.id)
         .select()
         .single();
 
@@ -70,10 +84,17 @@ const Orders = () => {
   // Delete order mutation
   const deleteOrderMutation = useMutation({
     mutationFn: async (id) => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       const { error } = await supabase
         .from('orders')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id);
 
       if (error) throw error;
     },

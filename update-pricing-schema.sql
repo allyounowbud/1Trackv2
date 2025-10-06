@@ -60,3 +60,4 @@ FROM information_schema.columns
 WHERE table_name IN ('cached_cards', 'cached_sealed_products')
     AND column_name LIKE '%price%'
 ORDER BY table_name, column_name;
+

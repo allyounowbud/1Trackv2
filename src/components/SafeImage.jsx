@@ -45,3 +45,4 @@ const SafeImage = ({ src, alt, className, style, onError, onLoad, fallback }) =>
 };
 
 export default SafeImage;
+

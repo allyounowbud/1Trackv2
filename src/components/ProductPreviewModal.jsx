@@ -5,11 +5,14 @@ const { processLocalizedCard, getLocalizedImageUrl } = translationUtils;
 import { useLanguage } from '../contexts/LanguageContext';
 import DesktopSideMenu from './DesktopSideMenu';
 import SafeImage from './SafeImage';
+import databasePricingService from '../services/databasePricingService';
 
 const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) => {
   const [quantity, setQuantity] = useState(1);
   const [selectedTimeRange, setSelectedTimeRange] = useState('1M');
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'prices', 'details'
+  const [pricingData, setPricingData] = useState(null);
+  const [isLoadingPricing, setIsLoadingPricing] = useState(false);
   const { preferredLanguage } = useLanguage();
 
   const formatPrice = (value) => {
@@ -44,6 +47,28 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
     };
   }, [isOpen]);
 
+  // Load pricing data from database when modal opens
+  useEffect(() => {
+    if (isOpen && product && product.api_id) {
+      loadPricingData();
+    }
+  }, [isOpen, product]);
+
+  const loadPricingData = async () => {
+    if (!product?.api_id) return;
+    
+    setIsLoadingPricing(true);
+    try {
+      const pricing = await databasePricingService.getSealedProductPricing(product.api_id);
+      setPricingData(pricing);
+    } catch (error) {
+      console.error('Error loading pricing data:', error);
+      setPricingData(null);
+    } finally {
+      setIsLoadingPricing(false);
+    }
+  };
+
   if (!isOpen || !product) return null;
 
   // Process the card with localization
@@ -63,39 +88,57 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
   const tcgPlayerPrices = prices.tcgPlayer || {};
   const priceChartingPrices = prices.priceCharting || {};
 
-  // Get market value from different possible sources
-  let marketValue = product.marketValue || product.price || product.loose_price || product.new_price || 0;
-  let priceSource = prices.source || 'unknown';
+  // Use pricing data from database if available, otherwise fall back to product data
+  let marketValue = 0;
+  let priceSource = 'unknown';
   
-  // Handle Scrydex pricing structure if available
-  if (product.priceData) {
-    marketValue = product.priceData.market || product.priceData.low || product.priceData.price || marketValue;
-    priceSource = 'scrydex';
-  }
-  
-  // Handle variants pricing structure
-  if (product.variants && Array.isArray(product.variants)) {
-    for (const variant of product.variants) {
-      if (variant.prices && Array.isArray(variant.prices) && variant.prices.length > 0) {
-        const variantPrice = variant.prices[0];
-        marketValue = variantPrice.market || variantPrice.low || variantPrice.price || marketValue;
-        priceSource = 'scrydex-variants';
-        break;
+  if (pricingData) {
+    // Use database pricing data
+    if (pricingData.pricecharting?.market) {
+      marketValue = pricingData.pricecharting.market;
+      priceSource = 'database-pricecharting';
+    } else if (pricingData.raw?.market) {
+      marketValue = pricingData.raw.market;
+      priceSource = 'database-raw';
+    } else if (pricingData.graded?.market) {
+      marketValue = pricingData.graded.market;
+      priceSource = 'database-graded';
+    }
+  } else {
+    // Fall back to original product data
+    marketValue = product.marketValue || product.price || product.loose_price || product.new_price || 0;
+    priceSource = prices.source || 'unknown';
+    
+    // Handle Scrydex pricing structure if available
+    if (product.priceData) {
+      marketValue = product.priceData.market || product.priceData.low || product.priceData.price || marketValue;
+      priceSource = 'scrydex';
+    }
+    
+    // Handle variants pricing structure
+    if (product.variants && Array.isArray(product.variants)) {
+      for (const variant of product.variants) {
+        if (variant.prices && Array.isArray(variant.prices) && variant.prices.length > 0) {
+          const variantPrice = variant.prices[0];
+          marketValue = variantPrice.market || variantPrice.low || variantPrice.price || marketValue;
+          priceSource = 'scrydex-variants';
+          break;
+        }
       }
     }
-  }
-  
-  // Handle raw_prices and graded_prices arrays
-  if (product.raw_prices && Array.isArray(product.raw_prices) && product.raw_prices.length > 0) {
-    const rawPrice = product.raw_prices[0];
-    marketValue = rawPrice.market || rawPrice.low || rawPrice.price || marketValue;
-    priceSource = 'scrydex-raw';
-  }
-  
-  if (product.graded_prices && Array.isArray(product.graded_prices) && product.graded_prices.length > 0) {
-    const gradedPrice = product.graded_prices[0];
-    marketValue = gradedPrice.market || gradedPrice.low || gradedPrice.price || marketValue;
-    priceSource = 'scrydex-graded';
+    
+    // Handle raw_prices and graded_prices arrays
+    if (product.raw_prices && Array.isArray(product.raw_prices) && product.raw_prices.length > 0) {
+      const rawPrice = product.raw_prices[0];
+      marketValue = rawPrice.market || rawPrice.low || rawPrice.price || marketValue;
+      priceSource = 'scrydex-raw';
+    }
+    
+    if (product.graded_prices && Array.isArray(product.graded_prices) && product.graded_prices.length > 0) {
+      const gradedPrice = product.graded_prices[0];
+      marketValue = gradedPrice.market || gradedPrice.low || gradedPrice.price || marketValue;
+      priceSource = 'scrydex-graded';
+    }
   }
   
   // Debug: Log what we actually have

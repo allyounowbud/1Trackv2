@@ -301,7 +301,7 @@ class HybridSearchService {
       const { page = 1, pageSize = 20 } = options
       
       // Check cache first
-      const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'expansion', expansionId, page, pageSize)
+      const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'sealed', expansionId, page, pageSize)
       const cachedResults = await searchCacheService.getCachedResults(cacheKey)
       
       if (cachedResults) {
@@ -336,7 +336,7 @@ class HybridSearchService {
           cacheKey, 
           '', 
           'pokemon', 
-          'expansion', 
+          'sealed', 
           result, 
           result.total, 
           page, 
@@ -448,8 +448,8 @@ class HybridSearchService {
         await searchCacheService.setCachedResults(
           cacheKey, 
           '', 
-          'pokemon', 
-          'expansion', 
+          'pokemon',
+          'sealed', 
           emptyResult, 
           0, 
           page, 

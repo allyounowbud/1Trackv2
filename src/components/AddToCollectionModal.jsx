@@ -185,9 +185,16 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       );
       const retailerId = retailer.id;
 
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       // Create order in orders table
       const orderData = {
         item_id: itemId,
+        user_id: user.id,
         order_type: 'buy',
         buy_date: formData.buyDate,
         buy_price_cents: Math.round((parseFloat(formData.buyPrice) / parseInt(formData.quantity)) * 100),
