@@ -70,7 +70,7 @@ class SearchCacheService {
   }
 
   // Generate a unique cache key for a search
-  generateCacheKey(query, game, searchType, expansionId = null, page = 1, pageSize = 20) {
+  generateCacheKey(query, game, searchType, expansionId = null, page = 1, pageSize = 100) {
     const keyParts = [
       query.toLowerCase().trim(),
       game,
@@ -175,7 +175,7 @@ class SearchCacheService {
   }
 
   // Store search results in cache
-  async setCachedResults(cacheKey, query, game, searchType, results, total, page = 1, pageSize = 20, expansionId = null) {
+  async setCachedResults(cacheKey, query, game, searchType, results, total, page = 1, pageSize = 100, expansionId = null) {
     try {
       console.log('💾 Attempting to cache search results:', { cacheKey, query, game, searchType, total });
       

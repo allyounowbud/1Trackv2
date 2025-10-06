@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS search_cache (
     search_type TEXT NOT NULL, -- 'general', 'expansion', 'sealed'
     expansion_id TEXT,
     page INTEGER DEFAULT 1,
-    page_size INTEGER DEFAULT 20,
+    page_size INTEGER DEFAULT 100,
     results JSONB NOT NULL,
     total_results INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

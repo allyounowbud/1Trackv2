@@ -175,7 +175,7 @@ class ScrydexProxy {
     const response = await this.makeScrydexRequest('/pokemon/v1/en/cards', {
       q: query,
       page: params.page || 1,
-      page_size: params.pageSize || 20,
+      page_size: params.pageSize || 100,
       ...params
     })
 
@@ -201,7 +201,7 @@ class ScrydexProxy {
     const response = await this.makeScrydexRequest('/pokemon/v1/en/expansions', {
       q: query,
       page: params.page || 1,
-      page_size: params.pageSize || 20,
+      page_size: params.pageSize || 100,
       ...params
     })
 

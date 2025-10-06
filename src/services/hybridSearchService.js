@@ -6,6 +6,7 @@
  */
 
 import scrydexApiService from './scrydexApiService'
+import localScrydexService from './localScrydexService'
 import priceChartingApiService from './priceChartingApiService'
 import rapidApiService from './rapidApiService'
 import searchCacheService from './searchCacheService'
@@ -75,9 +76,38 @@ class HybridSearchService {
     }
 
     try {
-      const { page = 1, pageSize = 20, expansionId = null } = options
+      const { page = 1, pageSize = 100, expansionId = null } = options
       
-      // Check cache first
+      // Check if local database has data and try local search first
+      const hasLocalData = await localScrydexService.hasData()
+      if (hasLocalData) {
+        console.log('🎯 Attempting local database search first')
+        try {
+          let localResults
+          if (expansionId) {
+            localResults = await localScrydexService.searchCardsByExpansion(expansionId, options)
+          } else {
+            localResults = await localScrydexService.searchCards(query, options)
+          }
+          
+          if (localResults && localResults.data && localResults.data.length > 0) {
+            console.log(`✅ Found ${localResults.data.length} results in local database`)
+            return {
+              singles: localResults.data,
+              sealed: [],
+              total: localResults.total,
+              page: localResults.page,
+              pageSize: localResults.pageSize,
+              source: 'local',
+              cached: false
+            }
+          }
+        } catch (localError) {
+          console.warn('⚠️ Local search failed, falling back to API:', localError.message)
+        }
+      }
+      
+      // Check cache second
       const cacheKey = searchCacheService.generateCacheKey(query, game, 'general', expansionId, page, pageSize)
       const cachedResults = await searchCacheService.getCachedResults(cacheKey)
       
@@ -298,7 +328,7 @@ class HybridSearchService {
     }
 
     try {
-      const { page = 1, pageSize = 20 } = options
+      const { page = 1, pageSize = 100 } = options
       
       // Check cache first
       const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'sealed', expansionId, page, pageSize)
@@ -439,7 +469,7 @@ class HybridSearchService {
           data: [],
           total: 0,
           page: 1,
-          pageSize: 20,
+          pageSize: 100,
           hasMore: false,
           source: 'none'
         }
@@ -523,7 +553,7 @@ class HybridSearchService {
         data: [],
         total: 0,
         page: 1,
-        pageSize: 20,
+        pageSize: 100,
         hasMore: false,
         source: 'error'
       }

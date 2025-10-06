@@ -77,7 +77,7 @@ class ScrydexApiService {
     const params = new URLSearchParams({
       q: searchQuery,
       page: options.page || '1',
-      pageSize: options.pageSize || '20',
+      pageSize: options.pageSize || '100', // Use Scrydex's maximum page size
     })
 
     // Add optional filters
@@ -124,8 +124,8 @@ class ScrydexApiService {
         data: cards,
         total: data.total_count || data.totalCount || data.total || 0,
         page: data.page || parseInt(options.page) || 1,
-        pageSize: data.page_size || data.pageSize || parseInt(options.pageSize) || 20,
-        totalPages: Math.ceil((data.total_count || data.totalCount || data.total || 0) / (data.page_size || data.pageSize || parseInt(options.pageSize) || 20))
+        pageSize: data.page_size || data.pageSize || parseInt(options.pageSize) || 100,
+        totalPages: Math.ceil((data.total_count || data.totalCount || data.total || 0) / (data.page_size || data.pageSize || parseInt(options.pageSize) || 100))
       }
       
       // Cache the result
@@ -427,7 +427,7 @@ class ScrydexApiService {
     }
 
     try {
-      const { page = 1, pageSize = 20 } = options
+      const { page = 1, pageSize = 100 } = options
       const searchQuery = encodeURIComponent(query)
       
       console.log('🔍 Scrydex sealed search:', `${this.baseUrl}/sealed?q=${searchQuery}&page=${page}&pageSize=${pageSize}`)
@@ -465,7 +465,7 @@ class ScrydexApiService {
     }
 
     try {
-      const { page = 1, pageSize = 20 } = options
+      const { page = 1, pageSize = 100 } = options
       
       console.log('🔍 Scrydex expansion sealed:', `${this.baseUrl}/expansions/${expansionId}/sealed?page=${page}&pageSize=${pageSize}`)
       

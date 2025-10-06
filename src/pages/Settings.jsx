@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../contexts/ModalContext';
 import ThemeSettings from '../components/ThemeSettings';
+import ScrydexSyncSettings from '../components/ScrydexSyncSettings';
 import AccountDeletionModal from '../components/AccountDeletionModal';
 
 const Settings = () => {
@@ -122,9 +123,12 @@ const Settings = () => {
           {/* App Settings */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-6">
             <h3 className="text-white font-medium mb-4">App Settings</h3>
-            <div className="space-y-4">
+            <div className="space-y-6">
               {/* Theme Settings */}
               <ThemeSettings />
+              
+              {/* Scrydex Sync Settings */}
+              <ScrydexSyncSettings />
             </div>
           </div>
 

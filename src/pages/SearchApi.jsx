@@ -506,14 +506,14 @@ const SearchApi = () => {
 
       const searchOptions = {
         page,
-        pageSize: 20, // Smaller page size for smoother infinite scroll
+        pageSize: 100, // Use Scrydex's maximum page size for better performance
         expansionId: selectedExpansion?.id || null
       };
 
       // Use hybrid search service to search both singles and sealed products
       const results = await hybridSearchService.smartSearch(query, selectedGame?.id || 'pokemon', {
         page,
-        pageSize: 20
+        pageSize: 100
       });
       
       
@@ -578,7 +578,7 @@ const SearchApi = () => {
       // Set pagination info
       const totalFromResults = results.total || (results.singles?.total || 0) + (results.sealed?.total || 0);
       setTotalResults(totalFromResults);
-      setHasMore(finalResults.length >= 20 && (page * 20) < totalFromResults);
+      setHasMore(finalResults.length >= 100 && (page * 100) < totalFromResults);
       setCurrentPage(page);
 
     } catch (error) {
@@ -654,7 +654,7 @@ const SearchApi = () => {
     try {
       const searchOptions = {
         page,
-        pageSize: 20, // Smaller page size for smoother infinite scroll
+        pageSize: 100, // Use Scrydex's maximum page size for better performance
         expansionId: expansionId,
       };
 
@@ -680,7 +680,7 @@ const SearchApi = () => {
           
           const sealedResults = await hybridSearchService.getSealedProductsForExpansion(expansionId, {
             page,
-            pageSize: 20
+            pageSize: 100
           });
           
           console.log(`📦 Sealed results source: ${sealedResults.source}, count: ${sealedResults.data?.length || 0}`);
@@ -845,7 +845,7 @@ const SearchApi = () => {
       }
       
       setTotalResults(totalFromResults);
-      setHasMore(enhancedResults.length >= 20 && (page * 20) < totalFromResults);
+      setHasMore(enhancedResults.length >= 100 && (page * 100) < totalFromResults);
       setCurrentPage(page);
 
     } catch (error) {

@@ -89,7 +89,7 @@ const makeScrydexRequest = async (endpoint: string, options: RequestInit = {}): 
       mockData = {
         data: [],
         page: 1,
-        pageSize: 20,
+        pageSize: 100,
         totalCount: 0
       }
     }
@@ -149,7 +149,7 @@ const searchPokemonCards = async (query: string, options: any = {}) => {
   const params = new URLSearchParams({
     q: searchQuery,
     page: options.page || '1',
-    page_size: options.pageSize || '20',
+    page_size: options.pageSize || '100', // Use Scrydex's maximum page size
     include: 'prices'
   })
 
@@ -252,7 +252,7 @@ serve(async (req) => {
         const query = searchParams.q || ''
         const searchOptions = {
           page: searchParams.page || '1',
-          pageSize: searchParams.pageSize || '20',
+          pageSize: searchParams.pageSize || '100',
           rarity: searchParams.rarity,
           type: searchParams.type,
           supertype: searchParams.supertype,

@@ -1,7 +1,7 @@
--- Update collection views to include user authentication
--- This ensures the views used by Collection.jsx respect user boundaries
+-- Fix price display issue by updating the database views
+-- Copy and paste this into your Supabase SQL Editor
 
--- 1. Update individual_orders_clean view to filter by user
+-- 1. Update individual_orders_clean view to include total_cost_cents
 DROP VIEW IF EXISTS individual_orders_clean;
 CREATE VIEW individual_orders_clean AS
 SELECT 
@@ -38,9 +38,9 @@ SELECT
     (o.buy_price_cents * o.buy_quantity) as total_cost_cents
 FROM orders o
 JOIN items i ON o.item_id = i.id
-WHERE o.user_id = auth.uid(); -- This ensures user can only see their own orders
+WHERE o.user_id = auth.uid();
 
--- 2. Update collection_summary_clean view to filter by user
+-- 2. Update collection_summary_clean view to include total_cost_cents
 DROP VIEW IF EXISTS collection_summary_clean;
 CREATE VIEW collection_summary_clean AS
 SELECT 
@@ -59,17 +59,21 @@ SELECT
     SUM(CASE WHEN o.is_sold = true THEN o.buy_quantity ELSE 0 END) as sold_quantity
 FROM items i
 JOIN orders o ON i.id = o.item_id
-WHERE o.user_id = auth.uid() -- This ensures user can only see their own collection
+WHERE o.user_id = auth.uid()
 GROUP BY i.id, i.name, i.set_name, i.image_url, i.market_value_cents, i.item_type, i.card_number;
 
--- 3. Grant permissions on the views
+-- 3. Grant permissions
 GRANT SELECT ON individual_orders_clean TO authenticated;
 GRANT SELECT ON collection_summary_clean TO authenticated;
 
--- 4. Verify the views were created correctly
+-- 4. Test the fix - this should show your order with the correct total_cost_cents
 SELECT 
-    schemaname,
-    viewname,
-    definition
-FROM pg_views 
-WHERE viewname IN ('individual_orders_clean', 'collection_summary_clean');
+    item_name,
+    buy_price_cents,
+    buy_quantity,
+    total_cost_cents,
+    (total_cost_cents / 100.0) as total_cost_dollars
+FROM individual_orders_clean 
+WHERE item_name LIKE '%Venusaur%'
+ORDER BY created_at DESC
+LIMIT 5;
