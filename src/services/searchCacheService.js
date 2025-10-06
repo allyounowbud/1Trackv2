@@ -525,6 +525,27 @@ class SearchCacheService {
       return null;
     }
   }
+
+  // Force clear all cache
+  async forceClearAllCache() {
+    try {
+      const { error } = await supabase
+        .from('search_cache')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all entries
+
+      if (error) {
+        console.error('Error force clearing cache:', error);
+        return false;
+      }
+
+      console.log('🗑️ Force cleared all search cache');
+      return true;
+    } catch (error) {
+      console.error('Error in forceClearAllCache:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

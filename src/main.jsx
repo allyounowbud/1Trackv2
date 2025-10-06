@@ -10,6 +10,7 @@ import LoadingScreen from "./components/LoadingScreen.jsx";
 // import { startBackgroundPriceService } from "./services/startBackgroundService.js";
 import { initializePWA } from "./utils/pwa.js";
 import { queryClient } from "./lib/queryClient.js";
+import './utils/clearAllCaches.js'; // Make cache clearing available
 // Initialize PWA features
 initializePWA();
 

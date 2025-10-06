@@ -30,6 +30,9 @@ class ScrydexApiService {
     if (this.isInitialized) return true
     
     try {
+      // Clear any existing cache to ensure fresh requests
+      apiCacheService.clear()
+      
       // Test the connection
       await this.testConnection()
       this.isInitialized = true
@@ -78,6 +81,7 @@ class ScrydexApiService {
       q: searchQuery,
       page: options.page || '1',
       pageSize: options.pageSize || '100', // Use Scrydex's maximum page size
+      _t: Date.now() // Cache busting parameter
     })
 
     // Add optional filters
@@ -143,6 +147,7 @@ class ScrydexApiService {
     const params = new URLSearchParams({
       page: options.page || '1',
       pageSize: options.pageSize || '100',
+      _t: Date.now(), // Cache busting parameter
       // Select only the fields we need to reduce payload size
       select: 'id,name,series,code,total,printed_total,language,language_code,release_date,logo,symbol,translation,is_online_only'
     })
