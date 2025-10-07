@@ -279,10 +279,11 @@ class ImageCacheService {
 // Export singleton instance
 const imageCacheService = new ImageCacheService();
 
-// Clean up expired cache every hour
-setInterval(() => {
-  imageCacheService.cleanupExpiredCache();
-}, 60 * 60 * 1000);
+// Automatic background cleanup disabled
+// setInterval(() => {
+//   imageCacheService.cleanupExpiredCache();
+// }, 60 * 60 * 1000);
 
 export default imageCacheService;
+
 

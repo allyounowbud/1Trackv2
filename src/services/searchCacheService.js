@@ -70,7 +70,7 @@ class SearchCacheService {
   }
 
   // Generate a unique cache key for a search
-  generateCacheKey(query, game, searchType, expansionId = null, page = 1, pageSize = 100) {
+  generateCacheKey(query, game, searchType, expansionId = null, page = 1, pageSize = 30, filters = {}) {
     const keyParts = [
       query.toLowerCase().trim(),
       game,
@@ -79,6 +79,33 @@ class SearchCacheService {
       page.toString(),
       pageSize.toString()
     ];
+    
+    // Add filter parameters to cache key
+    if (filters.supertype && filters.supertype.length > 0) {
+      keyParts.push('st:' + filters.supertype.sort().join(','));
+    }
+    if (filters.types && filters.types.length > 0) {
+      keyParts.push('t:' + filters.types.sort().join(','));
+    }
+    if (filters.subtypes && filters.subtypes.length > 0) {
+      keyParts.push('st:' + filters.subtypes.sort().join(','));
+    }
+    if (filters.rarity && filters.rarity.length > 0) {
+      keyParts.push('r:' + filters.rarity.sort().join(','));
+    }
+    if (filters.artists && filters.artists.length > 0) {
+      keyParts.push('a:' + filters.artists.sort().join(','));
+    }
+    if (filters.weaknesses && filters.weaknesses.length > 0) {
+      keyParts.push('w:' + filters.weaknesses.sort().join(','));
+    }
+    if (filters.resistances && filters.resistances.length > 0) {
+      keyParts.push('res:' + filters.resistances.sort().join(','));
+    }
+    if (filters.sortBy) {
+      keyParts.push('sort:' + filters.sortBy + ':' + (filters.sortOrder || 'asc'));
+    }
+    
     return keyParts.join('|');
   }
 
@@ -175,7 +202,7 @@ class SearchCacheService {
   }
 
   // Store search results in cache
-  async setCachedResults(cacheKey, query, game, searchType, results, total, page = 1, pageSize = 100, expansionId = null) {
+  async setCachedResults(cacheKey, query, game, searchType, results, total, page = 1, pageSize = 30, expansionId = null) {
     try {
       console.log('💾 Attempting to cache search results:', { cacheKey, query, game, searchType, total });
       

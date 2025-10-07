@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabaseClient';
 
 /**
  * Database Pricing Service
- * Fetches pricing data directly from Supabase cached tables
+ * Fetches pricing data directly from pokemon_cards table
  * This eliminates the need for API calls for pricing data
  */
 class DatabasePricingService {
@@ -16,7 +16,7 @@ class DatabasePricingService {
     try {
       // Test connection
       const { data, error } = await supabase
-        .from('cached_cards')
+        .from('pokemon_cards')
         .select('id')
         .limit(1);
       
@@ -35,62 +35,54 @@ class DatabasePricingService {
 
   /**
    * Get pricing data for a card from the database
-   * @param {string} apiId - The API ID of the card
+   * @param {string} cardId - The card ID
    * @returns {Object|null} Pricing data or null if not found
    */
-  async getCardPricing(apiId) {
+  async getCardPricing(cardId) {
     if (!this.isInitialized) {
       await this.initialize();
     }
 
     try {
       const { data, error } = await supabase
-        .from('cached_cards')
+        .from('pokemon_cards')
         .select(`
-          api_id,
-          raw_market_price,
-          raw_low_price,
-          raw_mid_price,
-          raw_high_price,
+          id,
+          name,
+          -- Raw pricing data
+          raw_market,
+          raw_low,
           raw_condition,
           raw_currency,
-          raw_trend_7d,
-          raw_trend_30d,
-          raw_trend_90d,
-          raw_trend_1y,
           raw_is_perfect,
           raw_is_signed,
           raw_is_error,
-          graded_market_price,
-          graded_low_price,
-          graded_mid_price,
-          graded_high_price,
-          graded_condition,
+          raw_trend_7d_percent,
+          raw_trend_30d_percent,
+          raw_trend_90d_percent,
+          raw_trend_180d_percent,
+          -- Graded pricing data
+          graded_market,
+          graded_low,
+          graded_mid,
+          graded_high,
           graded_grade,
           graded_company,
           graded_currency,
-          graded_trend_7d,
-          graded_trend_30d,
-          graded_trend_90d,
-          graded_trend_1y,
+          graded_trend_7d_percent,
+          graded_trend_30d_percent,
+          graded_trend_90d_percent,
+          graded_trend_180d_percent,
+          -- Basic pricing
           market_price,
           low_price,
           mid_price,
           high_price,
-          loose_price,
-          cib_price,
-          new_price,
-          retail_new_buy,
-          retail_new_sell,
-          retail_cib_buy,
-          retail_cib_sell,
-          retail_loose_buy,
-          retail_loose_sell,
-          gamestop_price,
-          gamestop_trade_price,
-          raw_pricing_data
+          -- Complete pricing data
+          prices,
+          updated_at
         `)
-        .eq('api_id', apiId)
+        .eq('id', cardId)
         .single();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
@@ -99,67 +91,56 @@ class DatabasePricingService {
       }
 
       if (!data) {
-        console.log('📦 No pricing data found for card:', apiId);
+        console.log('📦 No pricing data found for card:', cardId);
         return null;
       }
 
       // Format the pricing data to match expected structure
       const pricingData = {
         raw: {
-          market: data.raw_market_price,
-          low: data.raw_low_price,
-          mid: data.raw_mid_price,
-          high: data.raw_high_price,
+          market: data.raw_market,
+          low: data.raw_low,
           condition: data.raw_condition,
           currency: data.raw_currency,
           trends: {
-            days_7: { percent_change: data.raw_trend_7d },
-            days_30: { percent_change: data.raw_trend_30d },
-            days_90: { percent_change: data.raw_trend_90d },
-            days_365: { percent_change: data.raw_trend_1y }
+            days_7: { percent_change: data.raw_trend_7d_percent },
+            days_30: { percent_change: data.raw_trend_30d_percent },
+            days_90: { percent_change: data.raw_trend_90d_percent },
+            days_180: { percent_change: data.raw_trend_180d_percent }
           },
           is_perfect: data.raw_is_perfect,
           is_signed: data.raw_is_signed,
           is_error: data.raw_is_error
         },
         graded: {
-          market: data.graded_market_price,
-          low: data.graded_low_price,
-          mid: data.graded_mid_price,
-          high: data.graded_high_price,
-          condition: data.graded_condition,
+          market: data.graded_market,
+          low: data.graded_low,
+          mid: data.graded_mid,
+          high: data.graded_high,
+          condition: data.graded_grade,
           grade: data.graded_grade,
           company: data.graded_company,
           currency: data.graded_currency,
           trends: {
-            days_7: { percent_change: data.graded_trend_7d },
-            days_30: { percent_change: data.graded_trend_30d },
-            days_90: { percent_change: data.graded_trend_90d },
-            days_365: { percent_change: data.graded_trend_1y }
+            days_7: { percent_change: data.graded_trend_7d_percent },
+            days_30: { percent_change: data.graded_trend_30d_percent },
+            days_90: { percent_change: data.graded_trend_90d_percent },
+            days_180: { percent_change: data.graded_trend_180d_percent }
           }
         },
-        pricecharting: {
+        basic: {
           market: data.market_price,
           low: data.low_price,
           mid: data.mid_price,
-          high: data.high_price,
-          loose: data.loose_price,
-          cib: data.cib_price,
-          new: data.new_price,
-          retail_new_buy: data.retail_new_buy,
-          retail_new_sell: data.retail_new_sell,
-          retail_cib_buy: data.retail_cib_buy,
-          retail_cib_sell: data.retail_cib_sell,
-          retail_loose_buy: data.retail_loose_buy,
-          retail_loose_sell: data.retail_loose_sell,
-          gamestop_price: data.gamestop_price,
-          gamestop_trade_price: data.gamestop_trade_price
+          high: data.high_price
         },
-        raw_pricing_data: data.raw_pricing_data,
-        source: 'database'
+        prices: data.prices, // Complete pricing object from API
+        source: 'database',
+        lastUpdated: data.updated_at,
+        cardId: data.id
       };
 
-      console.log('📦 Retrieved pricing data from database for card:', apiId);
+      console.log('📦 Retrieved pricing data from database for card:', cardId);
       return pricingData;
     } catch (error) {
       console.error('❌ Error in getCardPricing:', error);
@@ -168,195 +149,59 @@ class DatabasePricingService {
   }
 
   /**
-   * Get pricing data for a sealed product from the database
-   * @param {string} apiId - The API ID of the sealed product
-   * @returns {Object|null} Pricing data or null if not found
-   */
-  async getSealedProductPricing(apiId) {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('cached_sealed_products')
-        .select(`
-          api_id,
-          loose_price,
-          cib_price,
-          new_price,
-          retail_new_buy,
-          retail_new_sell,
-          retail_cib_buy,
-          retail_cib_sell,
-          retail_loose_buy,
-          retail_loose_sell,
-          gamestop_price,
-          gamestop_trade_price,
-          market_price,
-          low_price,
-          mid_price,
-          high_price,
-          raw_market_price,
-          raw_low_price,
-          raw_mid_price,
-          raw_high_price,
-          raw_condition,
-          raw_currency,
-          raw_trend_7d,
-          raw_trend_30d,
-          raw_trend_90d,
-          raw_trend_1y,
-          graded_market_price,
-          graded_low_price,
-          graded_mid_price,
-          graded_high_price,
-          graded_condition,
-          graded_grade,
-          graded_company,
-          graded_currency,
-          graded_trend_7d,
-          graded_trend_30d,
-          graded_trend_90d,
-          graded_trend_1y,
-          raw_pricing_data
-        `)
-        .eq('api_id', apiId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('❌ Error fetching sealed product pricing:', error);
-        return null;
-      }
-
-      if (!data) {
-        console.log('📦 No pricing data found for sealed product:', apiId);
-        return null;
-      }
-
-      // Format the pricing data to match expected structure
-      const pricingData = {
-        pricecharting: {
-          loose: data.loose_price,
-          cib: data.cib_price,
-          new: data.new_price,
-          retail_new_buy: data.retail_new_buy,
-          retail_new_sell: data.retail_new_sell,
-          retail_cib_buy: data.retail_cib_buy,
-          retail_cib_sell: data.retail_cib_sell,
-          retail_loose_buy: data.retail_loose_buy,
-          retail_loose_sell: data.retail_loose_sell,
-          gamestop_price: data.gamestop_price,
-          gamestop_trade_price: data.gamestop_trade_price,
-          market: data.market_price,
-          low: data.low_price,
-          mid: data.mid_price,
-          high: data.high_price
-        },
-        raw: {
-          market: data.raw_market_price,
-          low: data.raw_low_price,
-          mid: data.raw_mid_price,
-          high: data.raw_high_price,
-          condition: data.raw_condition,
-          currency: data.raw_currency,
-          trends: {
-            days_7: { percent_change: data.raw_trend_7d },
-            days_30: { percent_change: data.raw_trend_30d },
-            days_90: { percent_change: data.raw_trend_90d },
-            days_365: { percent_change: data.raw_trend_1y }
-          }
-        },
-        graded: {
-          market: data.graded_market_price,
-          low: data.graded_low_price,
-          mid: data.graded_mid_price,
-          high: data.graded_high_price,
-          condition: data.graded_condition,
-          grade: data.graded_grade,
-          company: data.graded_company,
-          currency: data.graded_currency,
-          trends: {
-            days_7: { percent_change: data.graded_trend_7d },
-            days_30: { percent_change: data.graded_trend_30d },
-            days_90: { percent_change: data.graded_trend_90d },
-            days_365: { percent_change: data.graded_trend_1y }
-          }
-        },
-        raw_pricing_data: data.raw_pricing_data,
-        source: 'database'
-      };
-
-      console.log('📦 Retrieved pricing data from database for sealed product:', apiId);
-      return pricingData;
-    } catch (error) {
-      console.error('❌ Error in getSealedProductPricing:', error);
-      return null;
-    }
-  }
-
-  /**
    * Get pricing data for multiple cards from the database
-   * @param {Array<string>} apiIds - Array of API IDs
-   * @returns {Object} Object with apiId as key and pricing data as value
+   * @param {Array<string>} cardIds - Array of card IDs
+   * @returns {Object} Object with cardId as key and pricing data as value
    */
-  async getMultipleCardPricing(apiIds) {
+  async getMultipleCardPricing(cardIds) {
     if (!this.isInitialized) {
       await this.initialize();
     }
 
-    if (!apiIds || apiIds.length === 0) {
+    if (!cardIds || cardIds.length === 0) {
       return {};
     }
 
     try {
       const { data, error } = await supabase
-        .from('cached_cards')
+        .from('pokemon_cards')
         .select(`
-          api_id,
-          raw_market_price,
-          raw_low_price,
-          raw_mid_price,
-          raw_high_price,
+          id,
+          name,
+          -- Raw pricing data
+          raw_market,
+          raw_low,
           raw_condition,
           raw_currency,
-          raw_trend_7d,
-          raw_trend_30d,
-          raw_trend_90d,
-          raw_trend_1y,
           raw_is_perfect,
           raw_is_signed,
           raw_is_error,
-          graded_market_price,
-          graded_low_price,
-          graded_mid_price,
-          graded_high_price,
-          graded_condition,
+          raw_trend_7d_percent,
+          raw_trend_30d_percent,
+          raw_trend_90d_percent,
+          raw_trend_180d_percent,
+          -- Graded pricing data
+          graded_market,
+          graded_low,
+          graded_mid,
+          graded_high,
           graded_grade,
           graded_company,
           graded_currency,
-          graded_trend_7d,
-          graded_trend_30d,
-          graded_trend_90d,
-          graded_trend_1y,
+          graded_trend_7d_percent,
+          graded_trend_30d_percent,
+          graded_trend_90d_percent,
+          graded_trend_180d_percent,
+          -- Basic pricing
           market_price,
           low_price,
           mid_price,
           high_price,
-          loose_price,
-          cib_price,
-          new_price,
-          retail_new_buy,
-          retail_new_sell,
-          retail_cib_buy,
-          retail_cib_sell,
-          retail_loose_buy,
-          retail_loose_sell,
-          gamestop_price,
-          gamestop_trade_price,
-          raw_pricing_data
+          -- Complete pricing data
+          prices,
+          updated_at
         `)
-        .in('api_id', apiIds);
+        .in('id', cardIds);
 
       if (error) {
         console.error('❌ Error fetching multiple card pricing:', error);
@@ -365,59 +210,48 @@ class DatabasePricingService {
 
       const pricingMap = {};
       data.forEach(card => {
-        pricingMap[card.api_id] = {
+        pricingMap[card.id] = {
           raw: {
-            market: card.raw_market_price,
-            low: card.raw_low_price,
-            mid: card.raw_mid_price,
-            high: card.raw_high_price,
+            market: card.raw_market,
+            low: card.raw_low,
             condition: card.raw_condition,
             currency: card.raw_currency,
             trends: {
-              days_7: { percent_change: card.raw_trend_7d },
-              days_30: { percent_change: card.raw_trend_30d },
-              days_90: { percent_change: card.raw_trend_90d },
-              days_365: { percent_change: card.raw_trend_1y }
+              days_7: { percent_change: card.raw_trend_7d_percent },
+              days_30: { percent_change: card.raw_trend_30d_percent },
+              days_90: { percent_change: card.raw_trend_90d_percent },
+              days_180: { percent_change: card.raw_trend_180d_percent }
             },
             is_perfect: card.raw_is_perfect,
             is_signed: card.raw_is_signed,
             is_error: card.raw_is_error
           },
           graded: {
-            market: card.graded_market_price,
-            low: card.graded_low_price,
-            mid: card.graded_mid_price,
-            high: card.graded_high_price,
-            condition: card.graded_condition,
+            market: card.graded_market,
+            low: card.graded_low,
+            mid: card.graded_mid,
+            high: card.graded_high,
+            condition: card.graded_grade,
             grade: card.graded_grade,
             company: card.graded_company,
             currency: card.graded_currency,
             trends: {
-              days_7: { percent_change: card.graded_trend_7d },
-              days_30: { percent_change: card.graded_trend_30d },
-              days_90: { percent_change: card.graded_trend_90d },
-              days_365: { percent_change: card.graded_trend_1y }
+              days_7: { percent_change: card.graded_trend_7d_percent },
+              days_30: { percent_change: card.graded_trend_30d_percent },
+              days_90: { percent_change: card.graded_trend_90d_percent },
+              days_180: { percent_change: card.graded_trend_180d_percent }
             }
           },
-          pricecharting: {
+          basic: {
             market: card.market_price,
             low: card.low_price,
             mid: card.mid_price,
-            high: card.high_price,
-            loose: card.loose_price,
-            cib: card.cib_price,
-            new: card.new_price,
-            retail_new_buy: card.retail_new_buy,
-            retail_new_sell: card.retail_new_sell,
-            retail_cib_buy: card.retail_cib_buy,
-            retail_cib_sell: card.retail_cib_sell,
-            retail_loose_buy: card.retail_loose_buy,
-            retail_loose_sell: card.retail_loose_sell,
-            gamestop_price: card.gamestop_price,
-            gamestop_trade_price: card.gamestop_trade_price
+            high: card.high_price
           },
-          raw_pricing_data: card.raw_pricing_data,
-          source: 'database'
+          prices: card.prices,
+          source: 'database',
+          lastUpdated: card.updated_at,
+          cardId: card.id
         };
       });
 
@@ -430,130 +264,35 @@ class DatabasePricingService {
   }
 
   /**
-   * Get pricing data for multiple sealed products from the database
-   * @param {Array<string>} apiIds - Array of API IDs
-   * @returns {Object} Object with apiId as key and pricing data as value
+   * Check if pricing data is fresh (less than 12 hours old)
+   * @param {string} cardId - Card ID
+   * @returns {Object} Freshness information
    */
-  async getMultipleSealedProductPricing(apiIds) {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
-
-    if (!apiIds || apiIds.length === 0) {
-      return {};
-    }
-
+  async checkPricingFreshness(cardId) {
     try {
       const { data, error } = await supabase
-        .from('cached_sealed_products')
-        .select(`
-          api_id,
-          loose_price,
-          cib_price,
-          new_price,
-          retail_new_buy,
-          retail_new_sell,
-          retail_cib_buy,
-          retail_cib_sell,
-          retail_loose_buy,
-          retail_loose_sell,
-          gamestop_price,
-          gamestop_trade_price,
-          market_price,
-          low_price,
-          mid_price,
-          high_price,
-          raw_market_price,
-          raw_low_price,
-          raw_mid_price,
-          raw_high_price,
-          raw_condition,
-          raw_currency,
-          raw_trend_7d,
-          raw_trend_30d,
-          raw_trend_90d,
-          raw_trend_1y,
-          graded_market_price,
-          graded_low_price,
-          graded_mid_price,
-          graded_high_price,
-          graded_condition,
-          graded_grade,
-          graded_company,
-          graded_currency,
-          graded_trend_7d,
-          graded_trend_30d,
-          graded_trend_90d,
-          graded_trend_1y,
-          raw_pricing_data
-        `)
-        .in('api_id', apiIds);
+        .from('pokemon_cards')
+        .select('updated_at, raw_market, graded_market')
+        .eq('id', cardId)
+        .single();
 
-      if (error) {
-        console.error('❌ Error fetching multiple sealed product pricing:', error);
-        return {};
+      if (error || !data) {
+        return { isFresh: false, age: null, lastUpdated: null };
       }
 
-      const pricingMap = {};
-      data.forEach(product => {
-        pricingMap[product.api_id] = {
-          pricecharting: {
-            loose: product.loose_price,
-            cib: product.cib_price,
-            new: product.new_price,
-            retail_new_buy: product.retail_new_buy,
-            retail_new_sell: product.retail_new_sell,
-            retail_cib_buy: product.retail_cib_buy,
-            retail_cib_sell: product.retail_cib_sell,
-            retail_loose_buy: product.retail_loose_buy,
-            retail_loose_sell: product.retail_loose_sell,
-            gamestop_price: product.gamestop_price,
-            gamestop_trade_price: product.gamestop_trade_price,
-            market: product.market_price,
-            low: product.low_price,
-            mid: product.mid_price,
-            high: product.high_price
-          },
-          raw: {
-            market: product.raw_market_price,
-            low: product.raw_low_price,
-            mid: product.raw_mid_price,
-            high: product.raw_high_price,
-            condition: product.raw_condition,
-            currency: product.raw_currency,
-            trends: {
-              days_7: { percent_change: product.raw_trend_7d },
-              days_30: { percent_change: product.raw_trend_30d },
-              days_90: { percent_change: product.raw_trend_90d },
-              days_365: { percent_change: product.raw_trend_1y }
-            }
-          },
-          graded: {
-            market: product.graded_market_price,
-            low: product.graded_low_price,
-            mid: product.graded_mid_price,
-            high: product.graded_high_price,
-            condition: product.graded_condition,
-            grade: product.graded_grade,
-            company: product.graded_company,
-            currency: product.graded_currency,
-            trends: {
-              days_7: { percent_change: product.graded_trend_7d },
-              days_30: { percent_change: product.graded_trend_30d },
-              days_90: { percent_change: product.graded_trend_90d },
-              days_365: { percent_change: product.graded_trend_1y }
-            }
-          },
-          raw_pricing_data: product.raw_pricing_data,
-          source: 'database'
-        };
-      });
+      const lastUpdated = new Date(data.updated_at);
+      const now = new Date();
+      const ageHours = (now - lastUpdated) / (1000 * 60 * 60);
 
-      console.log(`📦 Retrieved pricing data for ${Object.keys(pricingMap).length} sealed products from database`);
-      return pricingMap;
+      return {
+        isFresh: ageHours < 12,
+        age: ageHours,
+        lastUpdated: lastUpdated.toISOString(),
+        hasPricingData: !!(data.raw_market || data.graded_market)
+      };
     } catch (error) {
-      console.error('❌ Error in getMultipleSealedProductPricing:', error);
-      return {};
+      console.error('Error checking pricing freshness:', error);
+      return { isFresh: false, age: null, lastUpdated: null };
     }
   }
 }
@@ -561,4 +300,3 @@ class DatabasePricingService {
 // Create and export a singleton instance
 const databasePricingService = new DatabasePricingService();
 export default databasePricingService;
-

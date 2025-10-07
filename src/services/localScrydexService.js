@@ -31,8 +31,8 @@ class LocalScrydexService {
         .or(`name.ilike.%${query}%,expansion_name.ilike.%${query}%`)
         .order('name')
         .range(
-          ((options.page || 1) - 1) * (options.pageSize || 100),
-          ((options.page || 1) * (options.pageSize || 100)) - 1
+          ((options.page || 1) - 1) * (options.pageSize || 30),
+          ((options.page || 1) * (options.pageSize || 30)) - 1
         );
 
       if (error) {
@@ -44,8 +44,8 @@ class LocalScrydexService {
         data: data || [],
         total: count || 0,
         page: options.page || 1,
-        pageSize: options.pageSize || 100,
-        totalPages: Math.ceil((count || 0) / (options.pageSize || 100)),
+        pageSize: options.pageSize || 30,
+        totalPages: Math.ceil((count || 0) / (options.pageSize || 30)),
         source: 'local'
       };
 
@@ -86,8 +86,8 @@ class LocalScrydexService {
         .eq('expansion_id', expansionId)
         .order('number')
         .range(
-          ((options.page || 1) - 1) * (options.pageSize || 100),
-          ((options.page || 1) * (options.pageSize || 100)) - 1
+          ((options.page || 1) - 1) * (options.pageSize || 30),
+          ((options.page || 1) * (options.pageSize || 30)) - 1
         );
 
       if (error) {
@@ -99,8 +99,8 @@ class LocalScrydexService {
         data: data || [],
         total: count || 0,
         page: options.page || 1,
-        pageSize: options.pageSize || 100,
-        totalPages: Math.ceil((count || 0) / (options.pageSize || 100)),
+        pageSize: options.pageSize || 30,
+        totalPages: Math.ceil((count || 0) / (options.pageSize || 30)),
         source: 'local'
       };
 
@@ -140,8 +140,8 @@ class LocalScrydexService {
         .select('*', { count: 'exact' })
         .order('release_date', { ascending: false })
         .range(
-          ((options.page || 1) - 1) * (options.pageSize || 100),
-          ((options.page || 1) * (options.pageSize || 100)) - 1
+          ((options.page || 1) - 1) * (options.pageSize || 30),
+          ((options.page || 1) * (options.pageSize || 30)) - 1
         );
 
       if (error) {
@@ -153,8 +153,8 @@ class LocalScrydexService {
         data: data || [],
         total: count || 0,
         page: options.page || 1,
-        pageSize: options.pageSize || 100,
-        totalPages: Math.ceil((count || 0) / (options.pageSize || 100)),
+        pageSize: options.pageSize || 30,
+        totalPages: Math.ceil((count || 0) / (options.pageSize || 30)),
         source: 'local'
       };
 

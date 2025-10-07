@@ -23,6 +23,15 @@ export const clearAllCaches = async () => {
     sessionStorage.clear();
     console.log('✅ Session storage cleared');
     
+    // Clear service worker cache if available
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames.map(cacheName => caches.delete(cacheName))
+      );
+      console.log('✅ Service worker caches cleared');
+    }
+    
     console.log('🎉 All caches cleared successfully!');
     return true;
   } catch (error) {
@@ -35,3 +44,4 @@ export const clearAllCaches = async () => {
 if (typeof window !== 'undefined') {
   window.clearAllCaches = clearAllCaches;
 }
+

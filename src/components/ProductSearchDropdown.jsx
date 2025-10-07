@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-// Image service removed - using Scrydex API only
+import localSearchService from '../services/localSearchService';
 import { supabase } from '../lib/supabaseClient.js';
 
 export default function ProductSearchDropdown({ 
@@ -67,77 +67,27 @@ export default function ProductSearchDropdown({
 
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        // Use local search service for Pokémon cards
+        const results = await localSearchService.searchCards(searchQuery, { pageSize: 30 });
         
-        const response = await fetch(`${supabaseUrl}/functions/v1/price-charting/search?q=${encodeURIComponent(searchQuery)}`, {
-          headers: {
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        const data = await response.json();
-        console.log('API Response:', data);
-        
-        if (data.success && data.data) {
-          // Handle different possible response structures
-          let products = [];
+        if (results && results.data && results.data.length > 0) {
+          // Format the results to match the expected structure
+          const formattedResults = results.data.map(card => ({
+            product_id: card.id,
+            product_name: card.name,
+            console_name: card.expansion_name || 'Pokémon',
+            loose_price: card.raw_market ? card.raw_market.toFixed(2) : '',
+            cib_price: card.graded_market ? card.graded_market.toFixed(2) : '',
+            new_price: card.raw_market ? card.raw_market.toFixed(2) : '',
+            image_url: card.image_small || card.image_medium || card.image_large || '',
+            similarity_score: 1.0,
+            card_data: card // Include full card data for reference
+          }));
           
-          if (data.data.products && Array.isArray(data.data.products)) {
-            products = data.data.products;
-          } else if (Array.isArray(data.data)) {
-            products = data.data;
-          } else if (data.data.product) {
-            products = [data.data.product];
-          }
-          
-                 console.log('Products found:', products.length);
-                 
-                 // Debug: Log the first product to see its structure
-                 if (products.length > 0) {
-                   console.log('First product structure:', products[0]);
-                   console.log('First product keys:', Object.keys(products[0]));
-                 }
-                 
-                 if (products.length > 0) {
-                   // Format the results to match the expected structure
-                   const formattedResults = products.map(product => {
-                     // Add null checks to prevent trim() errors
-                     // Use the correct field names from PriceCharting API documentation
-                     const productName = product['product-name'] || product.product_name || product.name || product.title || 'Unknown Product';
-                     const consoleName = product['console-name'] || product.console_name || product.console || product.platform || '';
-                     const loosePrice = product['loose-price'] || product.loose_price || product.price || product.loose || '';
-                     const cibPrice = product['cib-price'] || product.cib_price || product.complete_price || product.complete || '';
-                     const newPrice = product['new-price'] || product.new_price || product.sealed_price || product.sealed || '';
-                     const imageUrl = product['image-url'] || product.image_url || product.image || product.thumbnail || '';
-                     
-                     return {
-                       product_id: product.id || product['product-id'] || product.product_id || '',
-                       product_name: productName,
-                       console_name: consoleName,
-                       loose_price: loosePrice ? (parseFloat(loosePrice) / 100).toFixed(2) : '',
-                       cib_price: cibPrice ? (parseFloat(cibPrice) / 100).toFixed(2) : '',
-                       new_price: newPrice ? (parseFloat(newPrice) / 100).toFixed(2) : '',
-                       image_url: imageUrl,
-                       similarity_score: 1.0 // Price Charting API doesn't provide similarity scores
-                     };
-                   });
-            
-            console.log('Formatted results:', formattedResults);
-            setSearchResults(formattedResults);
-            
-            // Fetch images for the first few results
-            const topResults = formattedResults.slice(0, 5);
-            topResults.forEach(product => {
-              fetchProductImages(product.product_name, product.console_name);
-            });
-          } else {
-            setError('No products found');
-            setSearchResults([]);
-          }
+          console.log('Local search results:', formattedResults.length, 'cards found');
+          setSearchResults(formattedResults);
         } else {
-          console.error('API Error:', data.error || 'Search failed');
-          setError(data.error || 'Search failed');
+          setError('No cards found');
           setSearchResults([]);
         }
       } catch (err) {

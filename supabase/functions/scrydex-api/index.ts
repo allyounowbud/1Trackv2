@@ -22,13 +22,15 @@ const getScrydexConfig = (): ScrydexConfig => {
   console.log('SCRYDEX_API_KEY exists:', !!apiKey)
   console.log('SCRYDEX_TEAM_ID exists:', !!teamId)
   console.log('Base URL:', baseUrl)
+  console.log('API Key length:', apiKey?.length || 0)
+  console.log('Team ID length:', teamId?.length || 0)
 
   if (!apiKey || !teamId) {
     console.error('Missing API credentials:')
     console.error('API Key:', apiKey ? 'SET' : 'MISSING')
     console.error('Team ID:', teamId ? 'SET' : 'MISSING')
     
-    // Return mock data temporarily so the app works while credentials are being set up
+    // Return mock data temporarily to avoid breaking the app
     console.log('Returning mock data due to missing credentials')
     return {
       apiKey: 'mock',
@@ -65,25 +67,11 @@ const makeScrydexRequest = async (endpoint: string, options: RequestInit = {}): 
             is_online_only: false,
             logo: "https://images.scrydex.com/pokemon/sv1-logo/logo",
             symbol: "https://images.scrydex.com/pokemon/sv1-symbol/symbol"
-          },
-          {
-            id: "sv2",
-            name: "Paldea Evolved",
-            series: "Scarlet & Violet",
-            code: "SV2",
-            total: 193,
-            printed_total: 193,
-            language: "English",
-            language_code: "EN",
-            release_date: "2023/06/16",
-            is_online_only: false,
-            logo: "https://images.scrydex.com/pokemon/sv2-logo/logo",
-            symbol: "https://images.scrydex.com/pokemon/sv2-symbol/symbol"
           }
         ],
         page: 1,
         pageSize: 100,
-        totalCount: 2
+        totalCount: 1
       }
     } else {
       mockData = {
@@ -228,6 +216,87 @@ const getCardPricing = async (cardId: string) => {
   return await response.json()
 }
 
+// Get total card count from Scrydex API
+const getTotalCardCount = async () => {
+  try {
+    console.log('Getting total card count from Scrydex API...')
+    
+    // Make a request to get a larger page to estimate total count
+    const params = new URLSearchParams({
+      page: '1',
+      pageSize: '1000', // Get 1000 cards to get a better estimate
+      include: 'prices'
+    })
+    
+    const response = await makeScrydexRequest(`/pokemon/v1/cards?${params}`)
+    
+    if (!response.ok) {
+      throw new Error(`Scrydex API error ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    // Extract total count from response headers or data
+    const totalCount = response.headers.get('X-Total-Count') || 
+                      data.total || 
+                      data.totalCount || 
+                      (data.data ? data.data.length : 0)
+    
+    // If we got 1000 cards, there are likely more - estimate based on pagination
+    const cardsReturned = data.data ? data.data.length : 0
+    let estimatedTotal = parseInt(totalCount) || 0
+    
+    // If we got the full page size, estimate there are more cards
+    if (cardsReturned === 1000 && !totalCount) {
+      estimatedTotal = 1000 // Conservative estimate - there are at least 1000 cards
+    }
+    
+    console.log('Cards returned:', cardsReturned)
+    console.log('Total cards available in Scrydex API:', estimatedTotal)
+    
+    return {
+      total: estimatedTotal,
+      cardsReturned: cardsReturned,
+      source: 'scrydex-api',
+      timestamp: new Date().toISOString()
+    }
+    
+  } catch (error) {
+    console.error('Error getting total card count:', error)
+    throw error
+  }
+}
+
+// Get all cards using the direct endpoint (like scrydex-sync does)
+const getAllCards = async (options: any = {}) => {
+  try {
+    console.log('Getting all cards from Scrydex API...')
+    
+    const params = new URLSearchParams({
+      page: options.page || '1',
+      pageSize: options.pageSize || '100',
+      include: 'prices'
+    })
+    
+    const response = await makeScrydexRequest(`/pokemon/v1/cards?${params}`)
+    
+    if (!response.ok) {
+      throw new Error(`Scrydex API error ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    console.log('Cards returned:', data.data?.length || 0)
+    console.log('Total cards available:', data.total_count || 'unknown')
+    
+    return data
+    
+  } catch (error) {
+    console.error('Error getting all cards:', error)
+    throw error
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -306,6 +375,24 @@ serve(async (req) => {
           throw new Error('Card ID is required')
         }
         result = await getCardPricing(pricingCardId)
+        break
+
+      case '/total-count':
+        if (req.method !== 'GET') {
+          throw new Error('Method not allowed')
+        }
+        result = await getTotalCardCount()
+        break
+
+      case '/all-cards':
+        if (req.method !== 'GET') {
+          throw new Error('Method not allowed')
+        }
+        const allCardsOptions = {
+          page: searchParams.page || '1',
+          pageSize: searchParams.pageSize || '100',
+        }
+        result = await getAllCards(allCardsOptions)
         break
 
       default:

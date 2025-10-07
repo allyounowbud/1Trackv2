@@ -19,9 +19,10 @@ class ScrydexSyncService {
       console.log('🔄 Triggering Scrydex database sync...');
 
       // Call the Supabase Edge Function to trigger sync
-      const { data, error } = await supabase.functions.invoke('scrydex-sync', {
-        body: {
-          action: 'full_sync'
+      const { data, error } = await supabase.functions.invoke('scrydex-sync?action=full-sync', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
         }
       });
 
@@ -34,6 +35,72 @@ class ScrydexSyncService {
 
     } catch (error) {
       console.error('❌ Failed to trigger sync:', error);
+      throw error;
+    } finally {
+      this.syncInProgress = false;
+    }
+  }
+
+  // Trigger comprehensive database sync
+  async triggerComprehensiveSync() {
+    if (this.syncInProgress) {
+      throw new Error('Sync already in progress');
+    }
+
+    try {
+      this.syncInProgress = true;
+      console.log('🔄 Triggering comprehensive Scrydex database sync...');
+
+      // Call the Supabase Edge Function to trigger comprehensive sync
+      const { data, error } = await supabase.functions.invoke('scrydex-sync?action=comprehensive-sync', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('✅ Comprehensive sync triggered successfully:', data);
+      return data;
+
+    } catch (error) {
+      console.error('❌ Failed to trigger comprehensive sync:', error);
+      throw error;
+    } finally {
+      this.syncInProgress = false;
+    }
+  }
+
+  // Trigger test sync (10 cards only)
+  async triggerTestSync() {
+    if (this.syncInProgress) {
+      throw new Error('Sync already in progress');
+    }
+
+    try {
+      this.syncInProgress = true;
+      console.log('🧪 Triggering Scrydex test sync (10 cards)...');
+
+      // Call the Supabase Edge Function to trigger test sync
+      const { data, error } = await supabase.functions.invoke('scrydex-sync?action=test-sync', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('✅ Test sync triggered successfully:', data);
+      return data;
+
+    } catch (error) {
+      console.error('❌ Failed to trigger test sync:', error);
       throw error;
     } finally {
       this.syncInProgress = false;

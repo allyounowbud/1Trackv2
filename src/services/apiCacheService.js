@@ -94,8 +94,8 @@ class ApiCacheService {
     this.maxCacheSize = 10000;
     
     
-    // Start background maintenance
-    this.startBackgroundMaintenance();
+    // Background maintenance disabled
+    // this.startBackgroundMaintenance();
   }
 
   /**

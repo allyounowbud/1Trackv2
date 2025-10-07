@@ -14,6 +14,8 @@ import './utils/clearAllCaches.js'; // Make cache clearing available
 // Initialize PWA features
 initializePWA();
 
+// Automatic pricing sync disabled
+
 // PWA Loading Wrapper Component
 function PWALoadingWrapper() {
   const [isLoading, setIsLoading] = useState(true);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Loader2, Star, X, ChevronDown, Plus, MoreVertical } from 'lucide-react';
-import scrydexApiService from '../services/scrydexApiService';
+import localSearchService from '../services/localSearchService';
 import hybridSearchService from '../services/hybridSearchService';
 import priceChartingApiService from '../services/priceChartingApiService';
 import tcggoImageService from '../services/tcggoImageService';
@@ -107,7 +107,28 @@ const SearchApi = () => {
   // Bulk selection for custom items
   const [selectedCustomItems, setSelectedCustomItems] = useState(new Set());
   const [isCustomSelectionMode, setIsCustomSelectionMode] = useState(false);
+  
+  // Filter sidebar state
+  const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false);
+  const [sortBy, setSortBy] = useState('number');
+  const [sortOrder, setSortOrder] = useState('asc');
+  
+  // Filter categories state
+  const [expandedFilters, setExpandedFilters] = useState({});
+  const [filterValues, setFilterValues] = useState({
+    supertype: [],
+    types: [],
+    subtypes: [],
+    rarity: [],
+    artists: [],
+    weaknesses: [],
+    resistances: []
+  });
+  const [globalSearchTerm, setGlobalSearchTerm] = useState('');
   const [showCustomBulkMenu, setShowCustomBulkMenu] = useState(false);
+  
+  // Active filters state for pills
+  const [activeFilters, setActiveFilters] = useState([]);
   
   // UI state
   const [showGameDropdown, setShowGameDropdown] = useState(false);
@@ -129,6 +150,8 @@ const SearchApi = () => {
   const loadingRef = useRef(null);
   const observerRef = useRef(null);
   const searchTimeoutRef = useRef(null);
+  const filterTimeoutRef = useRef(null);
+  const isLoadingMoreRef = useRef(false);
 
   // Helper function to render game icon
   const renderGameIcon = (iconUrl, className = "w-4 h-4") => {
@@ -210,9 +233,8 @@ const SearchApi = () => {
     const formattedCards = [];
     
     cards.forEach(card => {
-      // Get image URL from the images array
-      const frontImage = card.images?.find(img => img.type === 'front');
-      const imageUrl = frontImage?.large || frontImage?.medium || frontImage?.small || null;
+      // Get image URL from database fields
+      const imageUrl = card.image_large || card.image_medium || card.image_small || null;
       
       // Use card name with card number
       let displayName = card.name;
@@ -220,16 +242,41 @@ const SearchApi = () => {
         displayName = `${card.name} #${card.number}`;
       }
       
-      // Get pricing data from the first variant (usually the normal variant)
+      // Get pricing data from database fields
       let rawPrice = null;
       let gradedPrice = null;
       
-      if (card.variants && card.variants.length > 0) {
-        const firstVariant = card.variants[0];
-        if (firstVariant.prices && firstVariant.prices.length > 0) {
-          rawPrice = firstVariant.prices.find(p => p.type === 'raw');
-          gradedPrice = firstVariant.prices.find(p => p.type === 'graded');
-        }
+      if (card.raw_market) {
+        rawPrice = {
+          type: 'raw',
+          market: parseFloat(card.raw_market).toFixed(2),
+          low: card.raw_low ? parseFloat(card.raw_low).toFixed(2) : null,
+          condition: card.raw_condition || 'NM',
+          trends: {
+            days_7: { percent_change: card.raw_trend_7d_percent },
+            days_30: { percent_change: card.raw_trend_30d_percent },
+            days_90: { percent_change: card.raw_trend_90d_percent },
+            days_180: { percent_change: card.raw_trend_180d_percent }
+          }
+        };
+      }
+      
+      if (card.graded_market) {
+        gradedPrice = {
+          type: 'graded',
+          market: parseFloat(card.graded_market).toFixed(2),
+          low: card.graded_low ? parseFloat(card.graded_low).toFixed(2) : null,
+          mid: card.graded_mid ? parseFloat(card.graded_mid).toFixed(2) : null,
+          high: card.graded_high ? parseFloat(card.graded_high).toFixed(2) : null,
+          grade: card.graded_grade || '10',
+          company: card.graded_company || 'PSA',
+          trends: {
+            days_7: { percent_change: card.graded_trend_7d_percent },
+            days_30: { percent_change: card.graded_trend_30d_percent },
+            days_90: { percent_change: card.graded_trend_90d_percent },
+            days_180: { percent_change: card.graded_trend_180d_percent }
+          }
+        };
       }
       
       // Create a single card entry with all variants grouped together
@@ -242,11 +289,14 @@ const SearchApi = () => {
         hp: card.hp,
         number: card.number,
         rarity: card.rarity || 'No Rarity',
-        expansion_id: card.expansion?.id || null,
-        expansion_name: card.expansion?.name || null,
+        expansion_id: card.expansion_id || null,
+        expansion_name: card.expansion_name || null,
         image_url: imageUrl,
-        image_url_large: frontImage?.large || imageUrl,
-        variants: card.variants || [], // Keep all variants together
+        image_url_large: imageUrl,
+        variants: [{
+          name: 'default',
+          prices: [rawPrice, gradedPrice].filter(Boolean)
+        }],
         // Pricing data from first variant
         raw_price: rawPrice?.market || null,
         raw_low: rawPrice?.low || null,
@@ -333,7 +383,7 @@ const SearchApi = () => {
     const initializeAndLoad = async () => {
              try {
                // Initialize all services
-               await scrydexApiService.initialize();
+               await localSearchService.initialize();
                await hybridSearchService.initialize();
                await tcggoImageService.initialize();
                await loadExpansions();
@@ -354,6 +404,9 @@ const SearchApi = () => {
       }
       if (searchTimeout) {
         clearTimeout(searchTimeout);
+      }
+      if (filterTimeoutRef.current) {
+        clearTimeout(filterTimeoutRef.current);
       }
     };
   }, []);
@@ -390,17 +443,15 @@ const SearchApi = () => {
   // Load expansions
   const loadExpansions = async () => {
     try {
-      // Fetch both English and Japanese expansions
-      const [englishResult, japaneseResult] = await Promise.all([
-        scrydexApiService.getExpansions({ pageSize: 500 }), // English (default)
-        scrydexApiService.getExpansions({ pageSize: 500, testJapanese: true }) // Japanese
-      ]);
-      
-      // Merge both results
-      const allExpansions = [...englishResult, ...japaneseResult];
+      // Fetch all expansions from database
+      const allExpansions = await localSearchService.getExpansions({ pageSize: 1000 });
       
       setExpansions(allExpansions);
     } catch (error) {
+      console.error('Failed to load expansions:', error);
+      setError('Failed to load expansions. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -506,15 +557,38 @@ const SearchApi = () => {
 
       const searchOptions = {
         page,
-        pageSize: 100, // Use Scrydex's maximum page size for better performance
-        expansionId: selectedExpansion?.id || null
+        pageSize: 30, // Optimized pagination for fast loading
+        expansionId: selectedExpansion?.id || null,
+        sortBy: sortBy, // Use current sort setting
+        sortOrder: sortOrder, // Use current sort order
+        // Apply filter values
+        supertype: filterValues.supertype.length > 0 ? filterValues.supertype : null,
+        types: filterValues.types.length > 0 ? filterValues.types : null,
+        subtypes: filterValues.subtypes.length > 0 ? filterValues.subtypes : null,
+        rarity: filterValues.rarity.length > 0 ? filterValues.rarity : null,
+        artists: filterValues.artists.length > 0 ? filterValues.artists : null,
+        weaknesses: filterValues.weaknesses.length > 0 ? filterValues.weaknesses : null,
+        resistances: filterValues.resistances.length > 0 ? filterValues.resistances : null
       };
+
+      console.log('🔍 SearchApi searchCards - pageSize:', searchOptions.pageSize, 'page:', page);
 
       // Use hybrid search service to search both singles and sealed products
       const results = await hybridSearchService.smartSearch(query, selectedGame?.id || 'pokemon', {
         page,
-        pageSize: 100
+        pageSize: 30,
+        sortBy: sortBy,
+        sortOrder: sortOrder,
+        supertype: filterValues.supertype.length > 0 ? filterValues.supertype : null,
+        types: filterValues.types.length > 0 ? filterValues.types : null,
+        subtypes: filterValues.subtypes.length > 0 ? filterValues.subtypes : null,
+        rarity: filterValues.rarity.length > 0 ? filterValues.rarity : null,
+        artists: filterValues.artists.length > 0 ? filterValues.artists : null,
+        weaknesses: filterValues.weaknesses.length > 0 ? filterValues.weaknesses : null,
+        resistances: filterValues.resistances.length > 0 ? filterValues.resistances : null
       });
+      
+      console.log('🔍 SearchApi results - pageSize:', results.pageSize, 'total:', results.total, 'singles count:', results.singles?.length);
       
       
       // Combine singles and sealed products
@@ -578,7 +652,9 @@ const SearchApi = () => {
       // Set pagination info
       const totalFromResults = results.total || (results.singles?.total || 0) + (results.sealed?.total || 0);
       setTotalResults(totalFromResults);
-      setHasMore(finalResults.length >= 100 && (page * 100) < totalFromResults);
+      const hasMoreValue = (page * 30) < totalFromResults;
+      console.log('🔍 hasMore calculation:', { page, pageSize: 30, totalFromResults, hasMoreValue });
+      setHasMore(hasMoreValue);
       setCurrentPage(page);
 
     } catch (error) {
@@ -628,13 +704,19 @@ const SearchApi = () => {
   };
 
   // Perform search for cards in a specific expansion
-  const performExpansionSearch = async (expansionId, page = 1, append = false, viewMode = null) => {
+  const performExpansionSearch = async (expansionId, page = 1, append = false, viewMode = null, skipCacheClear = false, currentFilterValues = null) => {
     // Clear any existing timeouts
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
     if (searchTimeout) {
       clearTimeout(searchTimeout);
+    }
+    
+    // Clear cache when starting a new search (not appending results)
+    if (page === 1 && !append) {
+      console.log('🔄 Clearing cache for new search');
+      await searchCacheService.forceClearAllCache();
     }
     
     // Reset state for new expansion search
@@ -652,18 +734,44 @@ const SearchApi = () => {
     }
 
     try {
+      // Use passed filter values or fall back to state
+      const filtersToUse = currentFilterValues || filterValues;
+      
       const searchOptions = {
         page,
-        pageSize: 100, // Use Scrydex's maximum page size for better performance
+        pageSize: 30, // Optimized pagination for fast loading
         expansionId: expansionId,
+        // Include current filter values - convert empty arrays to null for proper handling
+        sortBy,
+        sortOrder,
+        supertype: filtersToUse.supertype.length > 0 ? filtersToUse.supertype : null,
+        types: filtersToUse.types.length > 0 ? filtersToUse.types : null,
+        subtypes: filtersToUse.subtypes.length > 0 ? filtersToUse.subtypes : null,
+        rarity: filtersToUse.rarity.length > 0 ? filtersToUse.rarity : null,
+        artists: filtersToUse.artists.length > 0 ? filtersToUse.artists : null,
+        weaknesses: filtersToUse.weaknesses.length > 0 ? filtersToUse.weaknesses : null,
+        resistances: filtersToUse.resistances.length > 0 ? filtersToUse.resistances : null,
       };
+      
+      console.log('🔍 Search options with filters:', searchOptions);
+      console.log('🎯 Applying filters:', filtersToUse);
 
       let results;
       const currentViewMode = viewMode || expansionViewMode;
       
       if (currentViewMode === 'sealed') {
         // Check cache first for sealed products
-        const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'sealed', expansionId, page, 20);
+        const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'sealed', expansionId, page, 30, {
+          supertype: searchOptions.supertype,
+          types: searchOptions.types,
+          subtypes: searchOptions.subtypes,
+          rarity: searchOptions.rarity,
+          artists: searchOptions.artists,
+          weaknesses: searchOptions.weaknesses,
+          resistances: searchOptions.resistances,
+          sortBy,
+          sortOrder
+        });
         const cachedResults = await searchCacheService.getCachedResults(cacheKey);
         
         if (cachedResults) {
@@ -680,7 +788,7 @@ const SearchApi = () => {
           
           const sealedResults = await hybridSearchService.getSealedProductsForExpansion(expansionId, {
             page,
-            pageSize: 100
+            pageSize: 30
           });
           
           console.log(`📦 Sealed results source: ${sealedResults.source}, count: ${sealedResults.data?.length || 0}`);
@@ -703,7 +811,7 @@ const SearchApi = () => {
               results,
               results.total,
               page,
-              20,
+              30,
               expansionId
             ).catch(error => {
               console.warn('Cache write failed (non-critical):', error);
@@ -712,7 +820,17 @@ const SearchApi = () => {
         }
       } else {
         // Check cache first for expansion results
-        const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'expansion', expansionId, page, 20);
+        const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'expansion', expansionId, page, 30, {
+          supertype: searchOptions.supertype,
+          types: searchOptions.types,
+          subtypes: searchOptions.subtypes,
+          rarity: searchOptions.rarity,
+          artists: searchOptions.artists,
+          weaknesses: searchOptions.weaknesses,
+          resistances: searchOptions.resistances,
+          sortBy,
+          sortOrder
+        });
         const cachedResults = await searchCacheService.getCachedResults(cacheKey);
         
         if (cachedResults) {
@@ -725,7 +843,7 @@ const SearchApi = () => {
         } else {
           // Search for singles from Scrydex for this expansion
           console.log(`🔍 Searching singles for expansion: ${expansionId}`);
-          const result = await scrydexApiService.searchCards('', searchOptions);
+          const result = await localSearchService.searchCards('', searchOptions);
           
           // Format the results to match expected structure
           results = {
@@ -746,7 +864,7 @@ const SearchApi = () => {
               results,
               results.total,
               page,
-              20,
+              30,
               expansionId
             ).catch(error => {
               console.warn('Cache write failed (non-critical):', error);
@@ -845,7 +963,9 @@ const SearchApi = () => {
       }
       
       setTotalResults(totalFromResults);
-      setHasMore(enhancedResults.length >= 100 && (page * 100) < totalFromResults);
+      const hasMoreValue = (page * 30) < totalFromResults;
+      console.log('🔍 hasMore calculation:', { page, pageSize: 30, totalFromResults, hasMoreValue });
+      setHasMore(hasMoreValue);
       setCurrentPage(page);
 
     } catch (error) {
@@ -863,43 +983,63 @@ const SearchApi = () => {
   };
 
 
-  // Infinite scroll setup
+  // Infinite scroll setup with optimized loading
   useEffect(() => {
-    console.log('🔄 Setting up IntersectionObserver:', { hasMore, isLoading, isLoadingMore, loadingRefExists: !!loadingRef.current });
+    console.log('🔄 Setting up optimized IntersectionObserver:', { hasMore, isLoading, isLoadingMore });
     
     if (observerRef.current) observerRef.current.disconnect();
     
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        console.log('🔄 IntersectionObserver triggered:', { 
-          isIntersecting: entries[0].isIntersecting, 
-          hasMore, 
-          isLoading, 
-          isLoadingMore 
-        });
-        
-        if (entries[0].isIntersecting && hasMore && !isLoading && !isLoadingMore) {
-          console.log('🔄 IntersectionObserver calling loadMoreResults');
-          loadMoreResults();
+    // Only create observer if we have more results to load and we're not currently loading
+    if (hasMore && !isLoading && !isLoadingMore) {
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting && hasMore && !isLoading && !isLoadingMore) {
+            console.log('🔄 Triggering optimized load more...');
+            loadMoreResults();
+          }
+        },
+        { 
+          threshold: 0.1,
+          rootMargin: '200px' // Start loading earlier for smoother experience
         }
-      },
-      { 
-        threshold: 0.1,
-        rootMargin: '100px' // Start loading 100px before the element comes into view
-      }
-    );
+      );
 
-    if (loadingRef.current) {
-      observerRef.current.observe(loadingRef.current);
-      console.log('🔄 IntersectionObserver observing loadingRef');
-    } else {
-      console.log('🔄 IntersectionObserver: loadingRef not found');
+      if (loadingRef.current) {
+        observerRef.current.observe(loadingRef.current);
+      }
     }
 
     return () => {
       if (observerRef.current) observerRef.current.disconnect();
     };
-  }, [hasMore, isLoading, isLoadingMore]); 
+  }, [hasMore, isLoading, isLoadingMore]);
+
+  // Optimized load more results
+  const loadMoreResults = async () => {
+    console.log('🔄 loadMoreResults called:', { hasMore, isLoadingMore, currentPage, selectedExpansion: selectedExpansion?.id });
+    
+    // Prevent multiple simultaneous calls
+    if (isLoadingMoreRef.current || !hasMore || isLoadingMore || currentPage >= 50) {
+      console.log('🔄 loadMoreResults skipped:', { isLoadingMoreRef: isLoadingMoreRef.current, hasMore, isLoadingMore, currentPage, maxPage: 50 });
+      return;
+    }
+    
+    isLoadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    
+    try {
+      if (selectedExpansion) {
+        await performExpansionSearch(selectedExpansion.id, currentPage + 1, true);
+      } else if (searchQuery.trim()) {
+        await performSearch(searchQuery, currentPage + 1, true);
+      }
+    } catch (error) {
+      console.error('Error loading more results:', error);
+    } finally {
+      isLoadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  }; 
 
   // Handle card click
   const handleCardClick = (card) => {
@@ -980,8 +1120,8 @@ const SearchApi = () => {
     setSelectedExpansion(expansion);
     setCurrentView('search');
     
-    // Automatically search for cards in this expansion
-    performExpansionSearch(expansion.id, 1);
+    // Automatically search for cards in this expansion with current sort and filter values
+    performExpansionSearch(expansion.id, 1, false, null, false, filterValues);
   };
 
   const handleBackToGames = () => {
@@ -1032,31 +1172,7 @@ const SearchApi = () => {
     }
   };
 
-  // Load more results for infinite scroll
-  const loadMoreResults = async () => {
-    console.log('🔄 loadMoreResults called:', { hasMore, isLoadingMore, currentPage, selectedExpansion: selectedExpansion?.id });
-    if (!hasMore || isLoadingMore) {
-      console.log('🔄 loadMoreResults skipped:', { hasMore, isLoadingMore });
-      return;
-    }
-    
-    setIsLoadingMore(true);
-    try {
-      if (selectedExpansion) {
-        console.log('🔄 Loading more expansion results for:', selectedExpansion.id, 'page:', currentPage + 1);
-        // Load more results for expansion search
-        await performExpansionSearch(selectedExpansion.id, currentPage + 1, true);
-      } else if (searchQuery.trim()) {
-        console.log('🔄 Loading more search results for:', searchQuery, 'page:', currentPage + 1);
-        // Load more results for regular search
-        await performSearch(searchQuery, currentPage + 1, true);
-      }
-    } catch (error) {
-      console.error('Error loading more results:', error);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  };
+  // Load more results removed - we now load all cards at once
 
   // Format price for display
   const formatPrice = (price) => {
@@ -1092,6 +1208,249 @@ const SearchApi = () => {
         return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
       }
     });
+  };
+
+  // Filter categories configuration
+  const filterCategories = {
+    sorting: 'Sort',
+    supertype: 'Supertype',
+    types: 'Type', 
+    subtypes: 'Subtype',
+    rarity: 'Rarity',
+    artists: 'Artist',
+    weaknesses: 'Weakness',
+    resistances: 'Resistance'
+  };
+
+  // Toggle filter category expansion
+  const toggleFilterExpansion = (filterType) => {
+    setExpandedFilters(prev => ({
+      ...prev,
+      [filterType]: !prev[filterType]
+    }));
+  };
+
+  // Get filter label for display
+  const getFilterLabel = (filterType, value) => {
+    const options = getFilterOptions(filterType);
+    const option = options.find(opt => opt.value === value);
+    return option ? option.label : value;
+  };
+
+  // Toggle filter value selection
+  const toggleFilterValue = (filterType, value) => {
+    console.log('🎯 toggleFilterValue called:', { filterType, value });
+    
+    setFilterValues(prev => {
+      const currentValues = prev[filterType] || [];
+      const isCurrentlySelected = currentValues.includes(value);
+      
+      const newValues = {
+        ...prev,
+        [filterType]: isCurrentlySelected
+          ? currentValues.filter(v => v !== value)
+          : [...currentValues, value]
+      };
+      
+      // Update active filters immediately
+      const newActiveFilters = [];
+      Object.entries(newValues).forEach(([type, values]) => {
+        if (values.length > 0) {
+          values.forEach(val => {
+            newActiveFilters.push({ type, value: val, label: getFilterLabel(type, val) });
+          });
+        }
+      });
+      setActiveFilters(newActiveFilters);
+      
+      // Debounce filter application with current values
+      if (filterTimeoutRef.current) {
+        clearTimeout(filterTimeoutRef.current);
+      }
+      filterTimeoutRef.current = setTimeout(() => applyFilters(newValues), 100);
+      
+      return newValues;
+    });
+  };
+
+  // Remove individual filter
+  const removeFilter = (filterType, value) => {
+    setFilterValues(prev => {
+      const newValues = {
+        ...prev,
+        [filterType]: prev[filterType].filter(v => v !== value)
+      };
+      
+      // Update active filters immediately
+      const newActiveFilters = [];
+      Object.entries(newValues).forEach(([type, values]) => {
+        if (values.length > 0) {
+          values.forEach(val => {
+            newActiveFilters.push({ type, value: val, label: getFilterLabel(type, val) });
+          });
+        }
+      });
+      setActiveFilters(newActiveFilters);
+      
+      // Debounce filter application with current values
+      if (filterTimeoutRef.current) {
+        clearTimeout(filterTimeoutRef.current);
+      }
+      filterTimeoutRef.current = setTimeout(() => applyFilters(newValues), 100);
+      
+      return newValues;
+    });
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    const emptyFilters = {
+      supertype: [],
+      types: [],
+      subtypes: [],
+      rarity: [],
+      artists: [],
+      weaknesses: [],
+      resistances: []
+    };
+    
+    setFilterValues(emptyFilters);
+    setActiveFilters([]);
+    
+    // Apply filters immediately with empty values
+    if (filterTimeoutRef.current) {
+      clearTimeout(filterTimeoutRef.current);
+    }
+    filterTimeoutRef.current = setTimeout(() => applyFilters(emptyFilters), 100);
+  };
+
+  // Apply filters and refresh search
+  const applyFilters = async (currentFilterValues = null) => {
+    if (!selectedExpansion) return;
+    
+    try {
+      console.log('🎯 applyFilters called');
+      setIsLoading(true);
+      setSearchResults([]);
+      setTotalResults(0);
+      setHasMore(false);
+      setCurrentPage(1);
+      
+      // Use current filter values if provided, otherwise use state
+      const filtersToUse = currentFilterValues || filterValues;
+      console.log('🎯 Using filters:', filtersToUse);
+      console.log('🎯 Current sort settings:', { sortBy, sortOrder });
+      
+      // Clear cache when applying filters to ensure fresh results with current sort/filter settings
+      console.log('🧹 Clearing cache before applying filters');
+      await searchCacheService.forceClearAllCache();
+      
+      // Perform search with new filters
+      await performExpansionSearch(selectedExpansion.id, 1, false, expansionViewMode, false, filtersToUse);
+    } catch (error) {
+      console.error('Error applying filters:', error);
+      setError('Failed to apply filters');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Reset all filters
+  const resetAllFilters = () => {
+    setFilterValues({
+      supertype: [],
+      types: [],
+      subtypes: [],
+      rarity: [],
+      artists: [],
+      weaknesses: [],
+      resistances: []
+    });
+    setGlobalSearchTerm('');
+    setExpandedFilters({});
+    setSortBy('number');
+    setSortOrder('asc');
+    setActiveFilters([]);
+  };
+
+  // Get filter options based on type and search term
+  const getFilterOptions = (filterType, searchTerm) => {
+    const options = {
+      supertype: [
+        { value: 'Pokémon', label: 'Pokémon', count: 152 },
+        { value: 'Trainer', label: 'Trainer', count: 36 }
+      ],
+      types: [
+        { value: 'Grass', label: 'Grass', count: 25, icon: <img src="https://scrydex.com/assets/grass-ec3509d75db6cd146139044107045ccb5bcbb528b02c3de89d709a7be4a0bf90.png" alt="Grass" className="w-4 h-4" /> },
+        { value: 'Fighting', label: 'Fighting', count: 22, icon: <img src="https://scrydex.com/assets/fighting-5fcb6e1f157032efac4f6830d88759e83e66530354a297b112fff24c152e8d3c.png" alt="Fighting" className="w-4 h-4" /> },
+        { value: 'Psychic', label: 'Psychic', count: 19, icon: <img src="https://scrydex.com/assets/psychic-503107a3ed9d9cce58e290677918f057ea6dc4e75042f2a627a5dd8a8bf6af9e.png" alt="Psychic" className="w-4 h-4" /> },
+        { value: 'Water', label: 'Water', count: 17, icon: <img src="https://scrydex.com/assets/water-6b0bc3ea40b358d372e8be04aa90be9fb74e3e46ced6824f6b264cc2a7c7e32a.png" alt="Water" className="w-4 h-4" /> },
+        { value: 'Colorless', label: 'Colorless', count: 17, icon: '⭐' },
+        { value: 'Fire', label: 'Fire', count: 16, icon: <img src="https://scrydex.com/assets/fire-76e636965a1e28800904de4abbf84ade3b019bbbce7021987f379971f881c2b5.png" alt="Fire" className="w-4 h-4" /> },
+        { value: 'Darkness', label: 'Darkness', count: 12, icon: <img src="https://scrydex.com/assets/darkness-d766bdc83589235f104c3c3892cff4de80048e7a729f24b6e5e53a1838c7ebfa.png" alt="Darkness" className="w-4 h-4" /> },
+        { value: 'Lightning', label: 'Lightning', count: 11, icon: <img src="https://scrydex.com/assets/lightning-732a70ef2e2dab4cc564fbf4d85cad48b0ac9ece462be3d42166a6fea4085773.png" alt="Lightning" className="w-4 h-4" /> },
+        { value: 'Metal', label: 'Metal', count: 9, icon: <img src="https://scrydex.com/assets/metal-076b10c3700a68913c376f841b46a1d63c3895247385b4360bc70739289179b7.png" alt="Metal" className="w-4 h-4" /> },
+        { value: 'Dragon', label: 'Dragon', count: 4, icon: <img src="https://scrydex.com/assets/dragon-3445aa07cd2c2380ae8e61f4ec47c7d678b4ab4268db16f95f66a04ecdd5200f.png" alt="Dragon" className="w-4 h-4" /> }
+      ],
+      subtypes: [
+        { value: 'Basic', label: 'Basic', count: 83 },
+        { value: 'Stage 1', label: 'Stage 1', count: 52 },
+        { value: 'MEGA', label: 'MEGA', count: 28 },
+        { value: 'ex', label: 'ex', count: 28 },
+        { value: 'Stage 2', label: 'Stage 2', count: 17 },
+        { value: 'Item', label: 'Item', count: 16 },
+        { value: 'Supporter', label: 'Supporter', count: 14 },
+        { value: 'Stadium', label: 'Stadium', count: 5 },
+        { value: 'Pokémon Tool', label: 'Pokémon Tool', count: 1 }
+      ],
+      rarity: [
+        { value: 'Common', label: 'Common', count: 67 },
+        { value: 'Uncommon', label: 'Uncommon', count: 43 },
+        { value: 'Illustration Rare', label: 'Illustration Rare', count: 22 },
+        { value: 'Ultra Rare', label: 'Ultra Rare', count: 22 },
+        { value: 'Rare', label: 'Rare', count: 12 },
+        { value: 'Special Illustration Rare', label: 'Special Illustration Rare', count: 10 },
+        { value: 'Double Rare', label: 'Double Rare', count: 10 },
+        { value: 'Mega Hyper Rare', label: 'Mega Hyper Rare', count: 2 }
+      ],
+      artists: [
+        { value: '5ban Graphics', label: '5ban Graphics', count: 15 },
+        { value: 'Studio Bora Inc.', label: 'Studio Bora Inc.', count: 7 },
+        { value: 'Toyste Beach', label: 'Toyste Beach', count: 6 },
+        { value: 'AYUMI ODASHIMA', label: 'AYUMI ODASHIMA', count: 5 },
+        { value: 'aky CG Works', label: 'aky CG Works', count: 4 },
+        { value: 'Atsushi Furusawa', label: 'Atsushi Furusawa', count: 3 },
+        { value: 'Saboteri', label: 'Saboteri', count: 3 },
+        { value: 'mashu', label: 'mashu', count: 3 },
+        { value: 'satoma', label: 'satoma', count: 3 },
+        { value: 'takuyoa', label: 'takuyoa', count: 3 }
+      ],
+      weaknesses: [
+        { value: 'Fire', label: 'Fire', count: 34, icon: <img src="https://scrydex.com/assets/fire-76e636965a1e28800904de4abbf84ade3b019bbbce7021987f379971f881c2b5.png" alt="Fire" className="w-4 h-4" /> },
+        { value: 'Fighting', label: 'Fighting', count: 26, icon: <img src="https://scrydex.com/assets/fighting-5fcb6e1f157032efac4f6830d88759e83e66530354a297b112fff24c152e8d3c.png" alt="Fighting" className="w-4 h-4" /> },
+        { value: 'Grass', label: 'Grass', count: 18, icon: <img src="https://scrydex.com/assets/grass-ec3509d75db6cd146139044107045ccb5bcbb528b02c3de89d709a7be4a0bf90.png" alt="Grass" className="w-4 h-4" /> },
+        { value: 'Darkness', label: 'Darkness', count: 18, icon: <img src="https://scrydex.com/assets/darkness-d766bdc83589235f104c3c3892cff4de80048e7a729f24b6e5e53a1838c7ebfa.png" alt="Darkness" className="w-4 h-4" /> },
+        { value: 'Lightning', label: 'Lightning', count: 16, icon: <img src="https://scrydex.com/assets/lightning-732a70ef2e2dab4cc564fbf4d85cad48b0ac9ece462be3d42166a6fea4085773.png" alt="Lightning" className="w-4 h-4" /> },
+        { value: 'Water', label: 'Water', count: 16, icon: <img src="https://scrydex.com/assets/water-6b0bc3ea40b358d372e8be04aa90be9fb74e3e46ced6824f6b264cc2a7c7e32a.png" alt="Water" className="w-4 h-4" /> },
+        { value: 'Psychic', label: 'Psychic', count: 12, icon: <img src="https://scrydex.com/assets/psychic-503107a3ed9d9cce58e290677918f057ea6dc4e75042f2a627a5dd8a8bf6af9e.png" alt="Psychic" className="w-4 h-4" /> },
+        { value: 'Metal', label: 'Metal', count: 8, icon: <img src="https://scrydex.com/assets/metal-076b10c3700a68913c376f841b46a1d63c3895247385b4360bc70739289179b7.png" alt="Metal" className="w-4 h-4" /> }
+      ],
+      resistances: [
+        { value: 'Fighting', label: 'Fighting', count: 24, icon: <img src="https://scrydex.com/assets/fighting-5fcb6e1f157032efac4f6830d88759e83e66530354a297b112fff24c152e8d3c.png" alt="Fighting" className="w-4 h-4" /> },
+        { value: 'Grass', label: 'Grass', count: 9, icon: <img src="https://scrydex.com/assets/grass-ec3509d75db6cd146139044107045ccb5bcbb528b02c3de89d709a7be4a0bf90.png" alt="Grass" className="w-4 h-4" /> }
+      ]
+    };
+
+    let filterOptions = options[filterType] || [];
+    
+    // Filter by search term
+    if (searchTerm) {
+      filterOptions = filterOptions.filter(option =>
+        option.label.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    return filterOptions;
   };
 
   // Format trend for display on cards
@@ -1797,45 +2156,68 @@ const SearchApi = () => {
               )}
             </div>
             
-            {/* Singles/Sealed Toggle - Only show when viewing an expansion */}
+            
+            {/* Singles/Sealed Toggle with Filter Button - Only show when viewing an expansion */}
             {selectedExpansion && (
-              <div className="flex bg-gray-800 rounded-lg p-1">
-                <button
-                  onClick={() => {
-                    setExpansionViewMode('singles');
-                    setSearchResults([]); // Clear existing results
-                    setTotalResults(0);
-                    setHasMore(false);
-                    setCurrentPage(1);
-                    setIsLoading(true);
-                    performExpansionSearch(selectedExpansion.id, 1, false, 'singles');
-                  }}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                    expansionViewMode === 'singles'
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Singles
-                </button>
-                <button
-                  onClick={() => {
-                    setExpansionViewMode('sealed');
-                    setSearchResults([]); // Clear existing results immediately
-                    setTotalResults(0);
-                    setHasMore(false);
-                    setCurrentPage(1);
-                    setIsLoading(true); // Show loading state
-                    performExpansionSearch(selectedExpansion.id, 1, false, 'sealed');
-                  }}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                    expansionViewMode === 'sealed'
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Sealed
-                </button>
+              <div className="space-y-3">
+                {/* Filter Controls Row */}
+                <div className="flex items-center gap-3">
+                  {/* Filter Button with Badge */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsFilterSidebarOpen(true)}
+                      className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+                      title="Filter and Sort"
+                    >
+                      <Filter className="w-5 h-5 text-gray-400" />
+                    </button>
+                    {activeFilters.length > 0 && (
+                      <div className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {activeFilters.length}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Singles/Sealed Toggle */}
+                <div className="flex bg-gray-800 rounded-lg p-1">
+                  <button
+                    onClick={() => {
+                      setExpansionViewMode('singles');
+                      setSearchResults([]); // Clear existing results
+                      setTotalResults(0);
+                      setHasMore(false);
+                      setCurrentPage(1);
+                      setIsLoading(true);
+                      performExpansionSearch(selectedExpansion.id, 1, false, 'singles', false, filterValues);
+                    }}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      expansionViewMode === 'singles'
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Singles
+                  </button>
+                  <button
+                    onClick={() => {
+                      setExpansionViewMode('sealed');
+                      setSearchResults([]); // Clear existing results immediately
+                      setTotalResults(0);
+                      setHasMore(false);
+                      setCurrentPage(1);
+                      setIsLoading(true); // Show loading state
+                      performExpansionSearch(selectedExpansion.id, 1, false, 'sealed', false, filterValues);
+                    }}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      expansionViewMode === 'sealed'
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Sealed
+                  </button>
+                </div>
+                </div>
               </div>
             )}
           </div>
@@ -1848,6 +2230,32 @@ const SearchApi = () => {
               <X size={20} />
               <span>{error}</span>
             </div>
+          </div>
+        )}
+
+        {/* Active Filter Pills Row */}
+        {activeFilters.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap mb-4">
+            {activeFilters.map((filter, index) => (
+              <div
+                key={`${filter.type}-${filter.value}-${index}`}
+                className="flex items-center gap-1 bg-indigo-600 text-white px-2 py-1 rounded-md text-xs"
+              >
+                <span>{filter.label}</span>
+                <button
+                  onClick={() => removeFilter(filter.type, filter.value)}
+                  className="hover:bg-indigo-700 rounded-full p-0.5 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={clearAllFilters}
+              className="text-xs text-gray-400 hover:text-white transition-colors"
+            >
+              Clear all
+            </button>
           </div>
         )}
 
@@ -1893,7 +2301,7 @@ const SearchApi = () => {
                   {/* Pricing and Add Button */}
                   <div className="flex items-center justify-between">
                     <div className="font-semibold text-white text-xs">
-                      {formatPrice(card.raw_price) && (
+                      {card.raw_price && (
                         <>
                           {formatPrice(card.raw_price)}
                           {card.raw_pricing?.trends?.days_7?.percent_change && (
@@ -1903,7 +2311,7 @@ const SearchApi = () => {
                           )}
                         </>
                       )}
-                      {!formatPrice(card.raw_price) && formatPrice(card.graded_price) && (
+                      {!card.raw_price && card.graded_price && (
                         <>
                           {formatPrice(card.graded_price)}
                           {card.graded_pricing?.trends?.days_7?.percent_change && (
@@ -1913,12 +2321,12 @@ const SearchApi = () => {
                           )}
                         </>
                       )}
-                      {!formatPrice(card.raw_price) && !formatPrice(card.graded_price) && card.market_value_cents && (
+                      {!card.raw_price && !card.graded_price && card.market_value_cents && (
                         <span className="text-white">
                           ${(card.market_value_cents / 100).toFixed(2)}
                         </span>
                       )}
-                      {!formatPrice(card.raw_price) && !formatPrice(card.graded_price) && !formatPrice(card.market_value_cents / 100) && (
+                      {!card.raw_price && !card.graded_price && !card.market_value_cents && (
                         <span className="text-gray-400">Pricing N/A</span>
                       )}
                     </div>
@@ -1939,13 +2347,13 @@ const SearchApi = () => {
           </div>
         )}
 
-        {/* Loading indicator for infinite scroll */}
+        {/* Optimized loading indicator */}
         {hasMore && (
-          <div ref={loadingRef} className="flex justify-center py-6">
+          <div ref={loadingRef} className="flex justify-center py-4">
             {isLoadingMore ? (
               <div className="flex items-center gap-2 text-gray-400">
-                <Loader2 className="animate-spin" size={20} />
-                <span className="text-sm">Loading more cards...</span>
+                <Loader2 className="animate-spin" size={16} />
+                <span className="text-sm">Loading more...</span>
               </div>
             ) : (
               <div className="text-gray-500 text-sm">Scroll for more cards...</div>
@@ -2001,7 +2409,7 @@ const SearchApi = () => {
                     setHasMore(false);
                     setCurrentPage(1);
                     setIsLoading(true);
-                    performExpansionSearch(selectedExpansion.id, 1, false, 'singles');
+                    performExpansionSearch(selectedExpansion.id, 1, false, 'singles', false, filterValues);
                   }}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                 >
@@ -2445,6 +2853,231 @@ const SearchApi = () => {
         }}
         editingItem={selectedCustomItem}
       />
+
+      {/* Filter Sidebar */}
+      {isFilterSidebarOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black bg-opacity-50"
+            onClick={() => setIsFilterSidebarOpen(false)}
+          />
+          
+          {/* Sidebar */}
+          <div className="absolute right-0 top-0 h-full w-80 bg-gray-900 shadow-xl transform transition-transform">
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+                <h2 className="text-sm font-medium text-white">Advanced Filters</h2>
+                <button
+                  onClick={() => setIsFilterSidebarOpen(false)}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+              
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto">
+                {/* Global Search Bar */}
+                <div className="p-4">
+                  <input
+                    type="text"
+                    placeholder="Search series..."
+                    value={globalSearchTerm}
+                    onChange={(e) => setGlobalSearchTerm(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                
+                
+                {/* Filter Categories */}
+                <div className="px-4 pb-4">
+                  {Object.entries(filterCategories).map(([filterType, filterLabel]) => (
+                    <div key={filterType} className="border-b border-gray-700 last:border-b-0">
+                      {/* Category Header */}
+                      <button
+                        onClick={() => toggleFilterExpansion(filterType)}
+                        className="w-full flex items-center justify-between py-3 px-2 hover:bg-gray-800 rounded-md transition-colors"
+                      >
+                        <span className="text-xs text-white font-medium">{filterLabel}</span>
+                        <span className="text-xs text-white">
+                          {expandedFilters[filterType] ? '-' : '+'}
+                        </span>
+                      </button>
+                      
+                      {/* Expanded Category Options */}
+                      {expandedFilters[filterType] && (
+                        <div className="pl-4 pb-2">
+                          {filterType === 'sorting' ? (
+                            /* Special handling for sorting options */
+                            <div className="space-y-4">
+                              {/* Sort By Options */}
+                              <div>
+                                <h4 className="text-xs text-white font-medium mb-2">Sort By</h4>
+                                <div className="space-y-2">
+                                  {/* Card Number */}
+                                  <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input
+                                      type="radio"
+                                      name="sortBy"
+                                      value="number"
+                                      checked={sortBy === 'number'}
+                                      onChange={(e) => {
+                                        setSortBy(e.target.value);
+                                        setTimeout(() => applyFilters(), 100);
+                                      }}
+                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                    />
+                                    <span className="text-xs text-white">Card Number</span>
+                                  </label>
+                                  
+                                  {/* Name */}
+                                  <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input
+                                      type="radio"
+                                      name="sortBy"
+                                      value="name"
+                                      checked={sortBy === 'name'}
+                                      onChange={(e) => {
+                                        setSortBy(e.target.value);
+                                        setTimeout(() => applyFilters(), 100);
+                                      }}
+                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                    />
+                                    <span className="text-xs text-white">Name</span>
+                                  </label>
+                                  
+                                  {/* Price (Raw) */}
+                                  <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input
+                                      type="radio"
+                                      name="sortBy"
+                                      value="raw_market"
+                                      checked={sortBy === 'raw_market'}
+                                      onChange={(e) => {
+                                        setSortBy(e.target.value);
+                                        setTimeout(() => applyFilters(), 100);
+                                      }}
+                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                    />
+                                    <span className="text-xs text-white">Raw Price</span>
+                                  </label>
+                                  
+                                  {/* Price (Graded) */}
+                                  <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input
+                                      type="radio"
+                                      name="sortBy"
+                                      value="graded_market"
+                                      checked={sortBy === 'graded_market'}
+                                      onChange={(e) => {
+                                        setSortBy(e.target.value);
+                                        setTimeout(() => applyFilters(), 100);
+                                      }}
+                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                    />
+                                    <span className="text-xs text-white">Graded Price</span>
+                                  </label>
+                                  
+                                  {/* Rarity */}
+                                  <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input
+                                      type="radio"
+                                      name="sortBy"
+                                      value="rarity"
+                                      checked={sortBy === 'rarity'}
+                                      onChange={(e) => {
+                                        setSortBy(e.target.value);
+                                        setTimeout(() => applyFilters(), 100);
+                                      }}
+                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                    />
+                                    <span className="text-xs text-white">Rarity</span>
+                                  </label>
+                                </div>
+                              </div>
+                              
+                              {/* Sort Order */}
+                              <div>
+                                <h4 className="text-xs text-white font-medium mb-2">Sort Order</h4>
+                                <div className="space-y-2">
+                                  <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input
+                                      type="radio"
+                                      name="sortOrder"
+                                      value="asc"
+                                      checked={sortOrder === 'asc'}
+                                      onChange={(e) => {
+                                        setSortOrder(e.target.value);
+                                        setTimeout(() => applyFilters(), 100);
+                                      }}
+                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                    />
+                                    <span className="text-xs text-white">Ascending</span>
+                                  </label>
+                                  
+                                  <label className="flex items-center space-x-2 cursor-pointer">
+                                    <input
+                                      type="radio"
+                                      name="sortOrder"
+                                      value="desc"
+                                      checked={sortOrder === 'desc'}
+                                      onChange={(e) => {
+                                        setSortOrder(e.target.value);
+                                        setTimeout(() => applyFilters(), 100);
+                                      }}
+                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                    />
+                                    <span className="text-xs text-white">Descending</span>
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            /* Regular filter options */
+                            getFilterOptions(filterType, globalSearchTerm).map((option) => (
+                              <div
+                                key={`${filterType}-${option.value}`}
+                                className="flex items-center justify-between py-2.5 px-2 hover:bg-gray-800 rounded-md cursor-pointer transition-colors"
+                              >
+                                <div className="flex items-center">
+                                  {option.icon && (
+                                    <div className="w-4 h-4 mr-3 flex items-center justify-center">
+                                      {option.icon}
+                                    </div>
+                                  )}
+                                  <span className="text-xs text-white">{option.label}</span>
+                                </div>
+                                <div className="flex items-center">
+                                  <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full mr-3">
+                                    {option.count}
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    checked={filterValues[filterType]?.includes(option.value) || false}
+                                    onChange={() => {}} // Handled by parent onClick
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleFilterValue(filterType, option.value);
+                                    }} // Handle click directly and prevent bubbling
+                                    className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                  />
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

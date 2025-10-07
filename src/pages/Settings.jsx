@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../contexts/ModalContext';
+import { useAdmin } from '../hooks/useAdmin';
 import ThemeSettings from '../components/ThemeSettings';
 import ScrydexSyncSettings from '../components/ScrydexSyncSettings';
+import AdminSettings from '../components/AdminSettings';
 import AccountDeletionModal from '../components/AccountDeletionModal';
 
 const Settings = () => {
   const { user, signOut } = useAuth();
+  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
   const { openModal, closeModal } = useModal();
   const [loading, setLoading] = useState(false);
@@ -75,47 +78,50 @@ const Settings = () => {
               
               {/* User Details */}
               <div>
-                <h2 className="text-lg font-semibold text-white">
-                  {user?.user_metadata?.full_name || user?.user_metadata?.name || 'User'}
-                </h2>
+                <div className="flex items-center space-x-3">
+                  <h2 className="text-lg font-semibold text-white">
+                    {user?.user_metadata?.full_name || user?.user_metadata?.name || 'User'}
+                  </h2>
+                  <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                    isAdmin 
+                      ? 'bg-green-900/30 text-green-300 border border-green-800/30' 
+                      : 'bg-blue-900/30 text-blue-300 border border-blue-800/30'
+                  }`}>
+                    {isAdmin ? 'Admin' : 'Beta User'}
+                  </span>
+                </div>
                 <p className="text-gray-400 text-sm">{user?.email}</p>
                 {user?.user_metadata?.discord_username && (
                   <p className="text-indigo-400 text-xs">
                     Discord: {user.user_metadata.discord_username}
                   </p>
                 )}
-              </div>
             </div>
+          </div>
+        </div>
 
-            {/* Sign Out Button - Small and Unobtrusive */}
+        {/* Account Info */}
+        <div className="mt-4 pt-4 border-t border-gray-700">
+          <div className="flex items-center justify-between">
+            <div className="text-sm">
+              <span className="text-gray-400">Member Since</span>
+              <p className="text-white">
+                {formatDate(user?.created_at)}
+              </p>
+            </div>
+            
+            {/* Sign Out Button - More Prominent */}
             <button 
               onClick={() => {
                 setShowSignOutConfirm(true);
                 openModal();
               }}
-              className="px-3 py-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors text-sm"
+              className="px-4 py-2 text-red-400 border border-red-500/30 hover:bg-red-500/10 hover:border-red-400 rounded-lg transition-colors text-sm font-medium"
             >
               Sign Out
             </button>
           </div>
-
-          {/* Account Info */}
-          <div className="mt-4 pt-4 border-t border-gray-700">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-400">Account Type</span>
-                <p className="text-white">
-                  {user?.app_metadata?.provider === 'discord' ? 'Discord' : 'Email'}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-400">Member Since</span>
-                <p className="text-white">
-                  {formatDate(user?.created_at)}
-                </p>
-              </div>
-            </div>
-          </div>
+        </div>
         </div>
 
         {/* Settings Sections */}
@@ -127,8 +133,11 @@ const Settings = () => {
               {/* Theme Settings */}
               <ThemeSettings />
               
-              {/* Scrydex Sync Settings */}
-              <ScrydexSyncSettings />
+              {/* Admin Settings - Only show to admins */}
+              {isAdmin && <AdminSettings />}
+              
+              {/* Regular sync settings - Only show to non-admins */}
+              {!isAdmin && <ScrydexSyncSettings />}
             </div>
           </div>
 

@@ -5,8 +5,7 @@
  * Automatically routes searches based on product type
  */
 
-import scrydexApiService from './scrydexApiService'
-import localScrydexService from './localScrydexService'
+import localSearchService from './localSearchService'
 import priceChartingApiService from './priceChartingApiService'
 import rapidApiService from './rapidApiService'
 import searchCacheService from './searchCacheService'
@@ -19,8 +18,8 @@ class HybridSearchService {
   // Initialize all services
   async initialize() {
     try {
-      // Initialize Scrydex service (no API key needed - uses backend)
-      await scrydexApiService.initialize()
+      // Initialize local search service (fast, uses Supabase data)
+      await localSearchService.initialize()
       
       // Initialize PriceCharting service (optional - may fail if no API key)
       const priceChartingInitialized = await priceChartingApiService.initialize()
@@ -76,39 +75,83 @@ class HybridSearchService {
     }
 
     try {
-      const { page = 1, pageSize = 100, expansionId = null } = options
+      const { 
+        page = 1, 
+        pageSize = 30, 
+        expansionId = null, 
+        sortBy = 'number', 
+        sortOrder = 'asc', 
+        supertype = null,
+        types = null, 
+        subtypes = null,
+        rarity = null,
+        artists = null,
+        weaknesses = null,
+        resistances = null
+      } = options // Optimized pagination for fast loading
+      console.log('🔍 HybridSearch smartSearch - pageSize:', pageSize, 'page:', page, 'sortBy:', sortBy, 'sortOrder:', sortOrder, 'filters:', { supertype, types, subtypes, rarity, artists, weaknesses, resistances });
       
-      // Check if local database has data and try local search first
-      const hasLocalData = await localScrydexService.hasData()
-      if (hasLocalData) {
-        console.log('🎯 Attempting local database search first')
-        try {
-          let localResults
-          if (expansionId) {
-            localResults = await localScrydexService.searchCardsByExpansion(expansionId, options)
-          } else {
-            localResults = await localScrydexService.searchCards(query, options)
-          }
-          
-          if (localResults && localResults.data && localResults.data.length > 0) {
-            console.log(`✅ Found ${localResults.data.length} results in local database`)
-            return {
-              singles: localResults.data,
-              sealed: [],
-              total: localResults.total,
-              page: localResults.page,
-              pageSize: localResults.pageSize,
-              source: 'local',
-              cached: false
-            }
-          }
-        } catch (localError) {
-          console.warn('⚠️ Local search failed, falling back to API:', localError.message)
+      // Use local search service for Pokémon cards (fast, responsive)
+      console.log('🎯 Using local database search for Pokémon cards')
+      try {
+        let localResults
+        if (expansionId) {
+          localResults = await localSearchService.getCardsByExpansion(expansionId, { 
+            ...options, 
+            sortBy, 
+            sortOrder,
+            supertype,
+            types,
+            subtypes,
+            rarity,
+            artists,
+            weaknesses,
+            resistances
+          })
+        } else {
+          localResults = await localSearchService.searchCards(query, { 
+            ...options, 
+            sortBy, 
+            sortOrder,
+            supertype,
+            types,
+            subtypes,
+            rarity,
+            artists,
+            weaknesses,
+            resistances
+          })
         }
+        
+        if (localResults && localResults.data && localResults.data.length > 0) {
+          console.log(`✅ Found ${localResults.data.length} results in local database`)
+          return {
+            singles: localResults.data,
+            sealed: [],
+            total: localResults.total,
+            page: localResults.page,
+            pageSize: localResults.pageSize,
+            source: 'local',
+            cached: false
+          }
+        }
+      } catch (localError) {
+        console.warn('⚠️ Local search failed:', localError.message)
+        // Continue with other search methods
       }
       
       // Check cache second
-      const cacheKey = searchCacheService.generateCacheKey(query, game, 'general', expansionId, page, pageSize)
+      const cacheKey = searchCacheService.generateCacheKey(query, game, 'general', expansionId, page, pageSize, {
+        supertype,
+        types,
+        subtypes,
+        rarity,
+        artists,
+        weaknesses,
+        resistances,
+        sortBy,
+        sortOrder
+      })
       const cachedResults = await searchCacheService.getCachedResults(cacheKey)
       
       if (cachedResults) {
@@ -166,18 +209,18 @@ class HybridSearchService {
           results.total = 0
         }
       }
-      // If it's clearly a single card query, only search Scrydex
+      // If it's clearly a single card query, only search local database
       else if (isSingleQuery && !isSealedQuery) {
-        const singleResults = await scrydexApiService.searchCards(query, { ...options, page, pageSize })
+        const singleResults = await localSearchService.searchCards(query, { ...options, page, pageSize })
         results.singles = singleResults.data || []
         results.total = singleResults.total || 0
       }
       // If ambiguous or both types, search both APIs
       else {
         
-        // Search singles via Scrydex
+        // Search singles via local database
         try {
-          const singleResults = await scrydexApiService.searchCards(query, { ...options, page, pageSize })
+          const singleResults = await localSearchService.searchCards(query, { ...options, page, pageSize })
           results.singles = singleResults.data || []
         } catch (error) {
         }
@@ -264,15 +307,15 @@ class HybridSearchService {
   // Search only singles
   async searchSingles(query, game = 'pokemon', options = {}) {
     if (!this.isInitialized) {
-      throw new Error('Scrydex API not available')
+      throw new Error('Local search service not available')
     }
 
     try {
-      const results = await scrydexApiService.searchCards(query, game, options)
+      const results = await localSearchService.searchCards(query, options)
       return {
-        cards: results.cards || [],
+        cards: results.data || [],
         total: results.total || 0,
-        source: 'scrydex'
+        source: 'local'
       }
     } catch (error) {
       console.error('❌ Singles search failed:', error)
@@ -281,7 +324,7 @@ class HybridSearchService {
   }
 
   // Get product details (works for both singles and sealed)
-  async getProductDetails(productId, source = 'scrydex') {
+  async getProductDetails(productId, source = 'local') {
     if (!this.isInitialized) {
       throw new Error('Search service not initialized')
     }
@@ -290,7 +333,7 @@ class HybridSearchService {
       if (source === 'pricecharting') {
         return await priceChartingApiService.getProductDetails(productId)
       } else {
-        return await scrydexApiService.getCardDetails(productId)
+        return await localSearchService.getCardById(productId)
       }
     } catch (error) {
       console.error('❌ Product details failed:', error)
@@ -299,7 +342,7 @@ class HybridSearchService {
   }
 
   // Get pricing data
-  async getProductPricing(productId, source = 'scrydex') {
+  async getProductPricing(productId, source = 'local') {
     if (!this.isInitialized) {
       throw new Error('Search service not initialized')
     }
@@ -308,11 +351,11 @@ class HybridSearchService {
       if (source === 'pricecharting') {
         return await priceChartingApiService.getProductPricing(productId)
       } else {
-        // Scrydex pricing is included in card details
-        const cardDetails = await scrydexApiService.getCardDetails(productId)
+        // Local pricing is included in card details
+        const cardDetails = await localSearchService.getCardById(productId)
         return {
-          market_price: cardDetails.market_value || 0,
-          source: 'scrydex'
+          market_price: cardDetails.raw_market || cardDetails.graded_market || 0,
+          source: 'local'
         }
       }
     } catch (error) {
@@ -328,10 +371,20 @@ class HybridSearchService {
     }
 
     try {
-      const { page = 1, pageSize = 100 } = options
+      const { page = 1, pageSize = 30 } = options // Optimized pagination for fast loading
       
       // Check cache first
-      const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'sealed', expansionId, page, pageSize)
+      const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'sealed', expansionId, page, pageSize, {
+        supertype,
+        types,
+        subtypes,
+        rarity,
+        artists,
+        weaknesses,
+        resistances,
+        sortBy,
+        sortOrder
+      })
       const cachedResults = await searchCacheService.getCachedResults(cacheKey)
       
       if (cachedResults) {
@@ -347,18 +400,18 @@ class HybridSearchService {
 
       console.log('🔍 Getting Scrydex sealed products for expansion:', expansionId)
       
-      // Try to get sealed products from Scrydex first
-      const scrydexSealed = await scrydexApiService.getSealedProductsByExpansion(expansionId, options)
+      // Try to get sealed products from local database first
+      const localSealed = await localSearchService.getCardsByExpansion(expansionId, options)
       
-      if (scrydexSealed && scrydexSealed.data && scrydexSealed.data.length > 0) {
-        console.log(`📦 Found ${scrydexSealed.data.length} Scrydex sealed products for expansion ${expansionId}`)
+      if (localSealed && localSealed.data && localSealed.data.length > 0) {
+        console.log(`📦 Found ${localSealed.data.length} local cards for expansion ${expansionId}`)
         const result = {
-          data: scrydexSealed.data,
-          total: scrydexSealed.total,
-          page: scrydexSealed.page,
-          pageSize: scrydexSealed.pageSize,
-          hasMore: scrydexSealed.hasMore,
-          source: 'scrydex'
+          data: localSealed.data,
+          total: localSealed.total,
+          page: localSealed.page,
+          pageSize: localSealed.pageSize,
+          hasMore: localSealed.totalPages > localSealed.page,
+          source: 'local'
         }
         
         // Cache the result
@@ -378,9 +431,11 @@ class HybridSearchService {
       } else {
         console.log('📦 No Scrydex sealed products found, falling back to PriceCharting')
         
-        // Fallback to PriceCharting if Scrydex has no sealed products
+        // Fallback to PriceCharting if local database has no sealed products
         if (priceChartingApiService.isInitialized) {
-          const expansion = await scrydexApiService.getExpansion(expansionId)
+          // Get expansion details from local database
+          const expansions = await localSearchService.getExpansions()
+          const expansion = expansions.find(exp => exp.id === expansionId)
           if (expansion) {
             // Try multiple search strategies for better results
             let priceChartingSealed = []
@@ -467,11 +522,11 @@ class HybridSearchService {
         
         const emptyResult = {
           data: [],
-          total: 0,
-          page: 1,
-          pageSize: 100,
-          hasMore: false,
-          source: 'none'
+        total: 0,
+        page: 1,
+        pageSize: 30,
+        hasMore: false,
+        source: 'none'
         }
         
         // Cache empty result too
@@ -495,7 +550,9 @@ class HybridSearchService {
       // Fallback to PriceCharting on error
       if (priceChartingApiService.isInitialized) {
         try {
-          const expansion = await scrydexApiService.getExpansion(expansionId)
+          // Get expansion details from local database
+          const expansions = await localSearchService.getExpansions()
+          const expansion = expansions.find(exp => exp.id === expansionId)
           if (expansion) {
             const query = `pokemon ${expansion.name}`
             const priceChartingSealed = await priceChartingApiService.searchSealedProducts(query, 'pokemon')
@@ -553,18 +610,19 @@ class HybridSearchService {
         data: [],
         total: 0,
         page: 1,
-        pageSize: 100,
+        pageSize: 30,
         hasMore: false,
         source: 'error'
       }
     }
   }
 
-  // Sort sealed products by expansion using Scrydex expansion data
+  // Sort sealed products by expansion using local expansion data
   async sortSealedProductsByExpansion(sealedProducts, expansionId) {
     try {
-      // Get expansion details from Scrydex
-      const expansion = await scrydexApiService.getExpansion(expansionId)
+      // Get expansion details from local database
+      const expansions = await localSearchService.getExpansions()
+      const expansion = expansions.find(exp => exp.id === expansionId)
       if (!expansion) {
         console.warn('⚠️ Expansion not found:', expansionId)
         return sealedProducts
@@ -610,8 +668,8 @@ class HybridSearchService {
 
       if (includeSingles) {
         try {
-          const singleResults = await scrydexApiService.getExpansions(game)
-          results.singles = singleResults.expansions || []
+          const singleResults = await localSearchService.getExpansions()
+          results.singles = singleResults || []
         } catch (error) {
           console.warn('⚠️ Singles game search failed:', error)
         }
