@@ -107,17 +107,24 @@ class LocalSearchService {
       console.log('🔢 Sort parameters received:', { sortBy, sortOrder });
       if (sortBy && sortOrder) {
         if (sortBy === 'number') {
-          // For numeric sorting by card number, use the number field directly
-          console.log('🔢 Sorting by number field, order:', sortOrder === 'asc' ? 'ascending' : 'descending');
-          supabaseQuery = supabaseQuery.order('number', { ascending: sortOrder === 'asc' });
+          // For numeric sorting by card number, cast TEXT to INTEGER for proper numerical sorting
+          console.log('🔢 Sorting by number field (cast to int), order:', sortOrder === 'asc' ? 'ascending' : 'descending');
+          supabaseQuery = supabaseQuery.order('CAST(number AS INTEGER)', { ascending: sortOrder === 'asc' });
+        } else if (sortBy === 'raw_market' || sortBy === 'graded_market') {
+          // For price fields, cast to NUMERIC and handle nulls properly
+          console.log('🔢 Sorting by price field:', sortBy, 'order:', sortOrder === 'asc' ? 'ascending' : 'descending');
+          supabaseQuery = supabaseQuery.order(`CAST(${sortBy} AS NUMERIC)`, { 
+            ascending: sortOrder === 'asc',
+            nullsFirst: false // Put null values at the end
+          });
         } else {
           console.log('🔢 Sorting by field:', sortBy, 'order:', sortOrder === 'asc' ? 'ascending' : 'descending');
           supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' });
         }
       } else {
-        // Default to sorting by card number field
-        console.log('🔢 Default sorting by number field (no sort parameters provided)');
-        supabaseQuery = supabaseQuery.order('number', { ascending: true });
+        // Default to sorting by card number field (cast to int for numerical sorting)
+        console.log('🔢 Default sorting by number field (cast to int)');
+        supabaseQuery = supabaseQuery.order('CAST(number AS INTEGER)', { ascending: true });
       }
 
       // Apply pagination
@@ -335,17 +342,24 @@ class LocalSearchService {
       console.log('🔢 Expansion sort parameters received:', { sortBy, sortOrder });
       if (sortBy && sortOrder) {
         if (sortBy === 'number') {
-          // For numeric sorting by card number, use the number field directly
-          console.log('🔢 Expansion sorting by number field, order:', sortOrder === 'asc' ? 'ascending' : 'descending');
-          supabaseQuery = supabaseQuery.order('number', { ascending: sortOrder === 'asc' });
+          // For numeric sorting by card number, cast TEXT to INTEGER for proper numerical sorting
+          console.log('🔢 Expansion sorting by number field (cast to int), order:', sortOrder === 'asc' ? 'ascending' : 'descending');
+          supabaseQuery = supabaseQuery.order('CAST(number AS INTEGER)', { ascending: sortOrder === 'asc' });
+        } else if (sortBy === 'raw_market' || sortBy === 'graded_market') {
+          // For price fields, cast to NUMERIC and handle nulls properly
+          console.log('🔢 Expansion sorting by price field:', sortBy, 'order:', sortOrder === 'asc' ? 'ascending' : 'descending');
+          supabaseQuery = supabaseQuery.order(`CAST(${sortBy} AS NUMERIC)`, { 
+            ascending: sortOrder === 'asc',
+            nullsFirst: false // Put null values at the end
+          });
         } else {
           console.log('🔢 Expansion sorting by field:', sortBy, 'order:', sortOrder === 'asc' ? 'ascending' : 'descending');
           supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' });
         }
       } else {
-        // Default to sorting by card number field
-        console.log('🔢 Expansion default sorting by number field (no sort parameters provided)');
-        supabaseQuery = supabaseQuery.order('number', { ascending: true });
+        // Default to sorting by card number field (cast to int for numerical sorting)
+        console.log('🔢 Expansion default sorting by number field (cast to int)');
+        supabaseQuery = supabaseQuery.order('CAST(number AS INTEGER)', { ascending: true });
       }
 
       // Apply pagination

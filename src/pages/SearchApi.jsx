@@ -704,7 +704,7 @@ const SearchApi = () => {
   };
 
   // Perform search for cards in a specific expansion
-  const performExpansionSearch = async (expansionId, page = 1, append = false, viewMode = null, skipCacheClear = false, currentFilterValues = null) => {
+  const performExpansionSearch = async (expansionId, page = 1, append = false, viewMode = null, skipCacheClear = false, currentFilterValues = null, forceCacheClear = false, currentSortBy = null, currentSortOrder = null) => {
     // Clear any existing timeouts
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -742,8 +742,8 @@ const SearchApi = () => {
         pageSize: 30, // Optimized pagination for fast loading
         expansionId: expansionId,
         // Include current filter values - convert empty arrays to null for proper handling
-        sortBy,
-        sortOrder,
+        sortBy: currentSortBy || sortBy,
+        sortOrder: currentSortOrder || sortOrder,
         supertype: filtersToUse.supertype.length > 0 ? filtersToUse.supertype : null,
         types: filtersToUse.types.length > 0 ? filtersToUse.types : null,
         subtypes: filtersToUse.subtypes.length > 0 ? filtersToUse.subtypes : null,
@@ -1096,7 +1096,7 @@ const SearchApi = () => {
     }
   };
 
-  const handleExpansionSelect = (expansion) => {
+  const handleExpansionSelect = async (expansion) => {
     // Clear any existing timeouts
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -1120,8 +1120,12 @@ const SearchApi = () => {
     setSelectedExpansion(expansion);
     setCurrentView('search');
     
+    // Clear cache before performing search to ensure fresh results
+    console.log('🧹 Clearing cache for new expansion selection');
+    await searchCacheService.forceClearAllCache();
+    
     // Automatically search for cards in this expansion with current sort and filter values
-    performExpansionSearch(expansion.id, 1, false, null, false, filterValues);
+    await performExpansionSearch(expansion.id, 1, false, null, true, filterValues);
   };
 
   const handleBackToGames = () => {
@@ -1237,6 +1241,22 @@ const SearchApi = () => {
     return option ? option.label : value;
   };
 
+  // Helper function to get dynamic sort button text
+  const getSortButtonText = (sortBy, sortOrder) => {
+    // Return the text that represents what this button will do when clicked
+    switch (sortBy) {
+      case 'name':
+        return sortOrder === 'desc' ? 'A-Z' : 'Z-A';
+      case 'raw_market':
+        return sortOrder === 'desc' ? 'Low to High' : 'High to Low';
+      case 'graded_market':
+        return sortOrder === 'desc' ? 'Low to High' : 'High to Low';
+      case 'number':
+      default:
+        return sortOrder === 'desc' ? '1-999' : '999-1';
+    }
+  };
+
   // Toggle filter value selection
   const toggleFilterValue = (filterType, value) => {
     console.log('🎯 toggleFilterValue called:', { filterType, value });
@@ -1325,7 +1345,7 @@ const SearchApi = () => {
   };
 
   // Apply filters and refresh search
-  const applyFilters = async (currentFilterValues = null) => {
+  const applyFilters = async (currentFilterValues = null, currentSortBy = null, currentSortOrder = null) => {
     if (!selectedExpansion) return;
     
     try {
@@ -1338,15 +1358,18 @@ const SearchApi = () => {
       
       // Use current filter values if provided, otherwise use state
       const filtersToUse = currentFilterValues || filterValues;
+      const sortByToUse = currentSortBy || sortBy;
+      const sortOrderToUse = currentSortOrder || sortOrder;
+      
       console.log('🎯 Using filters:', filtersToUse);
-      console.log('🎯 Current sort settings:', { sortBy, sortOrder });
+      console.log('🎯 Using sort settings:', { sortBy: sortByToUse, sortOrder: sortOrderToUse });
       
       // Clear cache when applying filters to ensure fresh results with current sort/filter settings
       console.log('🧹 Clearing cache before applying filters');
       await searchCacheService.forceClearAllCache();
       
-      // Perform search with new filters
-      await performExpansionSearch(selectedExpansion.id, 1, false, expansionViewMode, false, filtersToUse);
+      // Perform search with new filters and sort settings
+      await performExpansionSearch(selectedExpansion.id, 1, false, expansionViewMode, true, filtersToUse, true, sortByToUse, sortOrderToUse);
     } catch (error) {
       console.error('Error applying filters:', error);
       setError('Failed to apply filters');
@@ -2181,14 +2204,16 @@ const SearchApi = () => {
                   {/* Singles/Sealed Toggle */}
                 <div className="flex bg-gray-800 rounded-lg p-1">
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setExpansionViewMode('singles');
                       setSearchResults([]); // Clear existing results
                       setTotalResults(0);
                       setHasMore(false);
                       setCurrentPage(1);
                       setIsLoading(true);
-                      performExpansionSearch(selectedExpansion.id, 1, false, 'singles', false, filterValues);
+                      // Clear cache before performing search
+                      await searchCacheService.forceClearAllCache();
+                      performExpansionSearch(selectedExpansion.id, 1, false, 'singles', true, filterValues);
                     }}
                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
                       expansionViewMode === 'singles'
@@ -2199,14 +2224,16 @@ const SearchApi = () => {
                     Singles
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setExpansionViewMode('sealed');
                       setSearchResults([]); // Clear existing results immediately
                       setTotalResults(0);
                       setHasMore(false);
                       setCurrentPage(1);
                       setIsLoading(true); // Show loading state
-                      performExpansionSearch(selectedExpansion.id, 1, false, 'sealed', false, filterValues);
+                      // Clear cache before performing search
+                      await searchCacheService.forceClearAllCache();
+                      performExpansionSearch(selectedExpansion.id, 1, false, 'sealed', true, filterValues);
                     }}
                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
                       expansionViewMode === 'sealed'
@@ -2402,14 +2429,16 @@ const SearchApi = () => {
               </p>
               <div className="space-y-3">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setExpansionViewMode('singles');
                     setSearchResults([]);
                     setTotalResults(0);
                     setHasMore(false);
                     setCurrentPage(1);
                     setIsLoading(true);
-                    performExpansionSearch(selectedExpansion.id, 1, false, 'singles', false, filterValues);
+                    // Clear cache before performing search
+                    await searchCacheService.forceClearAllCache();
+                    performExpansionSearch(selectedExpansion.id, 1, false, 'singles', true, filterValues);
                   }}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                 >
@@ -2856,7 +2885,7 @@ const SearchApi = () => {
 
       {/* Filter Sidebar */}
       {isFilterSidebarOpen && (
-        <div className="fixed inset-0 z-50 overflow-hidden">
+        <div className="fixed inset-0 z-[1100] overflow-hidden">
           {/* Backdrop */}
           <div 
             className="absolute inset-0 bg-black bg-opacity-50"
@@ -2895,180 +2924,154 @@ const SearchApi = () => {
                 <div className="px-4 pb-4">
                   {Object.entries(filterCategories).map(([filterType, filterLabel]) => (
                     <div key={filterType} className="border-b border-gray-700 last:border-b-0">
-                      {/* Category Header */}
-                      <button
-                        onClick={() => toggleFilterExpansion(filterType)}
-                        className="w-full flex items-center justify-between py-3 px-2 hover:bg-gray-800 rounded-md transition-colors"
-                      >
-                        <span className="text-xs text-white font-medium">{filterLabel}</span>
-                        <span className="text-xs text-white">
-                          {expandedFilters[filterType] ? '-' : '+'}
-                        </span>
-                      </button>
-                      
-                      {/* Expanded Category Options */}
-                      {expandedFilters[filterType] && (
-                        <div className="pl-4 pb-2">
-                          {filterType === 'sorting' ? (
-                            /* Special handling for sorting options */
-                            <div className="space-y-4">
-                              {/* Sort By Options */}
-                              <div>
-                                <h4 className="text-xs text-white font-medium mb-2">Sort By</h4>
-                                <div className="space-y-2">
-                                  {/* Card Number */}
-                                  <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input
-                                      type="radio"
-                                      name="sortBy"
-                                      value="number"
-                                      checked={sortBy === 'number'}
-                                      onChange={(e) => {
-                                        setSortBy(e.target.value);
-                                        setTimeout(() => applyFilters(), 100);
-                                      }}
-                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
-                                    />
-                                    <span className="text-xs text-white">Card Number</span>
-                                  </label>
-                                  
-                                  {/* Name */}
-                                  <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input
-                                      type="radio"
-                                      name="sortBy"
-                                      value="name"
-                                      checked={sortBy === 'name'}
-                                      onChange={(e) => {
-                                        setSortBy(e.target.value);
-                                        setTimeout(() => applyFilters(), 100);
-                                      }}
-                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
-                                    />
-                                    <span className="text-xs text-white">Name</span>
-                                  </label>
-                                  
-                                  {/* Price (Raw) */}
-                                  <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input
-                                      type="radio"
-                                      name="sortBy"
-                                      value="raw_market"
-                                      checked={sortBy === 'raw_market'}
-                                      onChange={(e) => {
-                                        setSortBy(e.target.value);
-                                        setTimeout(() => applyFilters(), 100);
-                                      }}
-                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
-                                    />
-                                    <span className="text-xs text-white">Raw Price</span>
-                                  </label>
-                                  
-                                  {/* Price (Graded) */}
-                                  <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input
-                                      type="radio"
-                                      name="sortBy"
-                                      value="graded_market"
-                                      checked={sortBy === 'graded_market'}
-                                      onChange={(e) => {
-                                        setSortBy(e.target.value);
-                                        setTimeout(() => applyFilters(), 100);
-                                      }}
-                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
-                                    />
-                                    <span className="text-xs text-white">Graded Price</span>
-                                  </label>
-                                  
-                                  {/* Rarity */}
-                                  <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input
-                                      type="radio"
-                                      name="sortBy"
-                                      value="rarity"
-                                      checked={sortBy === 'rarity'}
-                                      onChange={(e) => {
-                                        setSortBy(e.target.value);
-                                        setTimeout(() => applyFilters(), 100);
-                                      }}
-                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
-                                    />
-                                    <span className="text-xs text-white">Rarity</span>
-                                  </label>
-                                </div>
-                              </div>
-                              
-                              {/* Sort Order */}
-                              <div>
-                                <h4 className="text-xs text-white font-medium mb-2">Sort Order</h4>
-                                <div className="space-y-2">
-                                  <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input
-                                      type="radio"
-                                      name="sortOrder"
-                                      value="asc"
-                                      checked={sortOrder === 'asc'}
-                                      onChange={(e) => {
-                                        setSortOrder(e.target.value);
-                                        setTimeout(() => applyFilters(), 100);
-                                      }}
-                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
-                                    />
-                                    <span className="text-xs text-white">Ascending</span>
-                                  </label>
-                                  
-                                  <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input
-                                      type="radio"
-                                      name="sortOrder"
-                                      value="desc"
-                                      checked={sortOrder === 'desc'}
-                                      onChange={(e) => {
-                                        setSortOrder(e.target.value);
-                                        setTimeout(() => applyFilters(), 100);
-                                      }}
-                                      className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
-                                    />
-                                    <span className="text-xs text-white">Descending</span>
-                                  </label>
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            /* Regular filter options */
-                            getFilterOptions(filterType, globalSearchTerm).map((option) => (
-                              <div
-                                key={`${filterType}-${option.value}`}
-                                className="flex items-center justify-between py-2.5 px-2 hover:bg-gray-800 rounded-md cursor-pointer transition-colors"
-                              >
-                                <div className="flex items-center">
-                                  {option.icon && (
-                                    <div className="w-4 h-4 mr-3 flex items-center justify-center">
-                                      {option.icon}
-                                    </div>
-                                  )}
-                                  <span className="text-xs text-white">{option.label}</span>
-                                </div>
-                                <div className="flex items-center">
-                                  <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full mr-3">
-                                    {option.count}
-                                  </span>
-                                  <input
-                                    type="checkbox"
-                                    checked={filterValues[filterType]?.includes(option.value) || false}
-                                    onChange={() => {}} // Handled by parent onClick
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleFilterValue(filterType, option.value);
-                                    }} // Handle click directly and prevent bubbling
-                                    className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
-                                  />
-                                </div>
-                              </div>
-                            ))
-                          )}
+                      {filterType === 'sorting' ? (
+                        /* Always visible sort controls - no expandable header */
+                        <div className="px-2 py-3">
+                          <h3 className="text-xs text-white font-medium mb-3">Sort By</h3>
+                          
+                          {/* Sort By Selection */}
+                          <div className="space-y-1 mb-4">
+                            <button
+                              onClick={() => {
+                                console.log('🔢 Setting sort by: number');
+                                setSortBy('number');
+                                applyFilters(null, 'number', sortOrder);
+                              }}
+                              className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors ${
+                                sortBy === 'number'
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                              }`}
+                            >
+                              Card Number
+                            </button>
+                            <button
+                              onClick={() => {
+                                console.log('🔢 Setting sort by: name');
+                                setSortBy('name');
+                                applyFilters(null, 'name', sortOrder);
+                              }}
+                              className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors ${
+                                sortBy === 'name'
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                              }`}
+                            >
+                              Name
+                            </button>
+                            <button
+                              onClick={() => {
+                                console.log('🔢 Setting sort by: raw_market');
+                                setSortBy('raw_market');
+                                applyFilters(null, 'raw_market', sortOrder);
+                              }}
+                              className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors ${
+                                sortBy === 'raw_market'
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                              }`}
+                            >
+                              Raw Price
+                            </button>
+                            <button
+                              onClick={() => {
+                                console.log('🔢 Setting sort by: graded_market');
+                                setSortBy('graded_market');
+                                applyFilters(null, 'graded_market', sortOrder);
+                              }}
+                              className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors ${
+                                sortBy === 'graded_market'
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                              }`}
+                            >
+                              Graded Price
+                            </button>
+                          </div>
+                          
+                          {/* Dynamic Sort Order Buttons */}
+                          <div className="flex space-x-2 justify-center">
+                            <button
+                              onClick={() => {
+                                console.log('🔢 Setting sort order: desc');
+                                setSortOrder('desc');
+                                applyFilters(null, sortBy, 'desc');
+                              }}
+                              className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                                sortOrder === 'desc'
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                              }`}
+                            >
+                              {getSortButtonText(sortBy, 'desc')}
+                            </button>
+                            <button
+                              onClick={() => {
+                                console.log('🔢 Setting sort order: asc');
+                                setSortOrder('asc');
+                                applyFilters(null, sortBy, 'asc');
+                              }}
+                              className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                                sortOrder === 'asc'
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                              }`}
+                            >
+                              {getSortButtonText(sortBy, 'asc')}
+                            </button>
+                          </div>
                         </div>
-                      )}
+                      ) : (
+                        /* Regular expandable filter categories */
+                        <>
+                          {/* Category Header */}
+                          <button
+                            onClick={() => toggleFilterExpansion(filterType)}
+                            className="w-full flex items-center justify-between py-3 px-2 hover:bg-gray-800 rounded-md transition-colors"
+                          >
+                            <span className="text-xs text-white font-medium">{filterLabel}</span>
+                            <span className="text-xs text-white">
+                              {expandedFilters[filterType] ? '-' : '+'}
+                            </span>
+                          </button>
+                          
+                            {expandedFilters[filterType] ? (
+                              /* Regular filter options - only show when expanded */
+                              <div className="pl-4 pb-2">
+                                {getFilterOptions(filterType, globalSearchTerm).map((option) => (
+                                  <div
+                                    key={`${filterType}-${option.value}`}
+                                    className="flex items-center justify-between py-2.5 px-2 hover:bg-gray-800 rounded-md cursor-pointer transition-colors"
+                                  >
+                                    <div className="flex items-center">
+                                      {option.icon && (
+                                        <div className="w-4 h-4 mr-3 flex items-center justify-center">
+                                          {option.icon}
+                                        </div>
+                                      )}
+                                      <span className="text-xs text-white">{option.label}</span>
+                                    </div>
+                                    <div className="flex items-center">
+                                      <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full mr-3">
+                                        {option.count}
+                                      </span>
+                                      <input
+                                        type="checkbox"
+                                        checked={filterValues[filterType]?.includes(option.value) || false}
+                                        onChange={() => {}} // Handled by parent onClick
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleFilterValue(filterType, option.value);
+                                        }} // Handle click directly and prevent bubbling
+                                        className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </>
+                        )}
                     </div>
                   ))}
                 </div>
