@@ -57,6 +57,7 @@ const BottomNavigation = ({ currentPath, customButtons }) => {
 
   // If custom buttons are provided, render those instead
   if (customButtons) {
+    console.log('Rendering custom buttons:', customButtons);
     return (
       <div className="bottom-nav-fixed bg-gray-900 border-t border-gray-700 safe-bottom">
         <div className="flex items-center w-full py-2 px-4">

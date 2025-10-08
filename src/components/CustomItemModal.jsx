@@ -42,7 +42,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
 
   // Create custom bottom buttons for the modal
   const createCustomButtons = () => (
-    <>
+    <div className="flex space-x-3 w-full">
       <button
         type="button"
         onClick={handleClose}
@@ -58,7 +58,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
       >
         {isSubmitting ? (editingItem ? 'Updating...' : 'Adding...') : (editingItem ? 'Update Item' : 'Add Item')}
       </button>
-    </>
+    </div>
   );
 
   // Prevent body scroll when modal is open and update modal context
@@ -121,6 +121,13 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
       closeModal();
     };
   }, [isOpen, openModal, closeModal]);
+
+  // Update buttons when isSubmitting or editingItem changes
+  React.useEffect(() => {
+    if (isOpen) {
+      openModal(createCustomButtons());
+    }
+  }, [isSubmitting, editingItem, isOpen]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;

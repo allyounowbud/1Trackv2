@@ -27,6 +27,7 @@ export const ModalProvider = ({ children }) => {
   const openModal = (buttons = null) => {
     if (isTransitioning) return; // Prevent multiple rapid calls
     
+    console.log('Opening modal with buttons:', buttons);
     setIsTransitioning(true);
     setIsModalOpen(true);
     setCustomBottomButtons(buttons);

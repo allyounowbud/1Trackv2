@@ -59,8 +59,10 @@ const ResponsiveLayout = ({ children }) => {
       </div>
       
       {/* Bottom Navigation - Show custom buttons when modal is open, normal nav otherwise */}
-      {!isModalOpen && <BottomNavigation currentPath={location.pathname} />}
-      {isModalOpen && <BottomNavigation currentPath={location.pathname} customButtons={customBottomButtons} />}
+      <BottomNavigation 
+        currentPath={location.pathname} 
+        customButtons={isModalOpen ? customBottomButtons : null}
+      />
     </div>
   );
 };
