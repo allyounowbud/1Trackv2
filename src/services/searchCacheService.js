@@ -118,16 +118,18 @@ class SearchCacheService {
         .select('*')
         .eq('cache_key', cacheKey)
         .gt('expires_at', new Date().toISOString())
-        .single();
+        .maybeSingle();
 
+      // Handle all errors gracefully - cache misses should not break the app
       if (error) {
-        if (error.code === 'PGRST116') {
-          // No rows returned - this is normal for cache miss
-          this.stats.misses++; // Increment miss count
-          return null;
-        } else {
+        // 406 errors or table not found - silently ignore
+        if (error.code === 'PGRST116' || error.code === '42P01' || error.status === 406) {
+          this.stats.misses++;
           return null;
         }
+        // Any other error - log but don't break
+        console.warn('Cache query error (non-critical):', error.message);
+        return null;
       }
 
       if (data) {
@@ -142,8 +144,11 @@ class SearchCacheService {
         };
       }
 
+      this.stats.misses++;
       return null;
     } catch (error) {
+      // Catch all - cache errors should never break the app
+      console.warn('Cache service error (non-critical):', error.message);
       return null;
     }
   }
@@ -231,11 +236,15 @@ class SearchCacheService {
         });
 
       if (error) {
+        // Log error but don't break - cache writes are not critical
+        console.warn('Cache write error (non-critical):', error.message);
         return false;
       }
 
       return true;
     } catch (error) {
+      // Silently fail - cache errors should not affect app functionality
+      console.warn('Cache service write error (non-critical):', error.message);
       return false;
     }
   }

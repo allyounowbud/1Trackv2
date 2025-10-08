@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Search, Filter, Loader2, Star, X, ChevronDown, Plus, MoreVertical, ArrowUp, ArrowDown } from 'lucide-react';
-import localSearchService from '../services/localSearchService';
-import hybridSearchService from '../services/hybridSearchService';
-import tcggoImageService from '../services/tcggoImageService';
-import searchCacheService from '../services/searchCacheService';
+import expansionDataService from '../services/expansionDataService';
+import cardSearchService from '../services/cardSearchService';
 import SafeImage from '../components/SafeImage';
 import CardPreviewModal from '../components/CardPreviewModal';
 import CustomItemModal from '../components/CustomItemModal';
@@ -13,6 +11,8 @@ import { useModal } from '../contexts/ModalContext';
 
 const SearchApi = () => {
   const navigate = useNavigate();
+  const { game: gameParam, expansionId: expansionParam } = useParams();
+  const location = useLocation();
   const { openModal, closeModal } = useModal();
   
   // Available games with icons
@@ -30,7 +30,8 @@ const SearchApi = () => {
       logo: 'https://scrydex.com/assets/tcgs/logo_pokemon-8a159e17ae61d5720bfe605ab12acde3a8d7e5ff986e9979c353f66396b500f2.png',
       icon: 'https://scrydex.com/assets/tcgs/icon_pokemon-386fb418d8f003048ea382cbe3f9a5c1518c3b3bad005e7891c2eb0798278d60.png',
       description: 'The world\'s most popular trading card game',
-      color: 'from-yellow-500 to-blue-600'
+      color: 'from-yellow-500 to-blue-600',
+      enabled: true
     },
     {
       id: 'lorcana',
@@ -38,7 +39,8 @@ const SearchApi = () => {
       logo: 'https://scrydex.com/assets/tcgs/logo_lorcana-7127a308645f2a2d4eb4e9b38f1928a157960ed9ae4cab839952de98c902816e.png',
       icon: 'https://scrydex.com/assets/tcgs/icon_lorcana-f68779c6b7609ad758b3126d347ea1e2cf8bb3944edb52a2d620b73f2ee8a300.png',
       description: 'Disney\'s magical trading card game',
-      color: 'from-purple-500 to-pink-600'
+      color: 'from-purple-500 to-pink-600',
+      enabled: false
     },
     {
       id: 'magic',
@@ -46,7 +48,8 @@ const SearchApi = () => {
       logo: 'https://scrydex.com/assets/tcgs/logo_mtg-a99225ad3a6ecb7c7fdc9c579a187289aee78c3eeb577f92086dcc8a57f1738e.png',
       icon: 'https://scrydex.com/assets/tcgs/icon_magicthegathering-e2151698e87443ceccb0ad4b6c98dac19d1b244cce24bac76f52c506046d5833.png',
       description: 'The original trading card game',
-      color: 'from-red-500 to-orange-600'
+      color: 'from-red-500 to-orange-600',
+      enabled: false
     },
     {
       id: 'gundam',
@@ -54,7 +57,8 @@ const SearchApi = () => {
       logo: 'https://scrydex.com/assets/tcgs/logo_gundam-2e130fb7d7d5b295a6377c6994657d0b0041fdf13158e72709f7a21bb01e9a2a.png',
       icon: 'https://scrydex.com/assets/tcgs/icon_gundam-72d1c7c2890e7862b3c52b4d8851825dea709a8f279d70dd19c12aaea1e4462c.png',
       description: 'Mobile Suit Gundam trading cards',
-      color: 'from-blue-500 to-cyan-600'
+      color: 'from-blue-500 to-cyan-600',
+      enabled: false
     },
     {
       id: 'other',
@@ -62,7 +66,8 @@ const SearchApi = () => {
       logo: 'https://i.ibb.co/vvBYXsQH/other.png',
       icon: 'https://i.ibb.co/FLvRvfGM/other-icon.png',
       description: 'Manually added products',
-      color: 'from-purple-400 to-purple-600'
+      color: 'from-purple-400 to-purple-600',
+      enabled: true
     },
     {
       id: 'coming-soon',
@@ -71,7 +76,8 @@ const SearchApi = () => {
       icon: null,
       description: 'Additional trading card games',
       color: 'from-gray-400 to-gray-500',
-      badge: 'SOON'
+      badge: 'SOON',
+      enabled: false
     }
   ];
 
@@ -386,26 +392,57 @@ const SearchApi = () => {
     }
   };
 
-  // Initialize component - initialize API services and load expansions on mount
+  // Sync URL params with app state
+  useEffect(() => {
+    const syncUrlWithState = async () => {
+      if (!servicesInitialized) return;
+
+      // If we have a game param, set the selected game
+      if (gameParam && gameParam !== 'other') {
+        const game = games.find(g => g.id === gameParam);
+        if (game && game.id !== selectedGame?.id) {
+          setSelectedGame(game);
+          
+          // If we have an expansion param, find and select it
+          if (expansionParam) {
+            setCurrentView('search');
+            const expansion = expansions.find(e => e.id === expansionParam);
+            if (expansion && expansion.id !== selectedExpansion?.id) {
+              setSelectedExpansion(expansion);
+              await performExpansionSearch(expansion.id, 1, false, null, true, filterValues);
+            }
+          } else {
+            setCurrentView('expansions');
+          }
+        }
+      } else if (!gameParam) {
+        // No params - show games view
+        if (currentView !== 'games' && currentView !== 'manual') {
+          setCurrentView('games');
+        }
+      }
+    };
+
+    syncUrlWithState();
+  }, [gameParam, expansionParam, servicesInitialized]);
+  
+  // Initialize component - initialize services and load expansions on mount
   useEffect(() => {
     const initializeAndLoad = async () => {
-             try {
-               // Initialize core services (required)
-               await localSearchService.initialize();
-               
-               // Initialize optional services (fail silently)
-               await hybridSearchService.initialize().catch(() => {});
-               await tcggoImageService.initialize().catch(() => {});
-               
-               await loadExpansions();
-               
-               // Mark services as initialized
-               setServicesInitialized(true);
-             } catch (error) {
-               console.error('❌ Service initialization error:', error);
-               setError('Failed to connect to card database. Please try again later.');
-             }
-           };
+      try {
+        // Initialize simplified services
+        await expansionDataService.initialize();
+        await cardSearchService.initialize();
+        
+        await loadExpansions();
+        
+        // Mark services as initialized
+        setServicesInitialized(true);
+      } catch (error) {
+        console.error('❌ Service initialization error:', error);
+        setError('Failed to connect to card database. Please try again later.');
+      }
+    };
     
     initializeAndLoad();
     
@@ -455,8 +492,11 @@ const SearchApi = () => {
   // Load expansions
   const loadExpansions = async () => {
     try {
-      // Fetch all expansions from database
-      const allExpansions = await localSearchService.getExpansions({ pageSize: 1000 });
+      // Fetch expansions using simplified service
+      const allExpansions = await expansionDataService.getExpansions({
+        sortBy: 'release_date',
+        sortOrder: 'desc'
+      });
       
       setExpansions(allExpansions);
     } catch (error) {
@@ -871,17 +911,16 @@ const SearchApi = () => {
       let results;
       
       if (currentViewMode === 'sealed') {
-        // Get sealed products directly from database (no cache needed)
-        
-        const sealedResults = await localSearchService.getSealedProductsByExpansion(expansionId, {
+        // Get sealed products using simplified service
+        const sealedResults = await expansionDataService.getExpansionSealedProducts(expansionId, {
           page,
           pageSize: 30,
-          sortBy: currentSortBy === 'pricing_market' ? 'pricing_market' : 'name', // Use price sorting if specified, otherwise name
+          sortBy: currentSortBy === 'pricing_market' ? 'pricing_market' : 'name',
           sortOrder: currentSortOrder || priceSortOrder
         });
         
         // Format sealed products to match expected structure for UI display
-        const formattedSealedProducts = sealedResults.data.map(product => ({
+        const formattedSealedProducts = sealedResults.products.map(product => ({
           id: product.tcggo_id || product.id,
           name: product.name,
           type: 'sealed',
@@ -924,55 +963,28 @@ const SearchApi = () => {
         };
 
       } else {
-        // Check cache first for expansion results
-        const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'expansion', expansionId, page, 30, {
-          supertype: searchOptions.supertype,
-          types: searchOptions.types,
-          subtypes: searchOptions.subtypes,
-          rarity: searchOptions.rarity,
-          artists: searchOptions.artists,
-          weaknesses: searchOptions.weaknesses,
-          resistances: searchOptions.resistances,
+        // Get singles using simplified service - no cache needed (DB IS the cache per Scrydex)
+        const singleResults = await expansionDataService.getExpansionCards(expansionId, {
+          page,
+          pageSize: 30,
           sortBy: searchOptions.sortBy,
-          sortOrder: searchOptions.sortOrder
+          sortOrder: searchOptions.sortOrder,
+          filters: {
+            supertype: searchOptions.supertype,
+            types: searchOptions.types,
+            subtypes: searchOptions.subtypes,
+            rarity: searchOptions.rarity,
+            artists: searchOptions.artists,
+            weaknesses: searchOptions.weaknesses,
+            resistances: searchOptions.resistances
+          }
         });
         
-        // Use cache for all sorting types - database handles sorting efficiently
-        let cachedResults = await searchCacheService.getCachedResults(cacheKey);
-        
-        if (cachedResults) {
-          results = {
-            singles: cachedResults.results.singles || [],
-            sealed: [],
-            total: cachedResults.total || 0
-          };
-        } else {
-          // Search for singles from Scrydex for this expansion
-          const result = await localSearchService.searchCards('', searchOptions);
-          
-          // Format the results to match expected structure
-          results = {
-            singles: result.data || [],
-            sealed: [],
-            total: result.total || result.totalCount || 0
-          };
-
-          // Cache the expansion results (async, don't wait for it)
-          if (result.data && result.data.length > 0) {
-            // Don't await caching to improve performance
-            searchCacheService.setCachedResults(
-              cacheKey,
-              '',
-              'pokemon',
-              'expansion',
-              results,
-              results.total,
-              page,
-              30,
-              expansionId
-            ).catch(() => {});
-          }
-        }
+        results = {
+          singles: singleResults.cards || [],
+          sealed: [],
+          total: singleResults.total || 0
+        };
       }
       
       // Process results based on view mode - ensure strict separation
@@ -1094,11 +1106,6 @@ const SearchApi = () => {
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect();
     
-    // For expansion views, never create observer (no pagination)
-    if (selectedExpansion) {
-      return;
-    }
-    
     // Only create observer if we have more results to load and we're not currently loading
     if (hasMore && !isLoading && !isLoadingMore) {
       observerRef.current = new IntersectionObserver(
@@ -1121,7 +1128,7 @@ const SearchApi = () => {
     return () => {
       if (observerRef.current) observerRef.current.disconnect();
     };
-  }, [hasMore, isLoading, isLoadingMore, selectedExpansion]);
+  }, [hasMore, isLoading, isLoadingMore]);
 
   // Back to top button scroll listener
   useEffect(() => {
@@ -1141,16 +1148,15 @@ const SearchApi = () => {
       return;
     }
     
-    // For expansion views, disable pagination completely
-    if (selectedExpansion) {
-      return;
-    }
-    
     isLoadingMoreRef.current = true;
     setIsLoadingMore(true);
     
     try {
-      if (searchQuery.trim()) {
+      if (selectedExpansion) {
+        // Load more cards from the expansion
+        await performExpansionSearch(selectedExpansion.id, currentPage + 1, true, null, true, filterValues);
+      } else if (searchQuery.trim()) {
+        // Load more from search query
         await performSearch(searchQuery, currentPage + 1, true);
       }
     } catch (error) {
@@ -1189,6 +1195,12 @@ const SearchApi = () => {
 
   // Navigation functions
   const handleGameSelect = (game) => {
+    // Prevent selection of disabled games
+    if (game.enabled === false) {
+      setError(`${game.name} is not yet available. Currently only Pokémon and manually added items are available.`);
+      return;
+    }
+    
     if (game.badge === 'SOON') {
       // Show coming soon message for games not yet available
       setError(`${game.name} is coming soon! Currently only Pokémon cards are available.`);
@@ -1213,10 +1225,14 @@ const SearchApi = () => {
       // For other games, show expansions view
       setSelectedGame(game);
       setCurrentView('expansions');
+      navigate(`/search/${game.id}`);
     }
   };
 
   const handleExpansionSelect = async (expansion) => {
+    // Update URL to include expansion
+    navigate(`/search/${selectedGame.id}/expansions/${expansion.id}`);
+    
     // Clear any existing timeouts
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -1260,6 +1276,7 @@ const SearchApi = () => {
     setTotalResults(0);
     setHasMore(false);
     setCurrentPage(1);
+    navigate('/search');
   };
 
   const handleBackToExpansions = () => {
@@ -1270,6 +1287,7 @@ const SearchApi = () => {
     setTotalResults(0);
     setHasMore(false);
     setCurrentPage(1);
+    navigate(`/search/${selectedGame.id}`);
   };
 
   // Clear search and filters
@@ -1894,20 +1912,24 @@ const SearchApi = () => {
               {games.filter(game => game.id !== 'all').map((game) => (
                 <div
                   key={game.id}
-                  className="rounded-lg p-2 hover:bg-indigo-900/30 transition-colors cursor-pointer border border-gray-600 hover:border-indigo-400 aspect-square"
-                  onClick={() => handleGameSelect(game)}
+                  className={`rounded-lg p-2 transition-colors border aspect-square ${
+                    game.enabled === false 
+                      ? 'opacity-50 cursor-not-allowed border-gray-500' 
+                      : 'hover:bg-indigo-900/30 cursor-pointer border-gray-600 hover:border-indigo-400'
+                  }`}
+                  onClick={() => game.enabled !== false && handleGameSelect(game)}
                 >
                   <div className="w-full h-full flex items-center justify-center relative">
                     {game.logo ? (
                       <SafeImage
                         src={game.logo}
                         alt={`${game.name} logo`}
-                        className="w-full h-full object-contain"
+                        className={`w-full h-full object-contain ${game.enabled === false ? 'grayscale' : ''}`}
                    onError={() => {}}
                    onLoad={() => {}}
                         fallback={
                           <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-gray-400 text-xs font-medium">
+                            <span className={`text-xs font-medium ${game.enabled === false ? 'text-gray-500' : 'text-gray-400'}`}>
                               {game.name.charAt(0)}
                             </span>
                           </div>
@@ -1915,7 +1937,7 @@ const SearchApi = () => {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-gray-400 text-xs font-medium text-center">
+                        <span className={`text-xs font-medium text-center ${game.enabled === false ? 'text-gray-500' : 'text-gray-400'}`}>
                           {game.name}
                         </span>
                       </div>
@@ -2577,8 +2599,8 @@ const SearchApi = () => {
           </div>
         )}
 
-        {/* Optimized loading indicator - Only show for search results, not expansions */}
-        {hasMore && !selectedExpansion && (
+        {/* Optimized loading indicator for infinite scroll */}
+        {hasMore && (
           <div ref={loadingRef} className="flex justify-center py-4">
             {isLoadingMore ? (
               <div className="flex items-center gap-2 text-gray-400">

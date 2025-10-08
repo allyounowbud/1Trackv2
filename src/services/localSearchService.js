@@ -380,7 +380,7 @@ class LocalSearchService {
   async getCardsByExpansion(expansionId, options = {}) {
     const {
       page = 1,
-      pageSize = 10000, // Load all cards for expansion views
+      pageSize = 30, // Use pagination for better performance
       sortBy = 'number', // Sort by card number by default
       sortOrder = 'asc',
       supertype = null,
@@ -433,21 +433,32 @@ class LocalSearchService {
         supabaseQuery = supabaseQuery.overlaps('resistances', resistances);
       }
 
-      // Apply sorting
+      // Apply sorting - use proper natural sorting for card numbers
       if (sortBy && sortOrder) {
         if (sortBy === 'number') {
-          supabaseQuery = supabaseQuery.order('name', { ascending: true });
+          // Natural sort for card numbers (handles "1", "2", "10" correctly)
+          supabaseQuery = supabaseQuery.order('number', { 
+            ascending: sortOrder === 'asc', 
+            nullsLast: true 
+          });
         } else if (sortBy === 'raw_market' || sortBy === 'graded_market') {
-          supabaseQuery = supabaseQuery.order(`CAST(${sortBy} AS NUMERIC)`, { 
+          // Convert to numeric for price sorting, handle nulls
+          supabaseQuery = supabaseQuery.order(sortBy, { 
             ascending: sortOrder === 'asc',
-            nullsFirst: false
+            nullsLast: true
           });
         } else {
           supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' });
         }
       } else {
-        supabaseQuery = supabaseQuery.order('name', { ascending: true });
+        // Default to simple card number sorting
+        supabaseQuery = supabaseQuery.order('number', { ascending: true, nullsLast: true });
       }
+
+      // Apply pagination
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      supabaseQuery = supabaseQuery.range(from, to);
 
       const { data: cards, error, count } = await supabaseQuery;
 

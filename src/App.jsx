@@ -47,6 +47,8 @@ function App() {
                         <Routes>
                           <Route path="/" element={<Collection />} />
                           <Route path="/search" element={<SearchApi />} />
+                          <Route path="/search/:game" element={<SearchApi />} />
+                          <Route path="/search/:game/expansions/:expansionId" element={<SearchApi />} />
                           <Route path="/shipments" element={<Shipments />} />
                           <Route path="/analytics" element={<Analytics />} />
                           <Route path="/orders" element={<Orders />} />
