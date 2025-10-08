@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const BottomNavigation = ({ currentPath }) => {
+const BottomNavigation = ({ currentPath, customButtons }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -54,6 +54,17 @@ const BottomNavigation = ({ currentPath }) => {
     }
     return location.pathname.startsWith(path);
   };
+
+  // If custom buttons are provided, render those instead
+  if (customButtons) {
+    return (
+      <div className="bottom-nav-fixed bg-gray-900 border-t border-gray-700 safe-bottom">
+        <div className="flex items-center w-full py-2 px-4">
+          {customButtons}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bottom-nav-fixed bg-gray-950 border-t border-gray-800 safe-bottom">

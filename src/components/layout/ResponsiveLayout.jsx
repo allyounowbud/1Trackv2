@@ -6,7 +6,7 @@ import { useModal } from '../../contexts/ModalContext';
 
 const ResponsiveLayout = ({ children }) => {
   const location = useLocation();
-  const { isModalOpen } = useModal();
+  const { isModalOpen, customBottomButtons } = useModal();
   const [isDesktop, setIsDesktop] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [isMobileSafari, setIsMobileSafari] = useState(false);
@@ -58,8 +58,9 @@ const ResponsiveLayout = ({ children }) => {
         {children}
       </div>
       
-      {/* Bottom Navigation - Always render, let CSS handle hiding */}
+      {/* Bottom Navigation - Show custom buttons when modal is open, normal nav otherwise */}
       {!isModalOpen && <BottomNavigation currentPath={location.pathname} />}
+      {isModalOpen && <BottomNavigation currentPath={location.pathname} customButtons={customBottomButtons} />}
     </div>
   );
 };

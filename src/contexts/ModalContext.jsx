@@ -22,25 +22,17 @@ const isMobileSafari = () => {
 export const ModalProvider = ({ children }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [customBottomButtons, setCustomBottomButtons] = useState(null);
 
-  const openModal = () => {
+  const openModal = (buttons = null) => {
     if (isTransitioning) return; // Prevent multiple rapid calls
     
     setIsTransitioning(true);
     setIsModalOpen(true);
+    setCustomBottomButtons(buttons);
     
     // Single strategy: Use CSS class only to avoid conflicts
     document.body.classList.add('modal-open');
-    
-    // For mobile Safari, use a more reliable approach
-    if (isMobileSafari()) {
-      const bottomNav = document.querySelector('.bottom-nav-fixed');
-      if (bottomNav) {
-        // Use a single, reliable hiding method
-        bottomNav.style.display = 'none';
-        bottomNav.style.pointerEvents = 'none';
-      }
-    }
     
     // Reset transition flag after a brief delay
     setTimeout(() => setIsTransitioning(false), 100);
@@ -51,18 +43,10 @@ export const ModalProvider = ({ children }) => {
     
     setIsTransitioning(true);
     setIsModalOpen(false);
+    setCustomBottomButtons(null);
     
     // Clean up modal state
     document.body.classList.remove('modal-open');
-    
-    // Restore bottom navigation for mobile Safari
-    if (isMobileSafari()) {
-      const bottomNav = document.querySelector('.bottom-nav-fixed');
-      if (bottomNav) {
-        bottomNav.style.display = '';
-        bottomNav.style.pointerEvents = '';
-      }
-    }
     
     // Reset transition flag after a brief delay
     setTimeout(() => setIsTransitioning(false), 100);
@@ -72,18 +56,16 @@ export const ModalProvider = ({ children }) => {
   useEffect(() => {
     return () => {
       document.body.classList.remove('modal-open');
-      if (isMobileSafari()) {
-        const bottomNav = document.querySelector('.bottom-nav-fixed');
-        if (bottomNav) {
-          bottomNav.style.display = '';
-          bottomNav.style.pointerEvents = '';
-        }
-      }
     };
   }, []);
 
   return (
-    <ModalContext.Provider value={{ isModalOpen, openModal, closeModal }}>
+    <ModalContext.Provider value={{ 
+      isModalOpen, 
+      openModal, 
+      closeModal, 
+      customBottomButtons 
+    }}>
       {children}
     </ModalContext.Provider>
   );

@@ -1,4 +1,4 @@
-/* Cache bust v2.2.7 - Fixed scroll lock and bottom bar movement */
+/* Cache bust v2.2.8 - Replaced bottom bar with modal buttons */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 @tailwind base;
 @tailwind components;
@@ -100,10 +100,7 @@
     z-index: 10000 !important;
   }
 
-  /* Mobile Safari modal compatibility - Simplified approach */
-  body.modal-open .bottom-nav-fixed {
-    display: none !important;
-  }
+  /* Bottom navigation will be replaced with custom buttons when modal is open */
 
   /* Additional scroll lock for modals */
   body.modal-open {
