@@ -98,6 +98,9 @@ const SearchApi = () => {
   // Modal state
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState(null);
+  
+  // Back to top button state
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const [isCustomItemModalOpen, setIsCustomItemModalOpen] = useState(false);
   const [customItems, setCustomItems] = useState([]);
   const [isLoadingCustomItems, setIsLoadingCustomItems] = useState(false);
@@ -226,6 +229,7 @@ const SearchApi = () => {
         return 'Search cards...';
     }
   };
+
 
 
   // Format cards from API response - Keep variants grouped together
@@ -382,15 +386,40 @@ const SearchApi = () => {
   useEffect(() => {
     const initializeAndLoad = async () => {
              try {
-               // Initialize all services
+               // Initialize core services (required)
                await localSearchService.initialize();
-               await hybridSearchService.initialize();
-               await tcggoImageService.initialize();
+               console.log('✅ Local Search Service initialized');
+               
+               // Initialize optional services (may fail)
+               try {
+                 const hybridInitialized = await hybridSearchService.initialize();
+                 if (!hybridInitialized) {
+                   console.warn('⚠️ Hybrid Search Service initialization failed - will use fallback');
+                 } else {
+                   console.log('✅ Hybrid Search Service initialized');
+                 }
+               } catch (hybridError) {
+                 console.warn('⚠️ Hybrid Search Service initialization failed:', hybridError.message);
+               }
+               
+               try {
+                 const tcggoInitialized = await tcggoImageService.initialize();
+                 if (!tcggoInitialized) {
+                   console.warn('⚠️ TCGGo Image Service initialization failed - image enhancement disabled');
+                 } else {
+                   console.log('✅ TCGGo Image Service initialized');
+                 }
+               } catch (tcggoError) {
+                 console.warn('⚠️ TCGGo Image Service initialization failed:', tcggoError.message);
+               }
+               
                await loadExpansions();
                
-               // Mark services as initialized
+               // Mark services as initialized (local search service is working)
                setServicesInitialized(true);
+               console.log('✅ All services initialized successfully');
              } catch (error) {
+               console.error('❌ Service initialization error:', error);
                setError('Failed to connect to card database. Please try again later.');
              }
            };
@@ -574,19 +603,84 @@ const SearchApi = () => {
       console.log('🔍 SearchApi searchCards - pageSize:', searchOptions.pageSize, 'page:', page);
 
       // Use hybrid search service to search both singles and sealed products
-      const results = await hybridSearchService.smartSearch(query, selectedGame?.id || 'pokemon', {
-        page,
-        pageSize: 30,
-        sortBy: sortBy,
-        sortOrder: sortOrder,
-        supertype: filterValues.supertype.length > 0 ? filterValues.supertype : null,
-        types: filterValues.types.length > 0 ? filterValues.types : null,
-        subtypes: filterValues.subtypes.length > 0 ? filterValues.subtypes : null,
-        rarity: filterValues.rarity.length > 0 ? filterValues.rarity : null,
-        artists: filterValues.artists.length > 0 ? filterValues.artists : null,
-        weaknesses: filterValues.weaknesses.length > 0 ? filterValues.weaknesses : null,
-        resistances: filterValues.resistances.length > 0 ? filterValues.resistances : null
-      });
+      let results;
+      try {
+        results = await hybridSearchService.smartSearch(query, selectedGame?.id || 'pokemon', {
+          page,
+          pageSize: 30,
+          sortBy: sortBy,
+          sortOrder: sortOrder,
+          supertype: filterValues.supertype.length > 0 ? filterValues.supertype : null,
+          types: filterValues.types.length > 0 ? filterValues.types : null,
+          subtypes: filterValues.subtypes.length > 0 ? filterValues.subtypes : null,
+          rarity: filterValues.rarity.length > 0 ? filterValues.rarity : null,
+          artists: filterValues.artists.length > 0 ? filterValues.artists : null,
+          weaknesses: filterValues.weaknesses.length > 0 ? filterValues.weaknesses : null,
+          resistances: filterValues.resistances.length > 0 ? filterValues.resistances : null
+        });
+      } catch (hybridError) {
+        console.warn('⚠️ Hybrid search failed, falling back to local search:', hybridError.message);
+        
+        // Fallback to local search service for both singles and sealed products
+        let singlesResults = [];
+        let sealedResults = [];
+        let totalSingles = 0;
+        let totalSealed = 0;
+        
+        try {
+          // Search Pokémon cards
+          const cardResults = await localSearchService.searchCards(query, {
+            page,
+            pageSize: Math.max(1, Math.floor(30 / 2)), // Split page size between singles and sealed
+            sortBy: sortBy,
+            sortOrder: sortOrder,
+            supertype: filterValues.supertype.length > 0 ? filterValues.supertype : null,
+            types: filterValues.types.length > 0 ? filterValues.types : null,
+            subtypes: filterValues.subtypes.length > 0 ? filterValues.subtypes : null,
+            rarity: filterValues.rarity.length > 0 ? filterValues.rarity : null,
+            artists: filterValues.artists.length > 0 ? filterValues.artists : null,
+            weaknesses: filterValues.weaknesses.length > 0 ? filterValues.weaknesses : null,
+            resistances: filterValues.resistances.length > 0 ? filterValues.resistances : null
+          });
+          
+          if (cardResults && cardResults.data) {
+            singlesResults = cardResults.data;
+            totalSingles = cardResults.total || 0;
+            console.log(`✅ Found ${singlesResults.length} Pokémon cards via fallback`);
+          }
+        } catch (cardError) {
+          console.warn('⚠️ Card search failed:', cardError.message);
+        }
+        
+        try {
+          // Search sealed products
+          const sealedSearchResults = await localSearchService.searchSealedProducts(query, {
+            page,
+            pageSize: Math.max(1, Math.floor(30 / 2)), // Split page size between singles and sealed
+            sortBy: 'name',
+            sortOrder: 'asc'
+          });
+          
+          if (sealedSearchResults && sealedSearchResults.data) {
+            sealedResults = sealedSearchResults.data;
+            totalSealed = sealedSearchResults.total || 0;
+            console.log(`✅ Found ${sealedResults.length} sealed products via fallback`);
+          }
+        } catch (sealedError) {
+          console.warn('⚠️ Sealed products search failed:', sealedError.message);
+        }
+        
+        // Create fallback results
+        results = {
+          singles: singlesResults,
+          sealed: sealedResults,
+          total: totalSingles + totalSealed,
+          page: page,
+          pageSize: 30,
+          source: 'local-fallback',
+          cached: false
+        };
+      }
       
       console.log('🔍 SearchApi results - pageSize:', results.pageSize, 'total:', results.total, 'singles count:', results.singles?.length);
       
@@ -611,19 +705,79 @@ const SearchApi = () => {
           return !isTCGPocket;
         });
         
+        // For expansion views, apply sorting to ALL loaded cards (no pagination)
+        let sortedSingles = filteredSingles;
         
-        allResults.push(...filteredSingles.map(card => ({
+        // Apply numerical sorting to all cards
+        if (currentSortBy === 'number' || sortBy === 'number') {
+          console.log('🔢 Applying numerical sorting to all expansion cards');
+          console.log('🔢 Total cards before sorting:', filteredSingles.length);
+          console.log('🔢 Cards before sorting:', filteredSingles.slice(0, 5).map(c => `${c.name} (#${c.number || 'N/A'})`));
+          
+          sortedSingles = filteredSingles.sort((a, b) => {
+            const getCardNumber = (card) => {
+              return card.number ? parseInt(card.number, 10) : 9999;
+            };
+            
+            const numA = getCardNumber(a);
+            const numB = getCardNumber(b);
+            
+            const order = (currentSortOrder || sortOrder) === 'asc' ? 1 : -1;
+            return (numA - numB) * order;
+          });
+          
+          console.log('🔢 Total cards after sorting:', sortedSingles.length);
+          console.log('🔢 Cards after sorting:', sortedSingles.slice(0, 5).map(c => `${c.name} (#${c.number || 'N/A'})`));
+        }
+        
+        allResults.push(...sortedSingles.map(card => ({
           ...card,
           source: 'scrydex'
         })));
       }
       
-      // Add sealed products from PriceCharting
+      // Add sealed products from database
       if (results.sealed && results.sealed.length > 0) {
-        allResults.push(...results.sealed.map(product => ({
-          ...product,
-          source: 'pricecharting'
-        })));
+        console.log('📦 Adding sealed products from search results:', results.sealed.length);
+        
+        // Format sealed products to match expected structure for UI display
+        const formattedSealedProducts = results.sealed.map(product => ({
+          id: product.tcggo_id || product.id,
+          name: product.name,
+          type: 'sealed',
+          itemType: 'sealed',
+          rarity: 'Sealed', // Always "Sealed" for sealed products
+          image: product.image,
+          image_url: product.image,
+          expansion_name: product.episode_name || 'Unknown Set',
+          set_name: product.episode_name || 'Unknown Set',
+          product_name: product.name,
+          
+          // Pricing data - convert EUR to USD for display
+          raw_price: product.pricing_market ? (product.pricing_market * 1.08).toFixed(2) : null, // Approximate EUR to USD conversion
+          market_value_cents: product.pricing_market ? Math.round(product.pricing_market * 1.08 * 100) : null,
+          
+          // Original pricing data
+          pricing: {
+            low: product.pricing_low,
+            mid: product.pricing_mid,
+            high: product.pricing_high,
+            market: product.pricing_market,
+            currency: product.pricing_currency || 'EUR',
+            sources: product.pricing_sources || ['cardmarket']
+          },
+          pricingSource: product.pricing_source || 'cardmarket',
+          source: 'database',
+          episode: {
+            id: product.episode_id,
+            name: product.episode_name
+          },
+          tcggoUrl: product.tcggo_url,
+          cardmarketUrl: product.cardmarket_url,
+          rawData: product.raw_data
+        }));
+        
+        allResults.push(...formattedSealedProducts);
       }
       
 
@@ -649,12 +803,13 @@ const SearchApi = () => {
         setSearchResults(finalResults);
       }
 
-      // Set pagination info
+      // Set pagination info - for expansion views, no pagination needed
       const totalFromResults = results.total || (results.singles?.total || 0) + (results.sealed?.total || 0);
+      
       setTotalResults(totalFromResults);
-      const hasMoreValue = (page * 30) < totalFromResults;
-      console.log('🔍 hasMore calculation:', { page, pageSize: 30, totalFromResults, hasMoreValue });
-      setHasMore(hasMoreValue);
+      // For expansion views, no pagination - show all results at once
+      setHasMore(false);
+      console.log('📦 Expansion view - no pagination, showing all', totalFromResults, 'cards');
       setCurrentPage(page);
 
     } catch (error) {
@@ -760,66 +915,68 @@ const SearchApi = () => {
       const currentViewMode = viewMode || expansionViewMode;
       
       if (currentViewMode === 'sealed') {
-        // Check cache first for sealed products
-        const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'sealed', expansionId, page, 30, {
-          supertype: searchOptions.supertype,
-          types: searchOptions.types,
-          subtypes: searchOptions.subtypes,
-          rarity: searchOptions.rarity,
-          artists: searchOptions.artists,
-          weaknesses: searchOptions.weaknesses,
-          resistances: searchOptions.resistances,
-          sortBy,
-          sortOrder
-        });
-        const cachedResults = await searchCacheService.getCachedResults(cacheKey);
+        // Get sealed products directly from database (no cache needed)
+        console.log(`🔍 Getting sealed products for expansion: ${selectedExpansion?.name} (${selectedExpansion?.code})`);
+        console.log(`🔍 Full expansion object:`, selectedExpansion);
         
-        if (cachedResults) {
-          console.log(`📦 Using cached sealed products for: ${expansionId}`);
-          results = {
-            singles: [],
-            sealed: cachedResults.results.sealed || [],
-            total: cachedResults.total || 0
-          };
-        } else {
-          // Get sealed products for this expansion (Scrydex first, then PriceCharting fallback)
-          console.log(`🔍 Getting sealed products for expansion: ${selectedExpansion?.name} (${selectedExpansion?.code})`);
-          console.log(`🔍 Full expansion object:`, selectedExpansion);
+        const sealedResults = await localSearchService.getSealedProductsByExpansion(expansionId, {
+          page,
+          pageSize: 30,
+          sortBy: 'name', // Sealed products don't have a 'number' column, use 'name' instead
+          sortOrder: 'asc'
+        });
+        
+        console.log(`📦 Sealed results from database: count: ${sealedResults.data?.length || 0}`);
+        
+        // Format sealed products to match expected structure for UI display
+        const formattedSealedProducts = sealedResults.data.map(product => ({
+          id: product.tcggo_id || product.id,
+          name: product.name,
+          type: 'sealed',
+          itemType: 'sealed',
+          rarity: 'Sealed', // Always "Sealed" for sealed products
+          image: product.image,
+          image_url: product.image,
+          expansion_name: product.episode_name || 'Unknown Set',
+          set_name: product.episode_name || 'Unknown Set',
+          product_name: product.name,
           
-          const sealedResults = await hybridSearchService.getSealedProductsForExpansion(expansionId, {
-            page,
-            pageSize: 30
-          });
+          // Pricing data - convert EUR to USD for display
+          raw_price: product.pricing_market ? (product.pricing_market * 1.08).toFixed(2) : null, // Approximate EUR to USD conversion
+          market_value_cents: product.pricing_market ? Math.round(product.pricing_market * 1.08 * 100) : null,
           
-          console.log(`📦 Sealed results source: ${sealedResults.source}, count: ${sealedResults.data?.length || 0}`);
-          
-          results = {
-            singles: [],
-            sealed: sealedResults.data || [],
-            total: sealedResults.total || 0
-          };
+          // Original pricing data
+          pricing: {
+            low: product.pricing_low,
+            mid: product.pricing_mid,
+            high: product.pricing_high,
+            market: product.pricing_market,
+            currency: product.pricing_currency || 'EUR',
+            sources: product.pricing_sources || ['cardmarket']
+          },
+          pricingSource: product.pricing_source || 'cardmarket',
+          source: product.source || 'cardmarket',
+          episode: {
+            id: product.episode_id,
+            name: product.episode_name
+          },
+          tcggoUrl: product.tcggo_url,
+          cardmarketUrl: product.cardmarket_url,
+          rawData: product.raw_data
+        }));
+        
+        results = {
+          singles: [],
+          sealed: formattedSealedProducts,
+          total: sealedResults.total || 0
+        };
 
-          // Cache the sealed products results (async, don't wait for it)
-          if (sealedResults.data && sealedResults.data.length > 0) {
-            console.log(`💾 Caching sealed products for: ${expansionId}`);
-            // Don't await caching to improve performance
-            searchCacheService.setCachedResults(
-              cacheKey,
-              '',
-              'pokemon',
-              'sealed',
-              results,
-              results.total,
-              page,
-              30,
-              expansionId
-            ).catch(error => {
-              console.warn('Cache write failed (non-critical):', error);
-            });
-          }
-        }
+        console.log(`📦 Formatted ${formattedSealedProducts.length} sealed products for display`);
       } else {
         // Check cache first for expansion results
+        console.log('🔑 Cache key generation - searchOptions.sortBy:', searchOptions.sortBy, 'searchOptions.sortOrder:', searchOptions.sortOrder);
+        console.log('🔑 Cache key generation - local sortBy:', sortBy, 'local sortOrder:', sortOrder);
+        
         const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'expansion', expansionId, page, 30, {
           supertype: searchOptions.supertype,
           types: searchOptions.types,
@@ -828,10 +985,19 @@ const SearchApi = () => {
           artists: searchOptions.artists,
           weaknesses: searchOptions.weaknesses,
           resistances: searchOptions.resistances,
-          sortBy,
-          sortOrder
+          sortBy: searchOptions.sortBy,
+          sortOrder: searchOptions.sortOrder
         });
-        const cachedResults = await searchCacheService.getCachedResults(cacheKey);
+        
+        console.log('🔑 Generated cache key:', cacheKey);
+        
+        // Force fresh results when sorting by number to get ALL cards for proper sorting
+        let cachedResults = null;
+        if (searchOptions.sortBy !== 'number') {
+          cachedResults = await searchCacheService.getCachedResults(cacheKey);
+        } else {
+          console.log('🔢 Skipping cache for numerical sorting to get ALL cards');
+        }
         
         if (cachedResults) {
           console.log(`📦 Using cached expansion results for: ${expansionId}`);
@@ -883,22 +1049,46 @@ const SearchApi = () => {
         if (results.sealed && results.sealed.length > 0) {
           console.log('📦 Adding filtered sealed products:', results.sealed.length);
           
-          // Format sealed products using PriceCharting service
+          // Format sealed products - handle both TCGGo and PriceCharting formats
           const formattedSealed = results.sealed.map(product => {
-            // If product is already formatted, use it as-is
+            // If product is already formatted (TCGGo format), use it as-is but ensure proper fields
+            if (product.name && product.pricing && product.source === 'cardmarket') {
+              console.log('📦 Formatting TCGGo/CardMarket product:', product.name);
+              return {
+                ...product,
+                itemType: 'sealed',
+                rarity: product.rarity || 'Sealed', // Ensure rarity is always "Sealed"
+                // Map TCGGo pricing to expected format
+                market_value: product.pricing.market || product.pricing.low,
+                lowest_price: product.pricing.low,
+                set_name: product.episode?.name || product.expansion_name || 'Unknown Set',
+                product_name: product.name,
+                console_name: product.episode?.name || product.expansion_name || 'Unknown Set',
+                image_url: product.image,
+                // Ensure pricing fields are available for UI
+                raw_price: product.raw_price || (product.pricing.market ? (product.pricing.market * 1.08).toFixed(2) : null),
+                market_value_cents: product.market_value_cents || (product.pricing.market ? Math.round(product.pricing.market * 1.08 * 100) : null)
+              };
+            }
+            
+            // If product is already formatted (PriceCharting format), use it as-is
             if (product.name && product.set_name && product.market_value !== undefined) {
+              console.log('📦 Using already formatted PriceCharting product:', product.name);
               return {
                 ...product,
                 source: product.source || 'pricecharting',
-                itemType: 'sealed' // Explicitly mark as sealed
+                itemType: 'sealed',
+                rarity: product.rarity || 'Sealed' // Ensure rarity is always "Sealed"
               };
             }
             
             // Otherwise, format the raw PriceCharting data
+            console.log('📦 Formatting raw PriceCharting product:', product['product-name'] || 'Unknown');
             return {
               ...priceChartingApiService.formatProductData(product),
               source: 'pricecharting',
-              itemType: 'sealed' // Explicitly mark as sealed
+              itemType: 'sealed',
+              rarity: 'Sealed' // Ensure rarity is always "Sealed"
             };
           });
           
@@ -985,9 +1175,15 @@ const SearchApi = () => {
 
   // Infinite scroll setup with optimized loading
   useEffect(() => {
-    console.log('🔄 Setting up optimized IntersectionObserver:', { hasMore, isLoading, isLoadingMore });
+    console.log('🔄 Setting up optimized IntersectionObserver:', { hasMore, isLoading, isLoadingMore, selectedExpansion: selectedExpansion?.id });
     
     if (observerRef.current) observerRef.current.disconnect();
+    
+    // For expansion views, never create observer (no pagination)
+    if (selectedExpansion) {
+      console.log('🔄 Expansion view - no infinite scroll observer needed');
+      return;
+    }
     
     // Only create observer if we have more results to load and we're not currently loading
     if (hasMore && !isLoading && !isLoadingMore) {
@@ -1012,7 +1208,18 @@ const SearchApi = () => {
     return () => {
       if (observerRef.current) observerRef.current.disconnect();
     };
-  }, [hasMore, isLoading, isLoadingMore]);
+  }, [hasMore, isLoading, isLoadingMore, selectedExpansion]);
+
+  // Back to top button scroll listener
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      setShowBackToTop(scrollTop > 300); // Show button after scrolling 300px
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Optimized load more results
   const loadMoreResults = async () => {
@@ -1024,13 +1231,17 @@ const SearchApi = () => {
       return;
     }
     
+    // For expansion views, disable pagination completely
+    if (selectedExpansion) {
+      console.log('🔄 Expansion view - pagination disabled, skipping loadMoreResults');
+      return;
+    }
+    
     isLoadingMoreRef.current = true;
     setIsLoadingMore(true);
     
     try {
-      if (selectedExpansion) {
-        await performExpansionSearch(selectedExpansion.id, currentPage + 1, true);
-      } else if (searchQuery.trim()) {
+      if (searchQuery.trim()) {
         await performSearch(searchQuery, currentPage + 1, true);
       }
     } catch (error) {
@@ -1123,6 +1334,8 @@ const SearchApi = () => {
     // Clear cache before performing search to ensure fresh results
     console.log('🧹 Clearing cache for new expansion selection');
     await searchCacheService.forceClearAllCache();
+      // Clear any cached data for numerical sorting
+      window.allSortedCards = null;
     
     // Automatically search for cards in this expansion with current sort and filter values
     await performExpansionSearch(expansion.id, 1, false, null, true, filterValues);
@@ -1355,6 +1568,9 @@ const SearchApi = () => {
       setTotalResults(0);
       setHasMore(false);
       setCurrentPage(1);
+      
+      // Clear any cached data when filters or sort change
+      window.allSortedCards = null;
       
       // Use current filter values if provided, otherwise use state
       const filtersToUse = currentFilterValues || filterValues;
@@ -2170,13 +2386,11 @@ const SearchApi = () => {
           <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-400">
-                {searchResults.length}/{totalResults} {selectedExpansion && expansionViewMode === 'sealed' ? 'products' : 'cards'} found
+                {selectedExpansion ? totalResults : searchResults.length} {selectedExpansion && expansionViewMode === 'sealed' ? 'products' : 'cards'} found
               </p>
-              {hasMore && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Scroll down to load more...
-                </p>
-              )}
+              <p className="text-xs text-gray-500 mt-1">
+                Scroll down to see more...
+              </p>
             </div>
             
             
@@ -2231,8 +2445,8 @@ const SearchApi = () => {
                       setHasMore(false);
                       setCurrentPage(1);
                       setIsLoading(true); // Show loading state
-                      // Clear cache before performing search
-                      await searchCacheService.forceClearAllCache();
+                      
+                      console.log('📦 Switching to sealed products from database');
                       performExpansionSearch(selectedExpansion.id, 1, false, 'sealed', true, filterValues);
                     }}
                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
@@ -2374,8 +2588,8 @@ const SearchApi = () => {
           </div>
         )}
 
-        {/* Optimized loading indicator */}
-        {hasMore && (
+        {/* Optimized loading indicator - Only show for search results, not expansions */}
+        {hasMore && !selectedExpansion && (
           <div ref={loadingRef} className="flex justify-center py-4">
             {isLoadingMore ? (
               <div className="flex items-center gap-2 text-gray-400">
@@ -2436,8 +2650,7 @@ const SearchApi = () => {
                     setHasMore(false);
                     setCurrentPage(1);
                     setIsLoading(true);
-                    // Clear cache before performing search
-                    await searchCacheService.forceClearAllCache();
+                    console.log('🃏 Switching to singles cards');
                     performExpansionSearch(selectedExpansion.id, 1, false, 'singles', true, filterValues);
                   }}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
@@ -3080,6 +3293,37 @@ const SearchApi = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Back to Top Button */}
+      {showBackToTop && (
+        <button
+          onClick={() => {
+            window.scrollTo({
+              top: 0,
+              behavior: 'smooth'
+            });
+          }}
+          className="fixed bottom-20 right-6 bg-gray-800 hover:bg-gray-700 text-white p-3 rounded-full shadow-lg transition-all duration-300 ease-in-out z-50 border border-gray-600 hover:border-gray-500"
+          style={{
+            transform: showBackToTop ? 'scale(1)' : 'scale(0)',
+            opacity: showBackToTop ? 1 : 0
+          }}
+        >
+          <svg 
+            className="w-5 h-5" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M5 10l7-7m0 0l7 7m-7-7v18" 
+            />
+          </svg>
+        </button>
       )}
     </div>
   );

@@ -103,7 +103,9 @@ class SearchCacheService {
       keyParts.push('res:' + filters.resistances.sort().join(','));
     }
     if (filters.sortBy) {
-      keyParts.push('sort:' + filters.sortBy + ':' + (filters.sortOrder || 'asc'));
+      const sortOrder = filters.sortOrder || 'asc';
+      keyParts.push('sort:' + filters.sortBy + ':' + sortOrder);
+      console.log('🔑 Adding sort to cache key:', filters.sortBy, sortOrder);
     }
     
     return keyParts.join('|');

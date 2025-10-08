@@ -71,6 +71,96 @@ serve(async (req) => {
         response = await fetch(pricingUrl, { headers })
         break
 
+      case 'expansion-products':
+        // Get sealed products from a specific expansion using CardMarket API
+        const episodeId = url.searchParams.get('episodeId')
+        const sort = url.searchParams.get('sort') || 'price_highest'
+        const cardmarketHost = 'cardmarket-api-tcg.p.rapidapi.com'
+        
+        if (!episodeId) {
+          return new Response(
+            JSON.stringify({ 
+              status: 'error', 
+              'error-message': 'Episode ID is required' 
+            }),
+            { 
+              status: 400, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          )
+        }
+        
+        // CardMarket API uses rapidapi-key as query parameter, not header
+        const expansionProductsUrl = `https://${cardmarketHost}/pokemon/episodes/${episodeId}/products?rapidapi-key=${rapidApiKey}&sort=${sort}`
+        response = await fetch(expansionProductsUrl, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        break
+
+      case 'expansion-cards':
+        // Get single cards from a specific expansion using CardMarket API
+        const episodeIdCards = url.searchParams.get('episodeId')
+        const sortCards = url.searchParams.get('sort') || 'price_highest'
+        
+        if (!episodeIdCards) {
+          return new Response(
+            JSON.stringify({ 
+              status: 'error', 
+              'error-message': 'Episode ID is required' 
+            }),
+            { 
+              status: 400, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          )
+        }
+        
+        const expansionCardsUrl = `https://cardmarket-api-tcg.p.rapidapi.com/pokemon/episodes/${episodeIdCards}/cards?rapidapi-key=${rapidApiKey}&sort=${sortCards}`
+        response = await fetch(expansionCardsUrl, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        break
+
+      case 'cardmarket-search':
+        // Search for cards using CardMarket API
+        const searchTerm = url.searchParams.get('search')
+        const sortSearch = url.searchParams.get('sort') || 'price_highest'
+        
+        if (!searchTerm) {
+          return new Response(
+            JSON.stringify({ 
+              status: 'error', 
+              'error-message': 'Search term is required' 
+            }),
+            { 
+              status: 400, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          )
+        }
+        
+        const cardmarketSearchUrl = `https://cardmarket-api-tcg.p.rapidapi.com/pokemon/cards?search=${encodeURIComponent(searchTerm)}&rapidapi-key=${rapidApiKey}&sort=${sortSearch}`
+        response = await fetch(cardmarketSearchUrl, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        break
+
+      case 'cardmarket-expansions':
+        // Get list of all expansions using CardMarket API
+        const cardmarketExpansionsUrl = `https://cardmarket-api-tcg.p.rapidapi.com/pokemon/episodes?rapidapi-key=${rapidApiKey}`
+        response = await fetch(cardmarketExpansionsUrl, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        break
+
       default:
         return new Response(
           JSON.stringify({ 

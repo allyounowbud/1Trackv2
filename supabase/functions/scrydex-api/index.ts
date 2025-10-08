@@ -297,6 +297,38 @@ const getAllCards = async (options: any = {}) => {
   }
 }
 
+// Get sealed products
+const getSealedProducts = async (options: any = {}) => {
+  const params = new URLSearchParams({
+    ...options
+  })
+  
+  const response = await makeScrydexRequest(`/pokemon/v1/en/sealed?${params.toString()}`)
+  
+  if (!response.ok) {
+    throw new Error(`Scrydex API error: ${response.status} ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  return data
+}
+
+// Get sealed products for a specific expansion
+const getSealedProductsForExpansion = async (expansionId: string, options: any = {}) => {
+  const params = new URLSearchParams({
+    ...options
+  })
+  
+  const response = await makeScrydexRequest(`/pokemon/v1/en/expansions/${expansionId}/sealed?${params.toString()}`)
+  
+  if (!response.ok) {
+    throw new Error(`Scrydex API error: ${response.status} ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  return data
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -397,12 +429,31 @@ serve(async (req) => {
 
       default:
         // Handle dynamic routes
-        if (path.startsWith('/cards/') && path.endsWith('/pricing')) {
+        if (path === '/sealed') {
+          if (req.method !== 'GET') {
+            throw new Error('Method not allowed')
+          }
+          const sealedOptions = {
+            page: searchParams.page || '1',
+            pageSize: searchParams.pageSize || '100',
+            series: searchParams.series,
+            language_code: searchParams.language_code,
+            language: searchParams.language,
+          }
+          result = await getSealedProducts(sealedOptions)
+        } else if (path.startsWith('/cards/') && path.endsWith('/pricing')) {
           const cardId = path.replace('/cards/', '').replace('/pricing', '')
           result = await getCardPricing(cardId)
         } else if (path.startsWith('/cards/')) {
           const cardId = path.replace('/cards/', '')
           result = await getCardById(cardId)
+        } else if (path.startsWith('/expansions/') && path.endsWith('/sealed')) {
+          const expansionId = path.replace('/expansions/', '').replace('/sealed', '')
+          const expansionSealedOptions = {
+            page: searchParams.page || '1',
+            pageSize: searchParams.pageSize || '100',
+          }
+          result = await getSealedProductsForExpansion(expansionId, expansionSealedOptions)
         } else if (path.startsWith('/expansions/')) {
           const expansionId = path.replace('/expansions/', '')
           result = await getExpansionById(expansionId)

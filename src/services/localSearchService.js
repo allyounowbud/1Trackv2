@@ -107,9 +107,9 @@ class LocalSearchService {
       console.log('🔢 Sort parameters received:', { sortBy, sortOrder });
       if (sortBy && sortOrder) {
         if (sortBy === 'number') {
-          // For numeric sorting by card number, cast TEXT to INTEGER for proper numerical sorting
-          console.log('🔢 Sorting by number field (cast to int), order:', sortOrder === 'asc' ? 'ascending' : 'descending');
-          supabaseQuery = supabaseQuery.order('CAST(number AS INTEGER)', { ascending: sortOrder === 'asc' });
+          // For numeric sorting, we'll handle it on the frontend since Supabase doesn't support CAST in ORDER BY with SELECT *
+          console.log('🔢 Number sorting will be handled on frontend');
+          supabaseQuery = supabaseQuery.order('name', { ascending: true }); // Default alphabetical order
         } else if (sortBy === 'raw_market' || sortBy === 'graded_market') {
           // For price fields, cast to NUMERIC and handle nulls properly
           console.log('🔢 Sorting by price field:', sortBy, 'order:', sortOrder === 'asc' ? 'ascending' : 'descending');
@@ -122,15 +122,20 @@ class LocalSearchService {
           supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' });
         }
       } else {
-        // Default to sorting by card number field (cast to int for numerical sorting)
-        console.log('🔢 Default sorting by number field (cast to int)');
-        supabaseQuery = supabaseQuery.order('CAST(number AS INTEGER)', { ascending: true });
+        // Default sorting - alphabetical by name, frontend will handle numerical sorting
+        console.log('🔢 Default sorting by name (frontend will handle numerical sorting)');
+        supabaseQuery = supabaseQuery.order('name', { ascending: true });
       }
 
-      // Apply pagination
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-      supabaseQuery = supabaseQuery.range(from, to);
+      // Apply pagination - but load ALL cards if sorting by number for proper numerical sorting
+      if (sortBy === 'number') {
+        console.log('🔢 Loading ALL cards for numerical sorting (no pagination)');
+        // Don't apply pagination when sorting by number - we need all cards to sort properly
+      } else {
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        supabaseQuery = supabaseQuery.range(from, to);
+      }
 
       // Execute query
       const { data: cards, error, count } = await supabaseQuery;
@@ -272,6 +277,165 @@ class LocalSearchService {
   }
 
   /**
+   * Search sealed products by name across all expansions
+   * @param {string} query - Search query
+   * @param {Object} options - Query options
+   * @returns {Promise<Object>} Search results
+   */
+  async searchSealedProducts(query, options = {}) {
+    const {
+      page = 1,
+      pageSize = 30,
+      sortBy = 'name',
+      sortOrder = 'asc'
+    } = options
+
+    try {
+      console.log('🔍 Searching sealed products for:', query)
+      
+      let supabaseQuery = supabase
+        .from('sealed_products')
+        .select('*', { count: 'exact' })
+
+      // Apply search filters
+      if (query && query.trim()) {
+        const searchTerm = query.trim()
+        
+        // Search in name field
+        supabaseQuery = supabaseQuery.ilike('name', `%${searchTerm}%`)
+      }
+
+      // Apply sorting
+      if (sortBy && sortOrder) {
+        if (sortBy === 'pricing_market') {
+          supabaseQuery = supabaseQuery.order('pricing_market', { 
+            ascending: sortOrder === 'asc',
+            nullsFirst: false 
+          })
+        } else if (sortBy === 'name') {
+          supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
+        } else if (sortBy === 'number') {
+          // Sealed products don't have a 'number' column, use 'name' instead
+          console.log('⚠️ Sealed products don\'t have a number column, sorting by name instead')
+          supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
+        } else {
+          // Try to order by the requested column, fallback to 'name' if it doesn't exist
+          try {
+            supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' })
+          } catch (error) {
+            console.log(`⚠️ Column '${sortBy}' doesn't exist in sealed_products, using 'name' instead`)
+            supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
+          }
+        }
+      } else {
+        supabaseQuery = supabaseQuery.order('name', { ascending: true })
+      }
+
+      // Apply pagination
+      const from = (page - 1) * pageSize
+      const to = from + pageSize - 1
+      supabaseQuery = supabaseQuery.range(from, to)
+
+      const { data: sealedProducts, error, count } = await supabaseQuery
+
+      if (error) {
+        console.error('❌ Error fetching sealed products:', error)
+        throw error
+      }
+
+      console.log(`📦 Found ${sealedProducts?.length || 0} sealed products for query "${query}"`)
+
+      return {
+        data: sealedProducts || [],
+        total: count || 0,
+        page,
+        pageSize,
+        totalPages: Math.ceil((count || 0) / pageSize),
+        hasMore: (page * pageSize) < (count || 0)
+      }
+    } catch (error) {
+      console.error('❌ Error searching sealed products:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get sealed products for a specific expansion from database
+   * @param {string} expansionId - Expansion ID
+   * @param {Object} options - Query options
+   * @returns {Promise<Object>} Sealed products in expansion
+   */
+  async getSealedProductsByExpansion(expansionId, options = {}) {
+    const {
+      page = 1,
+      pageSize = 30,
+      sortBy = 'name',
+      sortOrder = 'asc'
+    } = options
+
+    try {
+      console.log('🔍 Getting sealed products for expansion:', expansionId)
+      
+      let supabaseQuery = supabase
+        .from('sealed_products')
+        .select('*', { count: 'exact' })
+        .eq('expansion_id', expansionId)
+
+      // Apply sorting - sealed products don't have 'number' column, default to 'name'
+      if (sortBy && sortOrder) {
+        if (sortBy === 'pricing_market') {
+          supabaseQuery = supabaseQuery.order('pricing_market', { 
+            ascending: sortOrder === 'asc',
+            nullsFirst: false 
+          })
+        } else if (sortBy === 'name') {
+          supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
+        } else if (sortBy === 'number') {
+          // Sealed products don't have a 'number' column, use 'name' instead
+          console.log('⚠️ Sealed products don\'t have a number column, sorting by name instead')
+          supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
+        } else {
+          // Try to order by the requested column, fallback to 'name' if it doesn't exist
+          try {
+            supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' })
+          } catch (error) {
+            console.log(`⚠️ Column '${sortBy}' doesn't exist in sealed_products, using 'name' instead`)
+            supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
+          }
+        }
+      } else {
+        supabaseQuery = supabaseQuery.order('name', { ascending: true })
+      }
+
+      // Apply pagination
+      const from = (page - 1) * pageSize
+      const to = from + pageSize - 1
+      supabaseQuery = supabaseQuery.range(from, to)
+
+      const { data: sealedProducts, error, count } = await supabaseQuery
+
+      if (error) {
+        console.error('❌ Error fetching sealed products:', error)
+        throw error
+      }
+
+      console.log(`📦 Found ${sealedProducts?.length || 0} sealed products for expansion ${expansionId}`)
+
+      return {
+        data: sealedProducts || [],
+        total: count || 0,
+        page,
+        pageSize,
+        totalPages: Math.ceil((count || 0) / pageSize),
+        hasMore: (page * pageSize) < (count || 0)
+      }
+    } catch (error) {
+      console.error('❌ Error getting sealed products by expansion:', error)
+      throw error
+    }
+  }
+
+  /**
    * Get cards by expansion ID
    * @param {string} expansionId - Expansion ID
    * @param {Object} options - Query options
@@ -280,7 +444,7 @@ class LocalSearchService {
   async getCardsByExpansion(expansionId, options = {}) {
     const {
       page = 1,
-      pageSize = 30, // Optimized pagination for fast loading
+      pageSize = 10000, // Load all cards for expansion views
       sortBy = 'number', // Sort by card number by default
       sortOrder = 'asc',
       supertype = null,
@@ -342,9 +506,9 @@ class LocalSearchService {
       console.log('🔢 Expansion sort parameters received:', { sortBy, sortOrder });
       if (sortBy && sortOrder) {
         if (sortBy === 'number') {
-          // For numeric sorting by card number, cast TEXT to INTEGER for proper numerical sorting
-          console.log('🔢 Expansion sorting by number field (cast to int), order:', sortOrder === 'asc' ? 'ascending' : 'descending');
-          supabaseQuery = supabaseQuery.order('CAST(number AS INTEGER)', { ascending: sortOrder === 'asc' });
+          // For numeric sorting, we'll handle it on the frontend since Supabase doesn't support CAST in ORDER BY with SELECT *
+          console.log('🔢 Expansion number sorting will be handled on frontend');
+          supabaseQuery = supabaseQuery.order('name', { ascending: true }); // Default alphabetical order
         } else if (sortBy === 'raw_market' || sortBy === 'graded_market') {
           // For price fields, cast to NUMERIC and handle nulls properly
           console.log('🔢 Expansion sorting by price field:', sortBy, 'order:', sortOrder === 'asc' ? 'ascending' : 'descending');
@@ -357,15 +521,14 @@ class LocalSearchService {
           supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' });
         }
       } else {
-        // Default to sorting by card number field (cast to int for numerical sorting)
-        console.log('🔢 Expansion default sorting by number field (cast to int)');
-        supabaseQuery = supabaseQuery.order('CAST(number AS INTEGER)', { ascending: true });
+        // Default sorting - alphabetical by name, frontend will handle numerical sorting
+        console.log('🔢 Expansion default sorting by name (frontend will handle numerical sorting)');
+        supabaseQuery = supabaseQuery.order('name', { ascending: true });
       }
 
-      // Apply pagination
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-      supabaseQuery = supabaseQuery.range(from, to);
+      // For expansion views, always load ALL cards (no pagination)
+      console.log('📦 Expansion view - loading ALL cards (no pagination)');
+      // Don't apply pagination for expansion views - load entire set
 
       const { data: cards, error, count } = await supabaseQuery;
 
