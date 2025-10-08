@@ -1,3 +1,4 @@
+// Cache bust v2.2.4 - Mobile Safari modal fixes
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const ModalContext = createContext();
