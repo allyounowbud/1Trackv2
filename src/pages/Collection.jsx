@@ -27,6 +27,7 @@ async function getCollectionSummary() {
   return data || [];
 }
 
+// Cache bust: Updated modal theme colors - v2
 const Collection = () => {
   const location = useLocation();
   const { isModalOpen, openModal, closeModal } = useModal();
@@ -75,11 +76,17 @@ const Collection = () => {
   };
 
   const handleLongPress = (itemId) => {
-    const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+    const totalItems = (collectionData.items || []).filter(item => {
+      if (selectedFilter === 'All') return true;
+      if (selectedFilter === 'Graded') {
+        return item.status.includes('PSA') || item.status.includes('BGS') || 
+               item.status.includes('CGC') || item.status.includes('SGC');
+      }
+      return item.status === selectedFilter;
+    }).length;
     
     // If there's only 1 item, show the normal menu instead of entering selection mode
     if (totalItems === 1) {
-      console.log('📱 Single item - showing normal menu instead of selection mode');
       setSelectedItemId(itemId);
       setShowItemMenu(true);
       openModal();
@@ -87,7 +94,6 @@ const Collection = () => {
     }
     
     // For multiple items, enter selection mode
-    console.log('✅ Multiple items - entering selection mode');
     setIsSelectionMode(true);
     handleItemSelect(itemId);
   };
@@ -98,7 +104,14 @@ const Collection = () => {
   };
 
   const selectAll = () => {
-    const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+    const totalItems = (collectionData.items || []).filter(item => {
+      if (selectedFilter === 'All') return true;
+      if (selectedFilter === 'Graded') {
+        return item.status.includes('PSA') || item.status.includes('BGS') || 
+               item.status.includes('CGC') || item.status.includes('SGC');
+      }
+      return item.status === selectedFilter;
+    }).length;
     
     // Only allow select all if there are multiple items
     if (totalItems > 1) {
@@ -141,6 +154,8 @@ const Collection = () => {
 
   // State for prefilled add item form
   const [prefilledCardData, setPrefilledCardData] = useState(null);
+  const [currentMarketValue, setCurrentMarketValue] = useState(null);
+  const [isRawPrice, setIsRawPrice] = useState(false);
 
   // Update modal context when prefilled data changes
   useEffect(() => {
@@ -389,8 +404,8 @@ const Collection = () => {
     const ungradedCount = orders
       .filter(order => 
         !order.is_sold && 
+        (order.card_type === 'raw' || !order.card_type) && // Raw cards or legacy orders without card_type
         order.item_type !== 'Sealed Product' && 
-        !order.item_type?.toLowerCase().includes('graded') &&
         !order.item_name?.toLowerCase().includes('box') &&
         !order.item_name?.toLowerCase().includes('bundle') &&
         !order.item_name?.toLowerCase().includes('collection') &&
@@ -400,7 +415,7 @@ const Collection = () => {
 
     const gradedCount = orders
       .filter(order => 
-        !order.is_sold && order.item_type?.toLowerCase().includes('graded')
+        !order.is_sold && order.card_type === 'graded'
       )
       .reduce((sum, order) => sum + (order.buy_quantity || 1), 0);
 
@@ -458,16 +473,34 @@ const Collection = () => {
       const profit = totalValue - group.totalPaid;
       const profitPercent = group.totalPaid > 0 ? (profit / group.totalPaid) * 100 : 0;
       
-      // Determine status based on item name and source
+      // Determine status based on card type and grading information
       let status = "Ungraded";
       if (group.source === 'manual') {
         status = "Custom";
-      } else if (group.name.toLowerCase().includes('graded') || group.name.toLowerCase().includes('psa') || group.name.toLowerCase().includes('bgs')) {
-        status = "Graded";
-      } else if (group.name.toLowerCase().includes('box') || group.name.toLowerCase().includes('bundle') || 
-                 group.name.toLowerCase().includes('pack') || group.name.toLowerCase().includes('collection') ||
-                 group.name.toLowerCase().includes('tin') || group.name.toLowerCase().includes('display')) {
-        status = "Sealed";
+      } else {
+        // Check if any order for this item is sealed
+        const sealedOrder = group.orders.find(order => order.card_type === 'sealed');
+        if (sealedOrder) {
+          status = "Sealed";
+        } else {
+          // Check if any order for this item is graded
+          const gradedOrder = group.orders.find(order => 
+            order.card_type === 'graded' && order.graded_company && order.graded_grade
+          );
+          
+          if (gradedOrder) {
+            status = `${gradedOrder.graded_company} ${gradedOrder.graded_grade}`;
+          } else {
+            // Check if it's a raw card (explicitly set as raw)
+            const rawOrder = group.orders.find(order => order.card_type === 'raw');
+            if (rawOrder) {
+              status = "Ungraded";
+            } else {
+              // Fallback to old logic for backward compatibility
+              status = "Ungraded";
+            }
+          }
+        }
       }
 
       // Use clean item name and separate card number
@@ -488,6 +521,69 @@ const Collection = () => {
       };
     });
 
+    // Calculate filtered values based on selectedFilter
+    const getFilteredData = (filter) => {
+      let filteredOrders = orders;
+      
+      if (filter === 'Ungraded') {
+        filteredOrders = orders.filter(order => 
+          !order.is_sold && 
+          (order.card_type === 'raw' || !order.card_type) &&
+          order.item_type !== 'Sealed Product' && 
+          !order.item_name?.toLowerCase().includes('box') &&
+          !order.item_name?.toLowerCase().includes('bundle') &&
+          !order.item_name?.toLowerCase().includes('collection') &&
+          !order.item_name?.toLowerCase().includes('tin')
+        );
+      } else if (filter === 'Graded') {
+        filteredOrders = orders.filter(order => 
+          !order.is_sold && order.card_type === 'graded'
+        );
+      } else if (filter === 'Sealed') {
+        filteredOrders = orders.filter(order => 
+          !order.is_sold && (
+            order.card_type === 'sealed' ||
+            order.item_type === 'Sealed Product' ||
+            order.item_name?.toLowerCase().includes('box') ||
+            order.item_name?.toLowerCase().includes('bundle') ||
+            order.item_name?.toLowerCase().includes('collection') ||
+            order.item_name?.toLowerCase().includes('tin')
+          )
+        );
+      } else if (filter === 'Custom') {
+        filteredOrders = orders.filter(order => 
+          !order.is_sold && order.source === 'manual'
+        );
+      }
+
+      const filteredValueCents = filteredOrders.reduce((sum, order) => {
+        return sum + ((order.market_value_cents || 0) * order.buy_quantity);
+      }, 0);
+
+      const filteredPaidCents = filteredOrders.reduce((sum, order) => {
+        return sum + (order.total_cost_cents || 0);
+      }, 0);
+
+      const filteredProfitCents = filteredOrders.reduce((sum, order) => {
+        if (order.is_sold) {
+          return sum + (order.net_profit_cents || 0);
+        } else {
+          const marketValue = (order.market_value_cents || 0) * order.buy_quantity;
+          const cost = order.total_cost_cents || 0;
+          return sum + (marketValue - cost);
+        }
+      }, 0);
+
+      return {
+        value: filteredValueCents / 100,
+        paid: filteredPaidCents / 100,
+        profit: filteredProfitCents / 100,
+        profitPercentage: (filteredPaidCents / 100) > 0 ? ((filteredProfitCents / 100) / (filteredPaidCents / 100)) * 100 : 0
+      };
+    };
+
+    const filteredData = getFilteredData(selectedFilter);
+
     return {
       totalValue,
       totalPaid,
@@ -497,15 +593,26 @@ const Collection = () => {
       gradedCount,
       sealedCount,
       customCount,
-      items
+      items,
+      // Filtered data for display
+      filteredValue: selectedFilter === 'All' ? totalValue : filteredData.value,
+      filteredPaid: selectedFilter === 'All' ? totalPaid : filteredData.paid,
+      filteredProfit: selectedFilter === 'All' ? totalProfit : filteredData.profit,
+      filteredProfitPercentage: selectedFilter === 'All' ? profitPercentage : filteredData.profitPercentage
     };
   })();
 
   // Exit selection mode if there's only 1 item
   useEffect(() => {
-    const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+    const totalItems = (collectionData.items || []).filter(item => {
+      if (selectedFilter === 'All') return true;
+      if (selectedFilter === 'Graded') {
+        return item.status.includes('PSA') || item.status.includes('BGS') || 
+               item.status.includes('CGC') || item.status.includes('SGC');
+      }
+      return item.status === selectedFilter;
+    }).length;
     if (totalItems <= 1 && isSelectionMode) {
-      console.log('🚫 Exiting selection mode - only 1 item available');
       setIsSelectionMode(false);
       setSelectedItems(new Set());
     }
@@ -517,9 +624,42 @@ const Collection = () => {
     const data = [];
     const today = new Date();
     
-    // Group orders by date to calculate cumulative value
+    // Filter orders based on selectedFilter
+    let filteredOrders = orders;
+    if (selectedFilter === 'Ungraded') {
+      filteredOrders = orders.filter(order => 
+        !order.is_sold && 
+        (order.card_type === 'raw' || !order.card_type) &&
+        order.item_type !== 'Sealed Product' && 
+        !order.item_name?.toLowerCase().includes('box') &&
+        !order.item_name?.toLowerCase().includes('bundle') &&
+        !order.item_name?.toLowerCase().includes('collection') &&
+        !order.item_name?.toLowerCase().includes('tin')
+      );
+    } else if (selectedFilter === 'Graded') {
+      filteredOrders = orders.filter(order => 
+        !order.is_sold && order.card_type === 'graded'
+      );
+    } else if (selectedFilter === 'Sealed') {
+      filteredOrders = orders.filter(order => 
+        !order.is_sold && (
+          order.card_type === 'sealed' ||
+          order.item_type === 'Sealed Product' ||
+          order.item_name?.toLowerCase().includes('box') ||
+          order.item_name?.toLowerCase().includes('bundle') ||
+          order.item_name?.toLowerCase().includes('collection') ||
+          order.item_name?.toLowerCase().includes('tin')
+        )
+      );
+    } else if (selectedFilter === 'Custom') {
+      filteredOrders = orders.filter(order => 
+        !order.is_sold && order.source === 'manual'
+      );
+    }
+    
+    // Group filtered orders by date to calculate cumulative value
     const ordersByDate = {};
-    orders.forEach(order => {
+    filteredOrders.forEach(order => {
       if (!order.is_sold) {
         const orderDate = new Date(order.buy_date).toISOString().split('T')[0];
         if (!ordersByDate[orderDate]) {
@@ -650,11 +790,18 @@ const Collection = () => {
       {/* Collection Value Section */}
       <div className="px-4 md:px-6 lg:px-8 py-6">
         <div className="text-center mb-3 pt-2 md:mb-6 md:pt-4">
-          <div className="text-sm text-gray-300 mb-1 md:mb-2">Your collection is worth</div>
-          <div className="text-5xl md:text-4xl lg:text-5xl font-bold text-blue-400 mb-1 md:mb-2 tracking-tight">
-            {formatPrice(collectionData.totalValue)}
+          <div className="text-sm text-gray-300 mb-1 md:mb-2">
+            {selectedFilter === 'All' ? 'Your collection is worth' : 
+             selectedFilter === 'Ungraded' ? 'Your ungraded collection is worth' :
+             selectedFilter === 'Graded' ? 'Your graded collection is worth' :
+             selectedFilter === 'Sealed' ? 'Your sealed collection is worth' :
+             selectedFilter === 'Custom' ? 'Your custom collection is worth' :
+             'Your collection is worth'}
           </div>
-          <div className="text-sm text-gray-300">You Paid • {formatPrice(collectionData.totalPaid)} <span className={collectionData.profitPercentage >= 0 ? 'text-green-400' : 'text-red-400'}>({collectionData.profitPercentage >= 0 ? '+' : ''}{collectionData.profitPercentage.toFixed(1)}%)</span></div>
+          <div className="text-5xl md:text-4xl lg:text-5xl font-bold text-blue-400 mb-1 md:mb-2 tracking-tight">
+            {formatPrice(collectionData.filteredValue)}
+          </div>
+          <div className="text-sm text-gray-300">You Paid • {formatPrice(collectionData.filteredPaid)} <span className={collectionData.filteredProfitPercentage >= 0 ? 'text-green-400' : 'text-red-400'}>({collectionData.filteredProfitPercentage >= 0 ? '+' : ''}{collectionData.filteredProfitPercentage.toFixed(1)}%)</span></div>
         </div>
       </div>
 
@@ -756,7 +903,7 @@ const Collection = () => {
               <div className="text-base md:text-2xl lg:text-3xl font-semibold text-white">My Portfolio</div>
               {/* Summary Text */}
               <div className="text-sm text-gray-400 mt-1">
-                {currentDateRange.label} <span className="text-blue-400">{formatPrice(collectionData.totalValue)}</span> 
+                {currentDateRange.label} <span className="text-blue-400">{formatPrice(collectionData.filteredValue)}</span> 
                 <span className="text-blue-400 ml-1">
                   ({percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(2)}%)
                 </span>
@@ -958,7 +1105,13 @@ const Collection = () => {
               <div className="text-sm text-gray-400">
                 {selectedFilter === 'All' 
                   ? (collectionData.items?.length || 0)
-                  : (collectionData.items?.filter(item => item.status === selectedFilter).length || 0)
+                  : (collectionData.items?.filter(item => {
+                      if (selectedFilter === 'Graded') {
+                        return item.status.includes('PSA') || item.status.includes('BGS') || 
+                               item.status.includes('CGC') || item.status.includes('SGC');
+                      }
+                      return item.status === selectedFilter;
+                    }).length || 0)
                 } Results
               </div>
             </div>
@@ -968,7 +1121,13 @@ const Collection = () => {
                   selectedFilter === 'All' 
                     ? collectionData.totalValue 
                     : (collectionData.items || [])
-                        .filter(item => item.status === selectedFilter)
+                        .filter(item => {
+                          if (selectedFilter === 'Graded') {
+                            return item.status.includes('PSA') || item.status.includes('BGS') || 
+                                   item.status.includes('CGC') || item.status.includes('SGC');
+                          }
+                          return item.status === selectedFilter;
+                        })
                         .reduce((sum, item) => sum + (item.value * item.quantity), 0)
                 )}
               </span></div>
@@ -997,7 +1156,15 @@ const Collection = () => {
         <div className={`px-3 md:px-6 lg:px-8 ${isSelectionMode ? 'pb-20' : 'pb-4'}`}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
           {(collectionData.items || [])
-            .filter(item => selectedFilter === 'All' || item.status === selectedFilter)
+            .filter(item => {
+              if (selectedFilter === 'All') return true;
+              if (selectedFilter === 'Graded') {
+                // Show all graded cards (PSA, BGS, CGC, SGC)
+                return item.status.includes('PSA') || item.status.includes('BGS') || 
+                       item.status.includes('CGC') || item.status.includes('SGC');
+              }
+              return item.status === selectedFilter;
+            })
             .map((item) => {
             const isSelected = selectedItems.has(item.id);
             return (
@@ -1009,7 +1176,14 @@ const Collection = () => {
                          : 'hover:bg-indigo-900/30 hover:border-indigo-400 hover:shadow-indigo-400/25'
                      }`}
                      onTouchStart={(e) => {
-                       const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+                       const totalItems = (collectionData.items || []).filter(item => {
+      if (selectedFilter === 'All') return true;
+      if (selectedFilter === 'Graded') {
+        return item.status.includes('PSA') || item.status.includes('BGS') || 
+               item.status.includes('CGC') || item.status.includes('SGC');
+      }
+      return item.status === selectedFilter;
+    }).length;
                        if (totalItems > 1) {
                          longPressTriggeredRef.current = false;
                          longPressRef.current = setTimeout(() => {
@@ -1026,7 +1200,14 @@ const Collection = () => {
                        }
                      }}
                      onMouseDown={(e) => {
-                       const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+                       const totalItems = (collectionData.items || []).filter(item => {
+      if (selectedFilter === 'All') return true;
+      if (selectedFilter === 'Graded') {
+        return item.status.includes('PSA') || item.status.includes('BGS') || 
+               item.status.includes('CGC') || item.status.includes('SGC');
+      }
+      return item.status === selectedFilter;
+    }).length;
                        if (e.button === 0 && totalItems > 1) { // Left click and multiple items
                          longPressTriggeredRef.current = false;
                          longPressRef.current = setTimeout(() => {
@@ -1052,7 +1233,14 @@ const Collection = () => {
                        }
                        
                        // Only handle click if we're already in selection mode AND there are multiple items
-                       const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+                       const totalItems = (collectionData.items || []).filter(item => {
+      if (selectedFilter === 'All') return true;
+      if (selectedFilter === 'Graded') {
+        return item.status.includes('PSA') || item.status.includes('BGS') || 
+               item.status.includes('CGC') || item.status.includes('SGC');
+      }
+      return item.status === selectedFilter;
+    }).length;
                        if (isSelectionMode && totalItems > 1) {
                          e.preventDefault();
                          handleItemSelect(item.id);
@@ -1197,9 +1385,15 @@ const Collection = () => {
 
       {/* Bulk Actions Bar - Fixed at bottom - Only show if more than 1 item */}
       {(() => {
-        const totalItems = (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length;
+        const totalItems = (collectionData.items || []).filter(item => {
+      if (selectedFilter === 'All') return true;
+      if (selectedFilter === 'Graded') {
+        return item.status.includes('PSA') || item.status.includes('BGS') || 
+               item.status.includes('CGC') || item.status.includes('SGC');
+      }
+      return item.status === selectedFilter;
+    }).length;
         const shouldShow = isSelectionMode && totalItems > 1;
-        console.log('🔍 Bulk bar check:', { isSelectionMode, totalItems, shouldShow });
         return shouldShow;
       })() && (
         <div className="fixed bottom-16 left-0 right-0 modal-overlay">
@@ -1207,7 +1401,14 @@ const Collection = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-white font-medium">
-                  {selectedItems.size}/{(collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length} Selected
+                  {selectedItems.size}/{(collectionData.items || []).filter(item => {
+                    if (selectedFilter === 'All') return true;
+                    if (selectedFilter === 'Graded') {
+                      return item.status.includes('PSA') || item.status.includes('BGS') || 
+                             item.status.includes('CGC') || item.status.includes('SGC');
+                    }
+                    return item.status === selectedFilter;
+                  }).length} Selected
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -1253,7 +1454,7 @@ const Collection = () => {
           }}
         >
           <div 
-            className="w-full bg-gray-950 border border-blue-400/50 rounded-t-2xl max-h-[80vh] overflow-y-auto"
+            className="w-full bg-gray-900 border border-blue-400/50 rounded-t-2xl max-h-[80vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -1614,66 +1815,74 @@ const Collection = () => {
         </div>
       )}
 
-      {/* Full Screen Add Item Form */}
+      {/* Optimized Add Item Form Modal */}
       {isModalOpen && prefilledCardData && (
-        <div className="fixed inset-0 bg-gray-950 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-gray-900 z-50 overflow-y-auto">
           <div className="min-h-screen">
-        {/* Header with Card Info */}
-        <div className="sticky top-0 bg-gray-950 border-b border-gray-800 px-4 py-3">
-          {/* Condensed Card Preview */}
-          <div className="flex items-center gap-4">
-            {prefilledCardData.image_url && (
-              <img
-                src={prefilledCardData.image_url}
-                alt={prefilledCardData.name}
-                className="h-[75px] object-contain rounded-lg"
-              />
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[17px] font-semibold text-white truncate">{prefilledCardData.name}</h2>
-                <button
-                  onClick={() => {
-                    setPrefilledCardData(null);
-                    closeModal();
-                  }}
-                  className="text-gray-400 hover:text-white p-1 flex-shrink-0"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="text-[13px] text-gray-400">
-                <span>{prefilledCardData.set_name}</span>
-              </div>
-              <div className="text-[13px] text-gray-400">
-                <span>{prefilledCardData.rarity}</span>
-              </div>
-              {prefilledCardData.market_value && (
-                <div className="text-[13px] text-blue-400 font-medium">
-                  ${prefilledCardData.market_value.toFixed(2)}
+            {/* Clean Header with Stacked Text */}
+            <div className="sticky top-0 bg-gray-900 border-b border-gray-800 px-6 py-5">
+              <div className="flex items-start gap-5 max-w-6xl mx-auto">
+                {prefilledCardData.image_url && (
+                  <img
+                    src={prefilledCardData.image_url}
+                    alt={prefilledCardData.name}
+                    className="h-[90px] w-auto object-contain rounded-lg flex-shrink-0"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 space-y-0.5">
+                      <h2 className="font-semibold text-white" style={{ fontSize: '16px' }}>{prefilledCardData.name}</h2>
+                      <div className="text-gray-400 text-sm">{prefilledCardData.set_name}</div>
+                      <div className="text-gray-400 text-sm">{prefilledCardData.rarity}</div>
+                      {(currentMarketValue || prefilledCardData.market_value) && (
+                        <div className="text-blue-400 font-medium text-sm">
+                          ${typeof (currentMarketValue || prefilledCardData.market_value) === 'number' ? (currentMarketValue || prefilledCardData.market_value).toFixed(2) : parseFloat(currentMarketValue || prefilledCardData.market_value || 0).toFixed(2)}
+                          {isRawPrice && (
+                            <span className="text-yellow-400 text-xs ml-1">(raw)</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setPrefilledCardData(null);
+                        closeModal();
+                      }}
+                      className="text-gray-400 hover:text-white p-1 flex-shrink-0 ml-4"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        </div>
 
-            {/* Content */}
-            <div className="px-4 py-6 max-w-2xl mx-auto">
+            {/* Optimized Content */}
+            <div className="px-6 py-6 max-w-6xl mx-auto">
 
               {/* Add Item Form */}
               <AddItemForm 
                 prefilledData={prefilledCardData}
+                onMarketValueChange={(value, isRaw) => {
+                  setCurrentMarketValue(value);
+                  setIsRawPrice(isRaw);
+                }}
                 onSuccess={() => {
                   closeModal();
                   setPrefilledCardData(null);
+                  setCurrentMarketValue(null);
+                  setIsRawPrice(false);
                   // Refresh collection data
                   refetchOrders();
                   refetchSummary();
                 }}
                 onCancel={() => {
                   setPrefilledCardData(null);
+                  setCurrentMarketValue(null);
+                  setIsRawPrice(false);
                   closeModal();
                 }}
               />
@@ -1795,36 +2004,116 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
   );
 };
 
+// Graded card types and grades
+const GRADED_CARD_TYPES = {
+  PSA: {
+    name: 'PSA',
+    grades: ['1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10']
+  },
+  BGS: {
+    name: 'BGS',
+    grades: ['1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '9.5', '10', '10']
+  },
+  CGC: {
+    name: 'CGC',
+    grades: ['1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10']
+  },
+  SGC: {
+    name: 'SGC',
+    grades: ['1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10']
+  }
+};
+
 // Add Item Form Component
-const AddItemForm = ({ prefilledData, onSuccess, onCancel }) => {
+const AddItemForm = ({ prefilledData, onMarketValueChange, onSuccess, onCancel }) => {
   const [formData, setFormData] = useState({
     quantity: 1,
     buyPrice: prefilledData?.market_value || '',
     pricePerItem: prefilledData?.market_value || '',
     buyDate: new Date().toISOString().split('T')[0],
     buyLocation: '',
-    isSold: false,
-    sellDate: '',
-    sellPrice: '',
-    sellPricePerItem: '',
-    sellLocation: '',
-    sellFees: '',
-    sellShipping: ''
+    cardType: (prefilledData?.itemType === 'Sealed Product' || 
+               prefilledData?.name?.toLowerCase().includes('box') || 
+               prefilledData?.name?.toLowerCase().includes('bundle') || 
+               prefilledData?.name?.toLowerCase().includes('collection') ||
+               prefilledData?.name?.toLowerCase().includes('tin') || 
+               prefilledData?.name?.toLowerCase().includes('pack')) ? 'sealed' : 'raw', // 'raw', 'graded', 'sealed'
+    gradedCompany: '',
+    gradedGrade: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [retailers, setRetailers] = useState([]);
   const [retailerSearchQuery, setRetailerSearchQuery] = useState('');
   const [isRetailerFocused, setIsRetailerFocused] = useState(false);
-  const [marketplaces, setMarketplaces] = useState([]);
-  const [marketplaceSearchQuery, setMarketplaceSearchQuery] = useState('');
-  const [isMarketplaceFocused, setIsMarketplaceFocused] = useState(false);
+  const [gradedPriceData, setGradedPriceData] = useState(null);
+  const [isLoadingGradedPrice, setIsLoadingGradedPrice] = useState(false);
+  const [showCardTypeDropdown, setShowCardTypeDropdown] = useState(false);
+  const [showGradingCompanyDropdown, setShowGradingCompanyDropdown] = useState(false);
+  const [showGradeDropdown, setShowGradeDropdown] = useState(false);
 
-  // Load retailers and marketplaces on component mount
+  // Load retailers on component mount
   useEffect(() => {
     loadRetailers();
-    loadMarketplaces();
   }, []);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.dropdown-container')) {
+        setShowCardTypeDropdown(false);
+        setShowGradingCompanyDropdown(false);
+        setShowGradeDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Fetch graded price when card type, company, or grade changes
+  useEffect(() => {
+    if (formData.cardType === 'graded' && formData.gradedCompany && formData.gradedGrade && prefilledData?.name) {
+      fetchGradedPrice(prefilledData.name, formData.gradedCompany, formData.gradedGrade)
+        .then(data => {
+          setGradedPriceData(data);
+          if (data && data.graded_market) {
+            // Update price with graded value
+            const gradedPrice = data.graded_market;
+            setFormData(prev => ({
+              ...prev,
+              buyPrice: gradedPrice.toString(),
+              pricePerItem: gradedPrice.toString()
+            }));
+            // Update header with graded price
+            onMarketValueChange(gradedPrice, false);
+          } else {
+            // Reset to raw price if no graded price found
+            const rawPrice = prefilledData?.market_value;
+            setFormData(prev => ({
+              ...prev,
+              buyPrice: rawPrice || '',
+              pricePerItem: rawPrice || ''
+            }));
+            // Update header with raw price and show (raw) indicator
+            onMarketValueChange(rawPrice, true);
+          }
+        });
+    } else if (formData.cardType === 'raw') {
+      // Reset to raw price when switching to raw card
+      setGradedPriceData(null);
+      const rawPrice = prefilledData?.market_value;
+      setFormData(prev => ({
+        ...prev,
+        buyPrice: rawPrice || '',
+        pricePerItem: rawPrice || ''
+      }));
+      // Update header with raw price (no (raw) indicator for raw cards)
+      onMarketValueChange(rawPrice, false);
+    }
+  }, [formData.cardType, formData.gradedCompany, formData.gradedGrade, prefilledData?.name, prefilledData?.market_value, onMarketValueChange]);
 
   const loadRetailers = async () => {
     try {
@@ -1859,38 +2148,30 @@ const AddItemForm = ({ prefilledData, onSuccess, onCancel }) => {
     }
   };
 
-  const loadMarketplaces = async () => {
+  const fetchGradedPrice = async (cardName, company, grade) => {
+    if (!cardName || !company || !grade) return null;
+    
+    setIsLoadingGradedPrice(true);
     try {
       const { data, error } = await supabase
-        .from('marketplaces')
-        .select('*')
-        .order('display_name');
+        .from('cached_cards')
+        .select('graded_market, graded_company, graded_grade, raw_market')
+        .eq('name', cardName)
+        .eq('graded_company', company)
+        .eq('graded_grade', grade)
+        .single();
       
-      if (error) throw error;
-      setMarketplaces(data || []);
+      if (error && error.code !== 'PGRST116') throw error;
+      
+      return data;
     } catch (error) {
-      console.error('Error loading marketplaces:', error);
+      console.error('Error fetching graded price:', error);
+      return null;
+    } finally {
+      setIsLoadingGradedPrice(false);
     }
   };
 
-  const createNewMarketplace = async (marketplaceName) => {
-    try {
-      const { data, error } = await supabase
-        .from('marketplaces')
-        .insert([{ display_name: marketplaceName }])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      // Add to local marketplaces list
-      setMarketplaces(prev => [...prev, data].sort((a, b) => a.display_name.localeCompare(b.display_name)));
-      return data;
-    } catch (error) {
-      console.error('Error creating marketplace:', error);
-      throw error;
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1951,6 +2232,9 @@ const AddItemForm = ({ prefilledData, onSuccess, onCancel }) => {
         buy_price_cents: Math.round((parseFloat(formData.buyPrice) / parseInt(formData.quantity)) * 100),
         buy_quantity: parseInt(formData.quantity),
         buy_location: formData.buyLocation || null,
+        card_type: formData.cardType,
+        graded_company: formData.cardType === 'graded' ? formData.gradedCompany : null,
+        graded_grade: formData.cardType === 'graded' ? formData.gradedGrade : null,
       };
 
       const { error: orderError } = await supabase
@@ -1959,27 +2243,7 @@ const AddItemForm = ({ prefilledData, onSuccess, onCancel }) => {
 
       if (orderError) throw orderError;
 
-      // If sold, create sale record
-      if (formData.isSold) {
-        const saleData = {
-          item_id: itemId,
-          user_id: user.id,
-          order_type: 'sell',
-          sell_date: formData.sellDate,
-          sell_price_cents: Math.round(parseFloat(formData.sellPrice) * 100),
-          sell_quantity: parseInt(formData.quantity),
-          sell_location: formData.sellLocation || null,
-          sell_notes: formData.sellNotes || null
-        };
 
-        const { error: saleError } = await supabase
-          .from('orders')
-          .insert(saleData);
-
-        if (saleError) throw saleError;
-      }
-
-      console.log('✅ Item added to collection successfully');
       onSuccess();
       
     } catch (error) {
@@ -1991,290 +2255,56 @@ const AddItemForm = ({ prefilledData, onSuccess, onCancel }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="p-3 bg-red-900/20 border border-red-500 rounded-lg text-red-400 text-sm">
           {error}
         </div>
       )}
 
-      {/* Purchase Details */}
-      <div className="space-y-4">
-        <div>
-          <label className="block text-gray-300 text-sm mb-1">Purchase Date</label>
-          <input
-            type="date"
-            value={formData.buyDate}
-            onChange={(e) => setFormData({...formData, buyDate: e.target.value})}
-            className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-gray-300 text-sm mb-1">Item</label>
-          <input
-            type="text"
-            value={prefilledData.name}
-            disabled
-            className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed"
-          />
-        </div>
-
-        <div>
-          <label className="block text-gray-300 text-sm mb-1">Purchase Location</label>
-        <div className="relative">
-          <input
-            type="text"
-            value={retailerSearchQuery}
-            onChange={(e) => {
-              setRetailerSearchQuery(e.target.value);
-              setFormData({...formData, buyLocation: e.target.value});
-            }}
-            onFocus={() => {
-              setIsRetailerFocused(true);
-              setRetailerSearchQuery(formData.buyLocation || '');
-            }}
-            onBlur={() => {
-              setTimeout(() => setIsRetailerFocused(false), 150);
-            }}
-            placeholder="Type to search retailers..."
-            className="w-full px-3 py-2 pr-8 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-            autoComplete="off"
-          />
-          {formData.buyLocation && (
-            <button
-              type="button"
-              onClick={() => {
-                setFormData({...formData, buyLocation: ''});
-                setRetailerSearchQuery('');
-                setIsRetailerFocused(false);
-              }}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-          
-          {/* Retailer Dropdown */}
-          {(isRetailerFocused || retailerSearchQuery !== '') && (() => {
-            const filteredRetailers = retailers.filter(retailer =>
-              retailer.display_name.toLowerCase().includes(retailerSearchQuery.toLowerCase()) &&
-              retailer.display_name !== formData.buyLocation
-            );
-            const exactMatch = retailers.find(retailer =>
-              retailer.display_name.toLowerCase() === retailerSearchQuery.toLowerCase()
-            );
-            const hasItems = filteredRetailers.length > 0 || (!exactMatch && formData.buyLocation && formData.buyLocation !== retailerSearchQuery);
-            return hasItems;
-          })() && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-gray-950 border border-gray-600 rounded-lg shadow-xl z-[9999] max-h-60 overflow-y-auto">
-                  {(() => {
-                    const filteredRetailers = retailers.filter(retailer =>
-                      retailer.display_name.toLowerCase().includes(retailerSearchQuery.toLowerCase()) &&
-                      retailer.display_name !== formData.buyLocation
-                    );
-                    const exactMatch = retailers.find(retailer =>
-                      retailer.display_name.toLowerCase() === retailerSearchQuery.toLowerCase()
-                    );
-
-                    return (
-                      <>
-                        {filteredRetailers.map((retailer) => (
-                          <button
-                            key={retailer.id}
-                            type="button"
-                            onClick={() => {
-                              setFormData({...formData, buyLocation: retailer.display_name});
-                              setRetailerSearchQuery(retailer.display_name);
-                              setIsRetailerFocused(false);
-                            }}
-                            className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 text-sm"
-                          >
-                            {retailer.display_name}
-                            {retailer.location && (
-                              <span className="text-gray-400 text-xs ml-2">({retailer.location})</span>
-                            )}
-                          </button>
-                        ))}
-                        {!exactMatch && formData.buyLocation && formData.buyLocation !== retailerSearchQuery && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                const newRetailer = await createNewRetailer(formData.buyLocation);
-                                setFormData({...formData, buyLocation: newRetailer.display_name});
-                                setRetailerSearchQuery(newRetailer.display_name);
-                                setIsRetailerFocused(false);
-                              } catch (error) {
-                                console.error('Failed to create retailer:', error);
-                              }
-                            }}
-                            className="w-full px-3 py-2 text-left text-blue-400 hover:bg-gray-700 text-sm border-t border-gray-600"
-                          >
-                            + Add "{formData.buyLocation}" as new retailer
-                          </button>
-                        )}
-                      </>
-                    );
-                  })()}
-            </div>
-          )}
-        </div>
-        </div>
-
-        <div>
-          <label className="block text-gray-300 text-sm mb-1">Quantity</label>
-          <input
-            type="number"
-            min="1"
-            value={formData.quantity}
-            onChange={(e) => {
-              const newQuantity = parseInt(e.target.value) || 1;
-              const newTotalPrice = formData.pricePerItem ? (parseFloat(formData.pricePerItem) * newQuantity).toFixed(2) : formData.buyPrice;
-              const newSellTotalPrice = formData.sellPricePerItem ? (parseFloat(formData.sellPricePerItem) * newQuantity).toFixed(2) : formData.sellPrice;
-              setFormData({...formData, quantity: newQuantity, buyPrice: newTotalPrice, sellPrice: newSellTotalPrice});
-            }}
-            className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-gray-300 text-sm mb-1">Price (per item)</label>
-          <input
-            type="number"
-            step="0.01"
-            value={formData.pricePerItem || (formData.buyPrice && formData.quantity ? (formData.buyPrice / formData.quantity).toFixed(2) : '')}
-            onChange={(e) => {
-              const pricePerItem = parseFloat(e.target.value) || 0;
-              const totalPrice = pricePerItem * formData.quantity;
-              setFormData({...formData, pricePerItem: e.target.value, buyPrice: totalPrice.toFixed(2)});
-            }}
-            className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-            placeholder="0.00"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-gray-300 text-sm mb-1">Total Price</label>
-          <input
-            type="number"
-            step="0.01"
-            value={formData.buyPrice}
-            onChange={(e) => {
-              const totalPrice = parseFloat(e.target.value) || 0;
-              const pricePerItem = formData.quantity > 0 ? (totalPrice / formData.quantity).toFixed(2) : 0;
-              setFormData({...formData, buyPrice: e.target.value, pricePerItem: pricePerItem});
-            }}
-            className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-            placeholder="0.00"
-            required
-          />
-        </div>
-        </div>
-
-        {/* Sold Toggle Slider */}
-      <div className="py-6">
-        <div className="flex items-center justify-between">
-          <label className="text-gray-300 text-sm font-medium">Mark as sold</label>
-          <button
-            type="button"
-            onClick={() => setFormData({...formData, isSold: !formData.isSold})}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${
-              formData.isSold ? 'bg-blue-600' : 'bg-gray-600'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
-                formData.isSold ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
-        </div>
-      </div>
-
-      {/* Sale Details (conditional with animation) */}
-      <div className={`transition-all duration-300 ease-in-out ${
-        formData.isSold ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'
-      }`}>
+      {/* Purchase Details - Optimized Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column */}
         <div className="space-y-4">
           <div>
-            <label className="block text-gray-300 text-sm mb-1">Sale Date</label>
+            <label className="block text-gray-300 text-sm mb-2">Purchase Date</label>
             <input
               type="date"
-              value={formData.sellDate}
-              onChange={(e) => setFormData({...formData, sellDate: e.target.value})}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-              required={formData.isSold}
+              value={formData.buyDate}
+              onChange={(e) => setFormData({...formData, buyDate: e.target.value})}
+              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors"
+              required
             />
           </div>
 
           <div>
-            <label className="block text-gray-300 text-sm mb-1">Price (per item)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={formData.sellPricePerItem || (formData.sellPrice && formData.quantity ? (formData.sellPrice / formData.quantity).toFixed(2) : '')}
-              onChange={(e) => {
-                const pricePerItem = parseFloat(e.target.value) || 0;
-                const totalPrice = pricePerItem * formData.quantity;
-                setFormData({...formData, sellPricePerItem: e.target.value, sellPrice: totalPrice.toFixed(2)});
-              }}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="0.00"
-              required={formData.isSold}
-            />
-          </div>
-          
-          <div>
-            <label className="block text-gray-300 text-sm mb-1">Total Price</label>
-            <input
-              type="number"
-              step="0.01"
-              value={formData.sellPrice}
-              onChange={(e) => {
-                const totalPrice = parseFloat(e.target.value) || 0;
-                const pricePerItem = formData.quantity > 0 ? (totalPrice / formData.quantity).toFixed(2) : 0;
-                setFormData({...formData, sellPrice: e.target.value, sellPricePerItem: pricePerItem});
-              }}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="0.00"
-              required={formData.isSold}
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-300 text-sm mb-1">Sell Location</label>
+            <label className="block text-gray-300 text-sm mb-2">Purchase Location</label>
             <div className="relative">
               <input
                 type="text"
-                value={marketplaceSearchQuery}
+                value={retailerSearchQuery}
                 onChange={(e) => {
-                  setMarketplaceSearchQuery(e.target.value);
-                  setFormData({...formData, sellLocation: e.target.value});
+                  setRetailerSearchQuery(e.target.value);
+                  setFormData({...formData, buyLocation: e.target.value});
                 }}
                 onFocus={() => {
-                  setIsMarketplaceFocused(true);
-                  setMarketplaceSearchQuery(formData.sellLocation || '');
+                  setIsRetailerFocused(true);
+                  setRetailerSearchQuery(formData.buyLocation || '');
                 }}
                 onBlur={() => {
-                  setTimeout(() => setIsMarketplaceFocused(false), 150);
+                  setTimeout(() => setIsRetailerFocused(false), 150);
                 }}
-                placeholder="Type to search marketplaces..."
-                className="w-full px-3 py-2 pr-8 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                placeholder="Type to search retailers..."
+                className="w-full px-3 py-3 pr-8 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors"
                 autoComplete="off"
               />
-              {formData.sellLocation && (
+              {formData.buyLocation && (
                 <button
                   type="button"
                   onClick={() => {
-                    setFormData({...formData, sellLocation: ''});
-                    setMarketplaceSearchQuery('');
-                    setIsMarketplaceFocused(false);
+                    setFormData({...formData, buyLocation: ''});
+                    setRetailerSearchQuery('');
+                    setIsRetailerFocused(false);
                   }}
                   className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
                 >
@@ -2284,121 +2314,309 @@ const AddItemForm = ({ prefilledData, onSuccess, onCancel }) => {
                 </button>
               )}
               
-              {/* Marketplace Dropdown */}
-              {(isMarketplaceFocused || marketplaceSearchQuery !== '') && (() => {
-                const filteredMarketplaces = marketplaces.filter(marketplace =>
-                  marketplace.display_name.toLowerCase().includes(marketplaceSearchQuery.toLowerCase()) &&
-                  marketplace.display_name !== formData.sellLocation
+              {/* Retailer Dropdown */}
+              {(isRetailerFocused || retailerSearchQuery !== '') && (() => {
+                const filteredRetailers = retailers.filter(retailer =>
+                  retailer.display_name.toLowerCase().includes(retailerSearchQuery.toLowerCase()) &&
+                  retailer.display_name !== formData.buyLocation
                 );
-                const exactMatch = marketplaces.find(marketplace =>
-                  marketplace.display_name.toLowerCase() === marketplaceSearchQuery.toLowerCase()
+                const exactMatch = retailers.find(retailer =>
+                  retailer.display_name.toLowerCase() === retailerSearchQuery.toLowerCase()
                 );
-                const hasItems = filteredMarketplaces.length > 0 || (!exactMatch && formData.sellLocation && formData.sellLocation !== marketplaceSearchQuery);
+                const hasItems = filteredRetailers.length > 0 || (!exactMatch && formData.buyLocation && formData.buyLocation !== retailerSearchQuery);
                 return hasItems;
               })() && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-950 border border-gray-600 rounded-lg shadow-xl z-[9999] max-h-60 overflow-y-auto">
-                  {(() => {
-                    const filteredMarketplaces = marketplaces.filter(marketplace =>
-                      marketplace.display_name.toLowerCase().includes(marketplaceSearchQuery.toLowerCase()) &&
-                      marketplace.display_name !== formData.sellLocation
-                    );
-                    const exactMatch = marketplaces.find(marketplace =>
-                      marketplace.display_name.toLowerCase() === marketplaceSearchQuery.toLowerCase()
-                    );
+                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-[9999] max-h-60 overflow-y-auto">
+                      {(() => {
+                        const filteredRetailers = retailers.filter(retailer =>
+                          retailer.display_name.toLowerCase().includes(retailerSearchQuery.toLowerCase()) &&
+                          retailer.display_name !== formData.buyLocation
+                        );
+                        const exactMatch = retailers.find(retailer =>
+                          retailer.display_name.toLowerCase() === retailerSearchQuery.toLowerCase()
+                        );
 
-                    return (
-                      <>
-                        {filteredMarketplaces.map((marketplace) => (
-                          <button
-                            key={marketplace.id}
-                            type="button"
-                            onClick={() => {
-                              setFormData({...formData, sellLocation: marketplace.display_name});
-                              setMarketplaceSearchQuery(marketplace.display_name);
-                              setIsMarketplaceFocused(false);
-                            }}
-                            className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 text-sm"
-                          >
-                            {marketplace.display_name}
-                            {marketplace.location && (
-                              <span className="text-gray-400 text-xs ml-2">({marketplace.location})</span>
+                        return (
+                          <>
+                            {filteredRetailers.map((retailer) => (
+                              <button
+                                key={retailer.id}
+                                type="button"
+                                onClick={() => {
+                                  setFormData({...formData, buyLocation: retailer.display_name});
+                                  setRetailerSearchQuery(retailer.display_name);
+                                  setIsRetailerFocused(false);
+                                }}
+                                className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 text-sm"
+                              >
+                                {retailer.display_name}
+                                {retailer.location && (
+                                  <span className="text-gray-400 text-xs ml-2">({retailer.location})</span>
+                                )}
+                              </button>
+                            ))}
+                            {!exactMatch && formData.buyLocation && formData.buyLocation !== retailerSearchQuery && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    const newRetailer = await createNewRetailer(formData.buyLocation);
+                                    setFormData({...formData, buyLocation: newRetailer.display_name});
+                                    setRetailerSearchQuery(newRetailer.display_name);
+                                    setIsRetailerFocused(false);
+                                  } catch (error) {
+                                    console.error('Failed to create retailer:', error);
+                                  }
+                                }}
+                                className="w-full px-3 py-2 text-left text-blue-400 hover:bg-gray-700 text-sm border-t border-gray-600"
+                              >
+                                + Add "{formData.buyLocation}" as new retailer
+                              </button>
                             )}
-                          </button>
-                        ))}
-                        {!exactMatch && formData.sellLocation && formData.sellLocation !== marketplaceSearchQuery && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                const newMarketplace = await createNewMarketplace(formData.sellLocation);
-                                setFormData({...formData, sellLocation: newMarketplace.display_name});
-                                setMarketplaceSearchQuery(newMarketplace.display_name);
-                                setIsMarketplaceFocused(false);
-                              } catch (error) {
-                                console.error('Failed to create marketplace:', error);
-                              }
-                            }}
-                            className="w-full px-3 py-2 text-left text-blue-400 hover:bg-gray-700 text-sm border-t border-gray-600"
-                          >
-                            + Add "{formData.sellLocation}" as new marketplace
-                          </button>
-                        )}
-                      </>
-                    );
-                  })()}
+                          </>
+                        );
+                      })()}
                 </div>
               )}
             </div>
           </div>
 
           <div>
-            <label className="block text-gray-300 text-sm mb-1">Fees</label>
+            <label className="block text-gray-300 text-sm mb-2">Quantity</label>
+            <input
+              type="number"
+              min="1"
+              value={formData.quantity}
+              onChange={(e) => {
+                const newQuantity = parseInt(e.target.value) || 1;
+                const newTotalPrice = formData.pricePerItem ? (parseFloat(formData.pricePerItem) * newQuantity).toFixed(2) : formData.buyPrice;
+                setFormData({...formData, quantity: newQuantity, buyPrice: newTotalPrice});
+              }}
+              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors"
+              required
+            />
+          </div>
+
+          {/* Only show Card Type for non-sealed products */}
+          {prefilledData?.itemType !== 'Sealed Product' && !prefilledData?.name?.toLowerCase().includes('box') && 
+           !prefilledData?.name?.toLowerCase().includes('bundle') && !prefilledData?.name?.toLowerCase().includes('collection') &&
+           !prefilledData?.name?.toLowerCase().includes('tin') && !prefilledData?.name?.toLowerCase().includes('pack') && (
+            <div>
+              <label className="block text-gray-300 text-sm mb-2">Card Type</label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowCardTypeDropdown(!showCardTypeDropdown)}
+                  className="w-full h-11 bg-transparent border border-gray-600 rounded-lg px-3 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer flex items-center justify-between"
+                >
+                  <span>{formData.cardType === 'raw' ? 'Raw Card' : 'Graded Card'}</span>
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {showCardTypeDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-50">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({...formData, cardType: 'raw', gradedCompany: '', gradedGrade: ''});
+                        setShowCardTypeDropdown(false);
+                      }}
+                      className="w-full text-left px-3 py-3 text-white hover:bg-gray-700 transition-colors"
+                    >
+                      Raw Card
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({...formData, cardType: 'graded'});
+                        setShowCardTypeDropdown(false);
+                      }}
+                      className="w-full text-left px-3 py-3 text-white hover:bg-gray-700 transition-colors"
+                    >
+                      Graded Card
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {formData.cardType === 'graded' && (
+            <>
+              <div>
+                <label className="block text-gray-300 text-sm mb-2">Grading Company</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowGradingCompanyDropdown(!showGradingCompanyDropdown)}
+                    className="w-full h-11 bg-transparent border border-gray-600 rounded-lg px-3 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer flex items-center justify-between"
+                    required={formData.cardType === 'graded'}
+                  >
+                    <span>{formData.gradedCompany || 'Select Company'}</span>
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {showGradingCompanyDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-50">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({...formData, gradedCompany: '', gradedGrade: ''});
+                          setShowGradingCompanyDropdown(false);
+                        }}
+                        className="w-full text-left px-3 py-3 text-white hover:bg-gray-700 transition-colors"
+                      >
+                        Select Company
+                      </button>
+                      {Object.keys(GRADED_CARD_TYPES).map(company => (
+                        <button
+                          key={company}
+                          type="button"
+                          onClick={() => {
+                            setFormData({...formData, gradedCompany: company, gradedGrade: ''});
+                            setShowGradingCompanyDropdown(false);
+                          }}
+                          className="w-full text-left px-3 py-3 text-white hover:bg-gray-700 transition-colors"
+                        >
+                          {company}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-gray-300 text-sm mb-2">Grade</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowGradeDropdown(!showGradeDropdown)}
+                    className={`w-full h-11 bg-transparent border border-gray-600 rounded-lg px-3 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors flex items-center justify-between ${
+                      !formData.gradedCompany ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                    }`}
+                    disabled={!formData.gradedCompany}
+                    required={formData.cardType === 'graded'}
+                  >
+                    <span>{formData.gradedGrade || 'Select Grade'}</span>
+                    <svg className={`w-4 h-4 ${!formData.gradedCompany ? 'text-gray-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {showGradeDropdown && formData.gradedCompany && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({...formData, gradedGrade: ''});
+                          setShowGradeDropdown(false);
+                        }}
+                        className="w-full text-left px-3 py-3 text-white hover:bg-gray-700 transition-colors"
+                      >
+                        Select Grade
+                      </button>
+                      {GRADED_CARD_TYPES[formData.gradedCompany]?.grades.map(grade => (
+                        <button
+                          key={grade}
+                          type="button"
+                          onClick={() => {
+                            setFormData({...formData, gradedGrade: grade});
+                            setShowGradeDropdown(false);
+                          }}
+                          className="w-full text-left px-3 py-3 text-white hover:bg-gray-700 transition-colors"
+                        >
+                          {grade}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Right Column */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-gray-300 text-sm mb-2">Price (per item)</label>
             <input
               type="number"
               step="0.01"
-              value={formData.sellFees || ''}
-              onChange={(e) => setFormData({...formData, sellFees: e.target.value})}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              value={formData.pricePerItem || (formData.buyPrice && formData.quantity ? (formData.buyPrice / formData.quantity).toFixed(2) : '')}
+              onChange={(e) => {
+                const pricePerItem = parseFloat(e.target.value) || 0;
+                const totalPrice = pricePerItem * formData.quantity;
+                setFormData({...formData, pricePerItem: e.target.value, buyPrice: totalPrice.toFixed(2)});
+              }}
+              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors"
               placeholder="0.00"
+              required
+              disabled={isLoadingGradedPrice}
             />
           </div>
 
           <div>
-            <label className="block text-gray-300 text-sm mb-1">Shipping (total)</label>
+            <label className="block text-gray-300 text-sm mb-2">Total Price</label>
             <input
               type="number"
               step="0.01"
-              value={formData.sellShipping || ''}
-              onChange={(e) => setFormData({...formData, sellShipping: e.target.value})}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              value={formData.buyPrice}
+              onChange={(e) => {
+                const totalPrice = parseFloat(e.target.value) || 0;
+                const pricePerItem = formData.quantity > 0 ? (totalPrice / formData.quantity).toFixed(2) : 0;
+                setFormData({...formData, buyPrice: e.target.value, pricePerItem: pricePerItem});
+              }}
+              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors"
               placeholder="0.00"
+              required
             />
           </div>
-
         </div>
-      </div>
+        </div>
+
 
       {/* Add bottom padding to prevent content from being hidden behind fixed buttons */}
       <div className="h-20"></div>
 
-      {/* Form Actions - Fixed at bottom */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gray-950 border-t border-gray-800 p-4 z-50">
-        <div className="max-w-2xl mx-auto flex gap-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-          disabled={isSubmitting}
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? 'Adding...' : 'Add to Collection'}
-        </button>
+      {/* Form Actions - Optimized Footer */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 p-6 z-50">
+        <div className="max-w-6xl mx-auto flex gap-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-3 font-medium disabled:opacity-50"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Adding to Collection...
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add to Collection
+              </>
+            )}
+          </button>
         </div>
       </div>
     </form>

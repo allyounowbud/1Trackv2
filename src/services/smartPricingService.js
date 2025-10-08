@@ -41,7 +41,6 @@ class SmartPricingService {
     if (!forceRefresh && this.cache.has(apiId)) {
       const cached = this.cache.get(apiId);
       if (Date.now() - cached.timestamp < this.cacheTimeout) {
-        console.log(`🚀 Serving pricing from memory cache for ${apiId}`);
         
         // Background refresh if stale
         if (backgroundRefresh && this.isStale(cached.data)) {
@@ -57,7 +56,6 @@ class SmartPricingService {
 
     // Check if request is already pending
     if (this.pendingRequests.has(apiId)) {
-      console.log(`⏳ Waiting for pending pricing request for ${apiId}`);
       return await this.pendingRequests.get(apiId);
     }
 
@@ -88,17 +86,14 @@ class SmartPricingService {
 
     try {
       // First, try database
-      console.log(`📦 Fetching pricing from database for ${apiId}`);
       const dbPricing = await databasePricingService.getCardPricing(apiId);
 
       if (dbPricing && !this.isStale(dbPricing)) {
-        console.log(`✅ Fresh pricing data from database for ${apiId}`);
         this.cachePricing(apiId, dbPricing);
         return dbPricing;
       }
 
       if (dbPricing && this.isStale(dbPricing)) {
-        console.log(`⏰ Stale pricing data for ${apiId}, serving but refreshing in background`);
         
         // Serve stale data but refresh in background
         this.backgroundRefresh(apiId);
@@ -108,7 +103,6 @@ class SmartPricingService {
 
       // No database data or fallback requested
       if (fallbackToApi) {
-        console.log(`🌐 Fetching fresh pricing from API for ${apiId}`);
         const apiPricing = await this.fetchFromApi(apiId);
         
         if (apiPricing) {
@@ -117,7 +111,6 @@ class SmartPricingService {
         }
       }
 
-      console.log(`❌ No pricing data available for ${apiId}`);
       return null;
 
     } catch (error) {
@@ -149,7 +142,6 @@ class SmartPricingService {
    */
   async backgroundRefresh(apiId) {
     try {
-      console.log(`🔄 Background refresh for ${apiId}`);
       
       // Check if pricing sync is needed globally
       // Auto-trigger pricing sync disabled
@@ -184,7 +176,6 @@ class SmartPricingService {
       timestamp: Date.now()
     });
 
-    console.log(`💾 Cached pricing for ${apiId} (cache size: ${this.cache.size})`);
   }
 
   /**
@@ -194,7 +185,6 @@ class SmartPricingService {
    */
   async fetchFromApi(apiId) {
     try {
-      console.log(`🌐 Fetching fresh pricing from API for ${apiId}`);
       return await realTimePricingService.fetchRealTimePricing(apiId);
     } catch (error) {
       console.error(`❌ API fetch failed for ${apiId}:`, error);
@@ -213,7 +203,6 @@ class SmartPricingService {
       return {};
     }
 
-    console.log(`📦 Fetching pricing for ${apiIds.length} cards`);
 
     // Process in parallel with concurrency limit
     const results = {};
@@ -234,7 +223,6 @@ class SmartPricingService {
       });
     }
 
-    console.log(`✅ Retrieved pricing for ${Object.keys(results).length}/${apiIds.length} cards`);
     return results;
   }
 
@@ -245,10 +233,8 @@ class SmartPricingService {
   clearCache(apiId = null) {
     if (apiId) {
       this.cache.delete(apiId);
-      console.log(`🗑️ Cleared cache for ${apiId}`);
     } else {
       this.cache.clear();
-      console.log(`🗑️ Cleared all pricing cache`);
     }
   }
 
@@ -286,7 +272,6 @@ class SmartPricingService {
    * Initialize smart pricing service
    */
   async initialize() {
-    console.log('🚀 Initializing Smart Pricing Service...');
     
     // Auto-trigger pricing sync disabled
     // const needsSync = await pricingSyncService.isPricingSyncNeeded();
@@ -295,7 +280,6 @@ class SmartPricingService {
     //   pricingSyncService.triggerPricingSync();
     // }
 
-    console.log('✅ Smart Pricing Service initialized');
   }
 }
 

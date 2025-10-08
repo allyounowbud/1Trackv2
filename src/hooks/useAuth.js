@@ -30,7 +30,6 @@ export function useAuth() {
         setUserInfo(newUserInfo);
         localStorage.setItem('user-info', JSON.stringify(newUserInfo));
       } catch (error) {
-        console.log("Auth error (expected in local testing):", error);
         const fallback = { avatar_url: "", username: "Local User" };
         setUserInfo(fallback);
         localStorage.setItem('user-info', JSON.stringify(fallback));
@@ -58,7 +57,6 @@ export function useAuth() {
       });
       return () => sub?.subscription?.unsubscribe();
     } catch (error) {
-      console.log("Auth state change error (expected in local testing):", error);
       return () => {};
     }
   }, []);

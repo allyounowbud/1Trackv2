@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Loader2, Star, X, ChevronDown, Plus, MoreVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import localSearchService from '../services/localSearchService';
 import hybridSearchService from '../services/hybridSearchService';
-import priceChartingApiService from '../services/priceChartingApiService';
 import tcggoImageService from '../services/tcggoImageService';
 import searchCacheService from '../services/searchCacheService';
 import SafeImage from '../components/SafeImage';
@@ -119,8 +118,7 @@ const SearchApi = () => {
   // Price sorting state for sealed products
   const [priceSortOrder, setPriceSortOrder] = useState('asc'); // 'asc' for low to high, 'desc' for high to low
   
-  // Force re-render when filter values change to update dynamic counts
-  const [filterUpdateTrigger, setFilterUpdateTrigger] = useState(0);
+  // Removed filterUpdateTrigger - was causing unnecessary re-renders
   
   // Filter categories state
   const [expandedFilters, setExpandedFilters] = useState({});
@@ -394,36 +392,15 @@ const SearchApi = () => {
              try {
                // Initialize core services (required)
                await localSearchService.initialize();
-               console.log('✅ Local Search Service initialized');
                
-               // Initialize optional services (may fail)
-               try {
-                 const hybridInitialized = await hybridSearchService.initialize();
-                 if (!hybridInitialized) {
-                   console.warn('⚠️ Hybrid Search Service initialization failed - will use fallback');
-                 } else {
-                   console.log('✅ Hybrid Search Service initialized');
-                 }
-               } catch (hybridError) {
-                 console.warn('⚠️ Hybrid Search Service initialization failed:', hybridError.message);
-               }
-               
-               try {
-                 const tcggoInitialized = await tcggoImageService.initialize();
-                 if (!tcggoInitialized) {
-                   console.warn('⚠️ TCGGo Image Service initialization failed - image enhancement disabled');
-                 } else {
-                   console.log('✅ TCGGo Image Service initialized');
-                 }
-               } catch (tcggoError) {
-                 console.warn('⚠️ TCGGo Image Service initialization failed:', tcggoError.message);
-               }
+               // Initialize optional services (fail silently)
+               await hybridSearchService.initialize().catch(() => {});
+               await tcggoImageService.initialize().catch(() => {});
                
                await loadExpansions();
                
-               // Mark services as initialized (local search service is working)
+               // Mark services as initialized
                setServicesInitialized(true);
-               console.log('✅ All services initialized successfully');
              } catch (error) {
                console.error('❌ Service initialization error:', error);
                setError('Failed to connect to card database. Please try again later.');
@@ -569,16 +546,16 @@ const SearchApi = () => {
     // Define current view mode at the beginning
     const currentViewMode = viewMode || expansionViewMode;
     
-    // Reset state for new search
+    // Reset state for new search - only update loading states when necessary
     if (page === 1) {
-      setIsLoading(true);
-      setError(null);
       if (!append) {
         setSearchResults([]);
         setTotalResults(0);
         setHasMore(false);
         setCurrentPage(1);
       }
+      setIsLoading(true);
+      setError(null);
     } else {
       setIsLoadingMore(true);
     }
@@ -586,7 +563,6 @@ const SearchApi = () => {
     try {
       // Check if services are initialized
       if (!servicesInitialized) {
-        console.log('⏳ Services not ready, waiting for initialization...');
         setError('Search services are still initializing. Please wait a moment and try again.');
         setIsLoading(false);
         setIsLoadingMore(false);
@@ -609,8 +585,6 @@ const SearchApi = () => {
         resistances: filterValues.resistances.length > 0 ? filterValues.resistances : null
       };
 
-      console.log('🔍 SearchApi searchCards - pageSize:', searchOptions.pageSize, 'page:', page);
-
       // Use hybrid search service to search both singles and sealed products
       let results;
       try {
@@ -628,8 +602,6 @@ const SearchApi = () => {
           resistances: filterValues.resistances.length > 0 ? filterValues.resistances : null
         });
       } catch (hybridError) {
-        console.warn('⚠️ Hybrid search failed, falling back to local search:', hybridError.message);
-        
         // Fallback to local search service for both singles and sealed products
         let singlesResults = [];
         let sealedResults = [];
@@ -655,10 +627,9 @@ const SearchApi = () => {
           if (cardResults && cardResults.data) {
             singlesResults = cardResults.data;
             totalSingles = cardResults.total || 0;
-            console.log(`✅ Found ${singlesResults.length} Pokémon cards via fallback`);
           }
         } catch (cardError) {
-          console.warn('⚠️ Card search failed:', cardError.message);
+          // Silent fail
         }
         
         try {
@@ -673,10 +644,9 @@ const SearchApi = () => {
           if (sealedSearchResults && sealedSearchResults.data) {
             sealedResults = sealedSearchResults.data;
             totalSealed = sealedSearchResults.total || 0;
-            console.log(`✅ Found ${sealedResults.length} sealed products via fallback`);
           }
         } catch (sealedError) {
-          console.warn('⚠️ Sealed products search failed:', sealedError.message);
+          // Silent fail
         }
         
         // Create fallback results
@@ -690,9 +660,6 @@ const SearchApi = () => {
           cached: false
         };
       }
-      
-      console.log('🔍 SearchApi results - pageSize:', results.pageSize, 'total:', results.total, 'singles count:', results.singles?.length);
-      
       
       // Combine singles and sealed products
       const allResults = [];
@@ -714,32 +681,8 @@ const SearchApi = () => {
           return !isTCGPocket;
         });
         
-        // For expansion views, apply sorting to ALL loaded cards (no pagination)
-        let sortedSingles = filteredSingles;
-        
-        // Apply numerical sorting to all cards
-        if (currentSortBy === 'number' || sortBy === 'number') {
-          console.log('🔢 Applying numerical sorting to all expansion cards');
-          console.log('🔢 Total cards before sorting:', filteredSingles.length);
-          console.log('🔢 Cards before sorting:', filteredSingles.slice(0, 5).map(c => `${c.name} (#${c.number || 'N/A'})`));
-          
-          sortedSingles = filteredSingles.sort((a, b) => {
-            const getCardNumber = (card) => {
-              return card.number ? parseInt(card.number, 10) : 9999;
-            };
-            
-            const numA = getCardNumber(a);
-            const numB = getCardNumber(b);
-            
-            const order = (currentSortOrder || sortOrder) === 'asc' ? 1 : -1;
-            return (numA - numB) * order;
-          });
-          
-          console.log('🔢 Total cards after sorting:', sortedSingles.length);
-          console.log('🔢 Cards after sorting:', sortedSingles.slice(0, 5).map(c => `${c.name} (#${c.number || 'N/A'})`));
-        }
-        
-        allResults.push(...sortedSingles.map(card => ({
+        // Use database-sorted results directly - no frontend sorting needed
+        allResults.push(...filteredSingles.map(card => ({
           ...card,
           source: 'scrydex'
         })));
@@ -747,8 +690,6 @@ const SearchApi = () => {
       
       // Add sealed products from database
       if (results.sealed && results.sealed.length > 0) {
-        console.log('📦 Adding sealed products from search results:', results.sealed.length);
-        
         // Format sealed products to match expected structure for UI display
         const formattedSealedProducts = results.sealed.map(product => ({
           id: product.tcggo_id || product.id,
@@ -804,8 +745,6 @@ const SearchApi = () => {
         }
       });
 
-      console.log(`🔒 FINAL FILTER: ${currentViewMode} mode - showing ${finalResults.length} items (filtered from ${enhancedResults.length})`);
-
       if (append) {
         setSearchResults(prev => [...prev, ...finalResults]);
       } else {
@@ -818,7 +757,6 @@ const SearchApi = () => {
       setTotalResults(totalFromResults);
       // For expansion views, no pagination - show all results at once
       setHasMore(false);
-      console.log('📦 Expansion view - no pagination, showing all', totalFromResults, 'cards');
       setCurrentPage(page);
 
     } catch (error) {
@@ -891,22 +829,21 @@ const SearchApi = () => {
       clearTimeout(searchTimeout);
     }
     
-    // Clear cache when starting a new search (not appending results)
-    if (page === 1 && !append) {
-      console.log('🔄 Clearing cache for new search');
+    // Only clear cache when explicitly requested (not on every search)
+    if (forceCacheClear) {
       await searchCacheService.forceClearAllCache();
     }
     
-    // Reset state for new expansion search
+    // Reset state for new expansion search - only update loading states when necessary
     if (page === 1) {
-      setIsLoading(true);
-      setError(null);
       if (!append) {
         setSearchResults([]);
         setTotalResults(0);
         setHasMore(false);
         setCurrentPage(1);
       }
+      setIsLoading(true);
+      setError(null);
     } else {
       setIsLoadingMore(true);
     }
@@ -931,15 +868,10 @@ const SearchApi = () => {
         resistances: filtersToUse.resistances.length > 0 ? filtersToUse.resistances : null,
       };
       
-      console.log('🔍 Search options with filters:', searchOptions);
-      console.log('🎯 Applying filters:', filtersToUse);
-
       let results;
       
       if (currentViewMode === 'sealed') {
         // Get sealed products directly from database (no cache needed)
-        console.log(`🔍 Getting sealed products for expansion: ${selectedExpansion?.name} (${selectedExpansion?.code})`);
-        console.log(`🔍 Full expansion object:`, selectedExpansion);
         
         const sealedResults = await localSearchService.getSealedProductsByExpansion(expansionId, {
           page,
@@ -947,8 +879,6 @@ const SearchApi = () => {
           sortBy: currentSortBy === 'pricing_market' ? 'pricing_market' : 'name', // Use price sorting if specified, otherwise name
           sortOrder: currentSortOrder || priceSortOrder
         });
-        
-        console.log(`📦 Sealed results from database: count: ${sealedResults.data?.length || 0}`);
         
         // Format sealed products to match expected structure for UI display
         const formattedSealedProducts = sealedResults.data.map(product => ({
@@ -993,12 +923,8 @@ const SearchApi = () => {
           total: sealedResults.total || 0
         };
 
-        console.log(`📦 Formatted ${formattedSealedProducts.length} sealed products for display`);
       } else {
         // Check cache first for expansion results
-        console.log('🔑 Cache key generation - searchOptions.sortBy:', searchOptions.sortBy, 'searchOptions.sortOrder:', searchOptions.sortOrder);
-        console.log('🔑 Cache key generation - local sortBy:', sortBy, 'local sortOrder:', sortOrder);
-        
         const cacheKey = searchCacheService.generateCacheKey('', 'pokemon', 'expansion', expansionId, page, 30, {
           supertype: searchOptions.supertype,
           types: searchOptions.types,
@@ -1011,18 +937,10 @@ const SearchApi = () => {
           sortOrder: searchOptions.sortOrder
         });
         
-        console.log('🔑 Generated cache key:', cacheKey);
-        
-        // Force fresh results when sorting by number to get ALL cards for proper sorting
-        let cachedResults = null;
-        if (searchOptions.sortBy !== 'number') {
-          cachedResults = await searchCacheService.getCachedResults(cacheKey);
-        } else {
-          console.log('🔢 Skipping cache for numerical sorting to get ALL cards');
-        }
+        // Use cache for all sorting types - database handles sorting efficiently
+        let cachedResults = await searchCacheService.getCachedResults(cacheKey);
         
         if (cachedResults) {
-          console.log(`📦 Using cached expansion results for: ${expansionId}`);
           results = {
             singles: cachedResults.results.singles || [],
             sealed: [],
@@ -1030,7 +948,6 @@ const SearchApi = () => {
           };
         } else {
           // Search for singles from Scrydex for this expansion
-          console.log(`🔍 Searching singles for expansion: ${expansionId}`);
           const result = await localSearchService.searchCards('', searchOptions);
           
           // Format the results to match expected structure
@@ -1042,7 +959,6 @@ const SearchApi = () => {
 
           // Cache the expansion results (async, don't wait for it)
           if (result.data && result.data.length > 0) {
-            console.log(`💾 Caching expansion results for: ${expansionId}`);
             // Don't await caching to improve performance
             searchCacheService.setCachedResults(
               cacheKey,
@@ -1054,9 +970,7 @@ const SearchApi = () => {
               page,
               30,
               expansionId
-            ).catch(error => {
-              console.warn('Cache write failed (non-critical):', error);
-            });
+            ).catch(() => {});
           }
         }
       }
@@ -1066,16 +980,12 @@ const SearchApi = () => {
       
       if (currentViewMode === 'sealed') {
         // SEALED MODE: Only add sealed products, explicitly exclude singles
-        console.log('🔒 SEALED MODE: Processing only sealed products');
         
         if (results.sealed && results.sealed.length > 0) {
-          console.log('📦 Adding filtered sealed products:', results.sealed.length);
-          
           // Format sealed products - handle both TCGGo and PriceCharting formats
           const formattedSealed = results.sealed.map(product => {
             // If product is already formatted (TCGGo format), use it as-is but ensure proper fields
             if (product.name && product.pricing && product.source === 'cardmarket') {
-              console.log('📦 Formatting TCGGo/CardMarket product:', product.name);
               return {
                 ...product,
                 itemType: 'sealed',
@@ -1095,7 +1005,6 @@ const SearchApi = () => {
             
             // If product is already formatted (PriceCharting format), use it as-is
             if (product.name && product.set_name && product.market_value !== undefined) {
-              console.log('📦 Using already formatted PriceCharting product:', product.name);
               return {
                 ...product,
                 source: product.source || 'pricecharting',
@@ -1105,7 +1014,6 @@ const SearchApi = () => {
             }
             
             // Otherwise, format the raw PriceCharting data
-            console.log('📦 Formatting raw PriceCharting product:', product['product-name'] || 'Unknown');
             return {
               ...priceChartingApiService.formatProductData(product),
               source: 'pricecharting',
@@ -1117,12 +1025,8 @@ const SearchApi = () => {
           allResults.push(...formattedSealed);
         }
         
-        // Explicitly ensure no singles are included in sealed mode
-        console.log('🔒 SEALED MODE: Excluding singles - results.singles length:', results.singles?.length || 0);
-        
       } else {
         // SINGLES MODE: Only add singles, explicitly exclude sealed products
-        console.log('🔒 SINGLES MODE: Processing only singles');
         
         if (results.singles && results.singles.length > 0) {
           const formattedSingles = formatCardsWithVariants(results.singles);
@@ -1140,18 +1044,12 @@ const SearchApi = () => {
             return !isTCGPocket;
           });
           
-          console.log('🚫 Filtered out TCG Pocket cards:', formattedSingles.length - filteredSingles.length);
-          console.log('✅ Final singles count:', filteredSingles.length);
-          
           allResults.push(...filteredSingles.map(card => ({
             ...card,
             source: 'scrydex',
             itemType: 'singles' // Explicitly mark as singles
           })));
         }
-        
-        // Explicitly ensure no sealed products are included in singles mode
-        console.log('🔒 SINGLES MODE: Excluding sealed products - results.sealed length:', results.sealed?.length || 0);
       }
       
 
@@ -1161,8 +1059,6 @@ const SearchApi = () => {
       if (append) {
         setSearchResults(prev => [...prev, ...enhancedResults]);
       } else {
-        console.log('🔄 Setting search results:', enhancedResults.length, 'items');
-        console.log('🔄 View mode:', expansionViewMode);
         setSearchResults(enhancedResults);
       }
 
@@ -1176,7 +1072,6 @@ const SearchApi = () => {
       
       setTotalResults(totalFromResults);
       const hasMoreValue = (page * 30) < totalFromResults;
-      console.log('🔍 hasMore calculation:', { page, pageSize: 30, totalFromResults, hasMoreValue });
       setHasMore(hasMoreValue);
       setCurrentPage(page);
 
@@ -1197,13 +1092,10 @@ const SearchApi = () => {
 
   // Infinite scroll setup with optimized loading
   useEffect(() => {
-    console.log('🔄 Setting up optimized IntersectionObserver:', { hasMore, isLoading, isLoadingMore, selectedExpansion: selectedExpansion?.id });
-    
     if (observerRef.current) observerRef.current.disconnect();
     
     // For expansion views, never create observer (no pagination)
     if (selectedExpansion) {
-      console.log('🔄 Expansion view - no infinite scroll observer needed');
       return;
     }
     
@@ -1212,7 +1104,6 @@ const SearchApi = () => {
       observerRef.current = new IntersectionObserver(
         (entries) => {
           if (entries[0].isIntersecting && hasMore && !isLoading && !isLoadingMore) {
-            console.log('🔄 Triggering optimized load more...');
             loadMoreResults();
           }
         },
@@ -1245,17 +1136,13 @@ const SearchApi = () => {
 
   // Optimized load more results
   const loadMoreResults = async () => {
-    console.log('🔄 loadMoreResults called:', { hasMore, isLoadingMore, currentPage, selectedExpansion: selectedExpansion?.id });
-    
     // Prevent multiple simultaneous calls
     if (isLoadingMoreRef.current || !hasMore || isLoadingMore || currentPage >= 50) {
-      console.log('🔄 loadMoreResults skipped:', { isLoadingMoreRef: isLoadingMoreRef.current, hasMore, isLoadingMore, currentPage, maxPage: 50 });
       return;
     }
     
     // For expansion views, disable pagination completely
     if (selectedExpansion) {
-      console.log('🔄 Expansion view - pagination disabled, skipping loadMoreResults');
       return;
     }
     
@@ -1353,9 +1240,10 @@ const SearchApi = () => {
     setSelectedExpansion(expansion);
     setCurrentView('search');
     
-    // Clear cache before performing search to ensure fresh results
-    console.log('🧹 Clearing cache for new expansion selection');
-    await searchCacheService.forceClearAllCache();
+    // Only clear cache if we're switching to a different expansion
+    if (selectedExpansion && selectedExpansion.id !== expansion.id) {
+      await searchCacheService.forceClearAllCache();
+    }
       // Clear any cached data for numerical sorting
       window.allSortedCards = null;
     
@@ -1494,8 +1382,6 @@ const SearchApi = () => {
 
   // Toggle filter value selection
   const toggleFilterValue = (filterType, value) => {
-    console.log('🎯 toggleFilterValue called:', { filterType, value });
-    
     setFilterValues(prev => {
       const currentValues = prev[filterType] || [];
       const isCurrentlySelected = currentValues.includes(value);
@@ -1518,11 +1404,11 @@ const SearchApi = () => {
       });
       setActiveFilters(newActiveFilters);
       
-      // Debounce filter application with current values
+      // Debounce filter application with current values - reduced timeout for faster response
       if (filterTimeoutRef.current) {
         clearTimeout(filterTimeoutRef.current);
       }
-      filterTimeoutRef.current = setTimeout(() => applyFilters(newValues), 100);
+      filterTimeoutRef.current = setTimeout(() => applyFilters(newValues), 50);
       
       return newValues;
     });
@@ -1547,11 +1433,11 @@ const SearchApi = () => {
       });
       setActiveFilters(newActiveFilters);
       
-      // Debounce filter application with current values
+      // Debounce filter application with current values - reduced timeout for faster response
       if (filterTimeoutRef.current) {
         clearTimeout(filterTimeoutRef.current);
       }
-      filterTimeoutRef.current = setTimeout(() => applyFilters(newValues), 100);
+      filterTimeoutRef.current = setTimeout(() => applyFilters(newValues), 50);
       
       return newValues;
     });
@@ -1584,12 +1470,12 @@ const SearchApi = () => {
     if (!selectedExpansion) return;
     
     try {
-      console.log('🎯 applyFilters called');
-      setIsLoading(true);
+      // Batch state updates to prevent multiple re-renders
       setSearchResults([]);
       setTotalResults(0);
       setHasMore(false);
       setCurrentPage(1);
+      setIsLoading(true);
       
       // Clear any cached data when filters or sort change
       window.allSortedCards = null;
@@ -1599,15 +1485,9 @@ const SearchApi = () => {
       const sortByToUse = currentSortBy || sortBy;
       const sortOrderToUse = currentSortOrder || sortOrder;
       
-      console.log('🎯 Using filters:', filtersToUse);
-      console.log('🎯 Using sort settings:', { sortBy: sortByToUse, sortOrder: sortOrderToUse });
-      
-      // Clear cache when applying filters to ensure fresh results with current sort/filter settings
-      console.log('🧹 Clearing cache before applying filters');
-      await searchCacheService.forceClearAllCache();
-      
-      // Perform search with new filters and sort settings
-      await performExpansionSearch(selectedExpansion.id, 1, false, expansionViewMode, true, filtersToUse, true, sortByToUse, sortOrderToUse);
+      // Don't clear cache for filter changes - let the cache work for performance
+      // Perform search with new filters and sort settings - no cache clearing for performance
+      await performExpansionSearch(selectedExpansion.id, 1, false, expansionViewMode, true, filtersToUse, false, sortByToUse, sortOrderToUse);
     } catch (error) {
       console.error('Error applying filters:', error);
       setError('Failed to apply filters');
@@ -1634,68 +1514,86 @@ const SearchApi = () => {
     setActiveFilters([]);
   };
 
-  // Calculate dynamic filter counts based on current selections
-  const getDynamicFilterCounts = (filterType) => {
-    if (!selectedExpansion) return {};
+  // Calculate dynamic filter counts based on current selections - memoized for performance
+  const getDynamicFilterCounts = useMemo(() => {
+    const cache = new Map();
     
-    // Get all cards for the current expansion
-    const allCards = searchResults || [];
-    
-    // Create a copy of current filter values, excluding the current filter type
-    const otherFilters = { ...filterValues };
-    delete otherFilters[filterType];
-    
-    // Filter cards based on other active filters
-    const filteredCards = allCards.filter(card => {
-      // Apply all other filters except the current one
-      for (const [filterKey, filterValues] of Object.entries(otherFilters)) {
-        if (filterValues && filterValues.length > 0) {
-          if (filterKey === 'supertype' && !filterValues.includes(card.supertype)) return false;
-          if (filterKey === 'types' && !filterValues.some(type => card.types?.includes(type))) return false;
-          if (filterKey === 'subtypes' && !filterValues.some(subtype => card.subtypes?.includes(subtype))) return false;
-          if (filterKey === 'rarity' && !filterValues.includes(card.rarity)) return false;
-          if (filterKey === 'artists' && !filterValues.includes(card.artist)) return false;
-          if (filterKey === 'weaknesses' && !filterValues.some(weakness => card.weaknesses?.some(w => w.type === weakness))) return false;
-          if (filterKey === 'resistances' && !filterValues.some(resistance => card.resistances?.some(r => r.type === resistance))) return false;
+    return (filterType) => {
+      if (!selectedExpansion) return {};
+      
+      // Create cache key based on filter type, search results length, and filter values
+      const cacheKey = `${filterType}-${searchResults?.length || 0}-${JSON.stringify(filterValues)}`;
+      
+      if (cache.has(cacheKey)) {
+        return cache.get(cacheKey);
+      }
+      
+      // Get all cards for the current expansion
+      const allCards = searchResults || [];
+      
+      // Create a copy of current filter values, excluding the current filter type
+      const otherFilters = { ...filterValues };
+      delete otherFilters[filterType];
+      
+      // Filter cards based on other active filters
+      const filteredCards = allCards.filter(card => {
+        // Apply all other filters except the current one
+        for (const [filterKey, filterValues] of Object.entries(otherFilters)) {
+          if (filterValues && filterValues.length > 0) {
+            if (filterKey === 'supertype' && !filterValues.includes(card.supertype)) return false;
+            if (filterKey === 'types' && !filterValues.some(type => card.types?.includes(type))) return false;
+            if (filterKey === 'subtypes' && !filterValues.some(subtype => card.subtypes?.includes(subtype))) return false;
+            if (filterKey === 'rarity' && !filterValues.includes(card.rarity)) return false;
+            if (filterKey === 'artists' && !filterValues.includes(card.artist)) return false;
+            if (filterKey === 'weaknesses' && !filterValues.some(weakness => card.weaknesses?.some(w => w.type === weakness))) return false;
+            if (filterKey === 'resistances' && !filterValues.some(resistance => card.resistances?.some(r => r.type === resistance))) return false;
+          }
         }
+        return true;
+      });
+      
+      // Count occurrences for the current filter type
+      const counts = {};
+      filteredCards.forEach(card => {
+        if (filterType === 'supertype' && card.supertype) {
+          counts[card.supertype] = (counts[card.supertype] || 0) + 1;
+        } else if (filterType === 'types' && card.types) {
+          card.types.forEach(type => {
+            counts[type] = (counts[type] || 0) + 1;
+          });
+        } else if (filterType === 'subtypes' && card.subtypes) {
+          card.subtypes.forEach(subtype => {
+            counts[subtype] = (counts[subtype] || 0) + 1;
+          });
+        } else if (filterType === 'rarity' && card.rarity) {
+          counts[card.rarity] = (counts[card.rarity] || 0) + 1;
+        } else if (filterType === 'artists' && card.artist) {
+          counts[card.artist] = (counts[card.artist] || 0) + 1;
+        } else if (filterType === 'weaknesses' && card.weaknesses) {
+          card.weaknesses.forEach(weakness => {
+            if (weakness.type) {
+              counts[weakness.type] = (counts[weakness.type] || 0) + 1;
+            }
+          });
+        } else if (filterType === 'resistances' && card.resistances) {
+          card.resistances.forEach(resistance => {
+            if (resistance.type) {
+              counts[resistance.type] = (counts[resistance.type] || 0) + 1;
+            }
+          });
+        }
+      });
+      
+      // Cache the result and limit cache size
+      if (cache.size > 50) {
+        const firstKey = cache.keys().next().value;
+        cache.delete(firstKey);
       }
-      return true;
-    });
-    
-    // Count occurrences for the current filter type
-    const counts = {};
-    filteredCards.forEach(card => {
-      if (filterType === 'supertype' && card.supertype) {
-        counts[card.supertype] = (counts[card.supertype] || 0) + 1;
-      } else if (filterType === 'types' && card.types) {
-        card.types.forEach(type => {
-          counts[type] = (counts[type] || 0) + 1;
-        });
-      } else if (filterType === 'subtypes' && card.subtypes) {
-        card.subtypes.forEach(subtype => {
-          counts[subtype] = (counts[subtype] || 0) + 1;
-        });
-      } else if (filterType === 'rarity' && card.rarity) {
-        counts[card.rarity] = (counts[card.rarity] || 0) + 1;
-      } else if (filterType === 'artists' && card.artist) {
-        counts[card.artist] = (counts[card.artist] || 0) + 1;
-      } else if (filterType === 'weaknesses' && card.weaknesses) {
-        card.weaknesses.forEach(weakness => {
-          if (weakness.type) {
-            counts[weakness.type] = (counts[weakness.type] || 0) + 1;
-          }
-        });
-      } else if (filterType === 'resistances' && card.resistances) {
-        card.resistances.forEach(resistance => {
-          if (resistance.type) {
-            counts[resistance.type] = (counts[resistance.type] || 0) + 1;
-          }
-        });
-      }
-    });
-    
-    return counts;
-  };
+      cache.set(cacheKey, counts);
+      
+      return counts;
+    };
+  }, [selectedExpansion, searchResults, filterValues]);
 
   // Get filter options based on type and search term
   const getFilterOptions = (filterType, searchTerm) => {
@@ -2005,12 +1903,8 @@ const SearchApi = () => {
                         src={game.logo}
                         alt={`${game.name} logo`}
                         className="w-full h-full object-contain"
-                   onError={(e) => {
-                     console.log('Game logo failed to load:', game.logo, 'Error:', e);
-                   }}
-                   onLoad={() => {
-                     console.log('Game logo loaded successfully:', game.logo);
-                   }}
+                   onError={() => {}}
+                   onLoad={() => {}}
                         fallback={
                           <div className="w-full h-full flex items-center justify-center">
                             <span className="text-gray-400 text-xs font-medium">
@@ -2059,7 +1953,6 @@ const SearchApi = () => {
                     alt="Pokémon"
                     className="h-10 w-auto"
                     onError={(e) => {
-                      console.log('Pokémon logo failed to load');
                       e.target.style.display = 'none';
                     }}
                   />
@@ -2271,7 +2164,6 @@ const SearchApi = () => {
                             alt={expansion.name}
                             className="w-full h-full object-contain scale-75"
                             onError={(e) => {
-                              console.log('Expansion logo failed to load:', expansion.logo);
                               e.target.style.display = 'none';
                             }}
                           />
@@ -2313,7 +2205,6 @@ const SearchApi = () => {
                             alt={expansion.name}
                             className="w-full h-full object-contain scale-75"
                             onError={(e) => {
-                              console.log('Expansion logo failed to load:', expansion.logo);
                               e.target.style.display = 'none';
                             }}
                           />
@@ -2458,7 +2349,6 @@ const SearchApi = () => {
                         width: 'auto'
                       }}
                       onError={(e) => {
-                        console.log('Expansion logo failed to load:', selectedExpansion.logo);
                         e.target.style.display = 'none';
                       }}
                     />
@@ -2549,7 +2439,6 @@ const SearchApi = () => {
                       setIsLoading(true); // Show loading state
                       setPriceSortOrder('asc'); // Reset to low-to-high when switching to sealed
                       
-                      console.log('📦 Switching to sealed products from database');
                       performExpansionSearch(selectedExpansion.id, 1, false, 'sealed', true, filterValues);
                     }}
                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
@@ -2618,11 +2507,8 @@ const SearchApi = () => {
                     src={card.image_url}
                     alt={card.name}
                     className="w-full h-full object-contain"
-                    onLoad={() => {
-                      console.log('Image loaded successfully:', card.image_url);
-                    }}
+                    onLoad={() => {}}
                     onError={(e) => {
-                      console.log('Image failed to load:', card.image_url);
                       e.target.style.display = 'none';
                     }}
                   />
@@ -2753,7 +2639,6 @@ const SearchApi = () => {
                     setHasMore(false);
                     setCurrentPage(1);
                     setIsLoading(true);
-                    console.log('🃏 Switching to singles cards');
                     performExpansionSearch(selectedExpansion.id, 1, false, 'singles', true, filterValues);
                   }}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
@@ -2792,7 +2677,6 @@ const SearchApi = () => {
                       alt={expansion.name}
                       className="w-full h-full object-contain"
                       onError={(e) => {
-                        console.log('Expansion logo failed to load:', expansion.logo);
                         e.target.style.display = 'none';
                       }}
                     />
@@ -2819,7 +2703,6 @@ const SearchApi = () => {
                     alt="Other"
                     className="w-20 h-20 object-contain"
                     onError={(e) => {
-                      console.log('Other logo failed to load');
                       e.target.style.display = 'none';
                     }}
                   />
@@ -2915,11 +2798,8 @@ const SearchApi = () => {
                             src={item.image_url}
                             alt={item.name}
                             className="w-full h-full object-contain"
-                            onLoad={() => {
-                              console.log('Custom item image loaded successfully:', item.image_url);
-                            }}
+                            onLoad={() => {}}
                             onError={(e) => {
-                              console.log('Custom item image failed to load:', item.image_url, 'Error:', e);
                               e.target.style.display = 'none';
                             }}
                             fallback={
@@ -3190,7 +3070,6 @@ const SearchApi = () => {
           setSelectedCustomItem(null);
         }}
         onSuccess={(successInfo) => {
-          console.log('Custom item added:', successInfo);
           setIsCustomItemModalOpen(false);
           setSelectedCustomItem(null);
           // Refresh custom items list
@@ -3249,7 +3128,6 @@ const SearchApi = () => {
                           <div className="space-y-1 mb-4">
                             <button
                               onClick={() => {
-                                console.log('🔢 Setting sort by: number');
                                 setSortBy('number');
                                 applyFilters(null, 'number', sortOrder);
                               }}
@@ -3263,7 +3141,6 @@ const SearchApi = () => {
                             </button>
                             <button
                               onClick={() => {
-                                console.log('🔢 Setting sort by: name');
                                 setSortBy('name');
                                 applyFilters(null, 'name', sortOrder);
                               }}
@@ -3277,7 +3154,6 @@ const SearchApi = () => {
                             </button>
                             <button
                               onClick={() => {
-                                console.log('🔢 Setting sort by: raw_market');
                                 setSortBy('raw_market');
                                 applyFilters(null, 'raw_market', sortOrder);
                               }}
@@ -3291,7 +3167,6 @@ const SearchApi = () => {
                             </button>
                             <button
                               onClick={() => {
-                                console.log('🔢 Setting sort by: graded_market');
                                 setSortBy('graded_market');
                                 applyFilters(null, 'graded_market', sortOrder);
                               }}
@@ -3309,7 +3184,6 @@ const SearchApi = () => {
                           <div className="flex space-x-2 justify-center">
                             <button
                               onClick={() => {
-                                console.log('🔢 Setting sort order: desc');
                                 setSortOrder('desc');
                                 applyFilters(null, sortBy, 'desc');
                               }}
@@ -3323,7 +3197,6 @@ const SearchApi = () => {
                             </button>
                             <button
                               onClick={() => {
-                                console.log('🔢 Setting sort order: asc');
                                 setSortOrder('asc');
                                 applyFilters(null, sortBy, 'asc');
                               }}

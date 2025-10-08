@@ -46,7 +46,6 @@ export const TableSearchDropdown = ({
 
   // Debug: Log options when they change
   useEffect(() => {
-    console.log(`${label} dropdown options:`, options.length, options.slice(0, 3));
   }, [options, label]);
 
   // Close dropdown when clicking outside

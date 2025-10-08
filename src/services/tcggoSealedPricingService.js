@@ -21,16 +21,13 @@ class TcgGoSealedPricingService {
       // Initialize RapidAPI service
       const rapidApiInitialized = await rapidApiService.initialize()
       if (!rapidApiInitialized) {
-        console.warn('⚠️ TCGGo Sealed Pricing: RapidAPI not available - service will be disabled')
         this.isInitialized = false
         return false
       }
       
       this.isInitialized = true
-      console.log('✅ TCGGo Sealed Pricing Service initialized')
       return true
     } catch (error) {
-      console.error('❌ Failed to initialize TCGGo Sealed Pricing Service:', error)
       this.isInitialized = false
       return false
     }
@@ -48,7 +45,6 @@ class TcgGoSealedPricingService {
     }
 
     try {
-      console.log(`🔍 TCGGo: Searching sealed products for "${query}"`)
       
       // Build search query with sealed product keywords
       const sealedKeywords = [
@@ -84,7 +80,6 @@ class TcgGoSealedPricingService {
       // Filter results for sealed products
       const sealedProducts = this.filterSealedProducts(searchData.results || [])
       
-      console.log(`📦 TCGGo: Found ${sealedProducts.length} sealed products`)
       
       // Get pricing for each product
       const productsWithPricing = await this.addPricingToProducts(sealedProducts)
@@ -163,12 +158,10 @@ class TcgGoSealedPricingService {
     const cacheKey = `pricing_${productId}`
     const cached = this.pricingCache.get(cacheKey)
     if (cached && (Date.now() - cached.timestamp) < this.cacheTimeout) {
-      console.log(`📊 TCGGo: Using cached pricing for ${productId}`)
       return cached.data
     }
 
     try {
-      console.log(`💰 TCGGo: Getting pricing for product ${productId}`)
       
       const response = await fetch(`${rapidApiService.baseUrl}?endpoint=pricing&id=${productId}`, {
         headers: rapidApiService.getAuthHeaders()
@@ -244,27 +237,22 @@ class TcgGoSealedPricingService {
     }
 
     try {
-      console.log(`🔍 TCGGo: Getting sealed products for expansion "${expansionName}"`)
       
       // Try CardMarket API first if we have a known episode ID mapping
       const episodeId = this.getEpisodeId(expansionId)
       if (episodeId) {
         try {
-          console.log(`🔍 TCGGo: Using CardMarket episode ID ${episodeId} for expansion ${expansionName}`)
           const cardmarketProducts = await this.getCardMarketExpansionProducts(episodeId)
           if (cardmarketProducts && cardmarketProducts.length > 0) {
-            console.log(`📦 TCGGo: Found ${cardmarketProducts.length} sealed products via CardMarket API`)
             return cardmarketProducts
           }
         } catch (error) {
           console.warn('⚠️ CardMarket API failed, falling back to search:', error.message)
         }
       } else {
-        console.log(`🔍 TCGGo: No episode ID mapping found for ${expansionId}, using search approach`)
       }
       
       // Fallback to search-based approach
-      console.log('🔍 TCGGo: Falling back to search-based approach')
       
       // Common sealed product types to search for
       const sealedTypes = [
@@ -292,7 +280,6 @@ class TcgGoSealedPricingService {
         index === self.findIndex(p => p.productId === product.productId)
       )
       
-      console.log(`📦 TCGGo: Found ${uniqueProducts.length} unique sealed products for ${expansionName}`)
       
       return uniqueProducts
     } catch (error) {
@@ -308,7 +295,6 @@ class TcgGoSealedPricingService {
     }
 
     try {
-      console.log(`🔍 TCGGo: Getting CardMarket products for episode ${episodeId}`)
       
       const response = await fetch(`${rapidApiService.baseUrl}?endpoint=expansion-products&episodeId=${episodeId}&sort=${sort}`, {
         headers: rapidApiService.getAuthHeaders()
@@ -327,7 +313,6 @@ class TcgGoSealedPricingService {
       // Filter for sealed products and format the data
       const sealedProducts = this.filterAndFormatCardMarketProducts(data.data || data.results || [])
       
-      console.log(`📦 TCGGo: Found ${sealedProducts.length} sealed products from CardMarket`)
       
       return sealedProducts
     } catch (error) {
@@ -413,7 +398,6 @@ class TcgGoSealedPricingService {
   // Clear pricing cache
   clearCache() {
     this.pricingCache.clear()
-    console.log('🧹 TCGGo Sealed Pricing cache cleared')
   }
 
   // Get cache statistics

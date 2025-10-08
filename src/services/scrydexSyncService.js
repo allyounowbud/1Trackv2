@@ -16,7 +16,6 @@ class ScrydexSyncService {
 
     try {
       this.syncInProgress = true;
-      console.log('🔄 Triggering Scrydex database sync...');
 
       // Call the Supabase Edge Function to trigger sync
       const { data, error } = await supabase.functions.invoke('scrydex-sync?action=full-sync', {
@@ -30,7 +29,6 @@ class ScrydexSyncService {
         throw error;
       }
 
-      console.log('✅ Sync triggered successfully:', data);
       return data;
 
     } catch (error) {
@@ -49,7 +47,6 @@ class ScrydexSyncService {
 
     try {
       this.syncInProgress = true;
-      console.log('🔄 Triggering comprehensive Scrydex database sync...');
 
       // Call the Supabase Edge Function to trigger comprehensive sync
       const { data, error } = await supabase.functions.invoke('scrydex-sync?action=comprehensive-sync', {
@@ -63,7 +60,6 @@ class ScrydexSyncService {
         throw error;
       }
 
-      console.log('✅ Comprehensive sync triggered successfully:', data);
       return data;
 
     } catch (error) {
@@ -82,7 +78,6 @@ class ScrydexSyncService {
 
     try {
       this.syncInProgress = true;
-      console.log('🧪 Triggering Scrydex test sync (10 cards)...');
 
       // Call the Supabase Edge Function to trigger test sync
       const { data, error } = await supabase.functions.invoke('scrydex-sync?action=test-sync', {
@@ -96,7 +91,6 @@ class ScrydexSyncService {
         throw error;
       }
 
-      console.log('✅ Test sync triggered successfully:', data);
       return data;
 
     } catch (error) {
@@ -203,7 +197,6 @@ class ScrydexSyncService {
     try {
       const needsSync = await this.isSyncNeeded();
       if (needsSync) {
-        console.log('🔄 Auto-sync needed, triggering...');
         await this.triggerSync();
         return true;
       }

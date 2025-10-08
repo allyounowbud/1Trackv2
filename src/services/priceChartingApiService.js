@@ -33,11 +33,9 @@ class PriceChartingApiService {
       // Test the connection
       await this.testConnection()
       this.isInitialized = true
-      console.log('✅ PriceCharting API Service initialized')
       return true
     } catch (error) {
-      console.warn('⚠️ PriceCharting API Service not available:', error.message)
-      // Don't throw error - allow app to continue without PriceCharting
+      // Service not available - this is expected in development
       this.isInitialized = false
       return false
     }
@@ -51,9 +49,7 @@ class PriceChartingApiService {
       })
       
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`PriceCharting test failed: ${response.status}`, errorText)
-        throw new Error(`API test failed: ${response.status}`)
+        throw new Error(`API function not deployed (${response.status})`)
       }
       
       const data = await response.json()
@@ -62,10 +58,9 @@ class PriceChartingApiService {
         throw new Error(data['error-message'] || 'API test failed')
       }
       
-      console.log('✅ PriceCharting connection successful')
       return data
     } catch (error) {
-      console.error('❌ PriceCharting connection failed:', error)
+      // Silently fail - this is expected if function isn't deployed
       throw error
     }
   }
@@ -81,15 +76,12 @@ class PriceChartingApiService {
     const cachedData = apiCacheService.get(cacheKey)
     
     if (cachedData) {
-      console.log('📦 Using cached sealed products for:', query)
       return cachedData
     }
 
     try {
       // Search for sealed products specifically
       const searchQuery = encodeURIComponent(query)
-      console.log('🔍 Fetching fresh sealed products for:', query)
-      console.log('🔍 PriceCharting API call:', `${this.baseUrl}?endpoint=search&q=${searchQuery}&game=${game}`)
       const response = await fetch(`${this.baseUrl}?endpoint=search&q=${searchQuery}&game=${game}`, {
         headers: this.getAuthHeaders()
       })
@@ -119,8 +111,6 @@ class PriceChartingApiService {
       // Cache the result
       apiCacheService.set(cacheKey, sealedProducts, 'sealed')
       
-      console.log('🔍 Found sealed products:', sealedProducts.length)
-      console.log('🔍 Sample sealed product:', sealedProducts[0])
       
       return sealedProducts
     } catch (error) {
@@ -140,12 +130,10 @@ class PriceChartingApiService {
     const cachedData = apiCacheService.get(cacheKey)
     
     if (cachedData) {
-      console.log('📦 Using cached product details for:', productId)
       return cachedData
     }
 
     try {
-      console.log('🔍 Fetching fresh product details for:', productId)
       const response = await fetch(`${this.baseUrl}?endpoint=product&id=${productId}`, {
         headers: this.getAuthHeaders()
       })
@@ -253,7 +241,6 @@ class PriceChartingApiService {
 
   // Format product data for our app
   formatProductData(product) {
-    console.log('🔍 PriceCharting product data:', product);
     
     // Handle missing or undefined fields - use correct PriceCharting field names
     const productName = product['product-name'] || product.name || product.product_name || 'Unknown Product';

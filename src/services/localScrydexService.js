@@ -17,13 +17,11 @@ class LocalScrydexService {
     if (this.cache.has(cacheKey)) {
       const cached = this.cache.get(cacheKey);
       if (Date.now() - cached.timestamp < this.cacheTimeout) {
-        console.log('🎯 Using cached local search results');
         return cached.data;
       }
     }
 
     try {
-      console.log('🔍 Searching local Scrydex database for:', query);
       
       const { data, error, count } = await supabase
         .from('pokemon_cards')
@@ -55,7 +53,6 @@ class LocalScrydexService {
         timestamp: Date.now()
       });
 
-      console.log(`✅ Found ${data?.length || 0} cards in local database`);
       return result;
 
     } catch (error) {
@@ -72,13 +69,11 @@ class LocalScrydexService {
     if (this.cache.has(cacheKey)) {
       const cached = this.cache.get(cacheKey);
       if (Date.now() - cached.timestamp < this.cacheTimeout) {
-        console.log('🎯 Using cached expansion search results');
         return cached.data;
       }
     }
 
     try {
-      console.log('🔍 Searching local database for expansion:', expansionId);
       
       const { data, error, count } = await supabase
         .from('pokemon_cards')
@@ -110,7 +105,6 @@ class LocalScrydexService {
         timestamp: Date.now()
       });
 
-      console.log(`✅ Found ${data?.length || 0} cards for expansion ${expansionId}`);
       return result;
 
     } catch (error) {
@@ -127,13 +121,11 @@ class LocalScrydexService {
     if (this.cache.has(cacheKey)) {
       const cached = this.cache.get(cacheKey);
       if (Date.now() - cached.timestamp < this.cacheTimeout) {
-        console.log('🎯 Using cached expansions');
         return cached.data;
       }
     }
 
     try {
-      console.log('🔍 Getting expansions from local database');
       
       const { data, error, count } = await supabase
         .from('pokemon_expansions')
@@ -164,7 +156,6 @@ class LocalScrydexService {
         timestamp: Date.now()
       });
 
-      console.log(`✅ Found ${data?.length || 0} expansions in local database`);
       return result;
 
     } catch (error) {
@@ -215,7 +206,6 @@ class LocalScrydexService {
   // Clear cache
   clearCache() {
     this.cache.clear();
-    console.log('🗑️ Local Scrydex cache cleared');
   }
 }
 

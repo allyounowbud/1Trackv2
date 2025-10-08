@@ -10,9 +10,7 @@ export const useCollection = () => {
     queryKey: ['collection-aggregated'],
     queryFn: async () => {
       try {
-        console.log('useCollection: Starting to fetch aggregated items...');
         const result = await dataService.getAggregatedCollectionItems();
-        console.log('useCollection: Got result:', result);
         return result;
       } catch (err) {
         console.error('Error fetching collection items:', err);

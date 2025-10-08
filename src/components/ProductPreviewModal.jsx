@@ -141,14 +141,6 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
     }
   }
   
-  // Debug: Log what we actually have
-  console.log('🔍 ProductPreviewModal - Product data:', {
-    name: product.name,
-    prices: product.prices,
-    priceData: product.priceData,
-    marketValue: marketValue,
-    priceSource: priceSource
-  });
   
   // Check if we have valid pricing data
   const hasPricing = marketValue > 0 || (product.raw_prices && product.raw_prices.length > 0);

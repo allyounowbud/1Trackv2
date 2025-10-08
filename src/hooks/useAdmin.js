@@ -51,7 +51,6 @@ export function useAdmin() {
           }
         } catch (error) {
           // Database check failed, continue without it
-          console.log('Database admin check failed:', error.message);
         }
       }
 
@@ -59,13 +58,6 @@ export function useAdmin() {
       const hasAdminAccess = isEmailAdmin || isMetadataAdmin || isDatabaseAdmin;
       
       setIsAdmin(hasAdminAccess);
-      console.log('Admin check:', {
-        email: userEmail,
-        isEmailAdmin,
-        isMetadataAdmin,
-        isDatabaseAdmin,
-        finalResult: hasAdminAccess
-      });
 
     } catch (error) {
       console.error('Error checking admin status:', error);

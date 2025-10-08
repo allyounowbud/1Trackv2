@@ -26,7 +26,6 @@ class DatabasePricingService {
       }
       
       this.isInitialized = true;
-      console.log('✅ Database pricing service initialized');
     } catch (error) {
       console.error('❌ Database pricing service initialization error:', error);
       throw error;
@@ -91,7 +90,6 @@ class DatabasePricingService {
       }
 
       if (!data) {
-        console.log('📦 No pricing data found for card:', cardId);
         return null;
       }
 
@@ -140,7 +138,6 @@ class DatabasePricingService {
         cardId: data.id
       };
 
-      console.log('📦 Retrieved pricing data from database for card:', cardId);
       return pricingData;
     } catch (error) {
       console.error('❌ Error in getCardPricing:', error);
@@ -255,7 +252,6 @@ class DatabasePricingService {
         };
       });
 
-      console.log(`📦 Retrieved pricing data for ${Object.keys(pricingMap).length} cards from database`);
       return pricingMap;
     } catch (error) {
       console.error('❌ Error in getMultipleCardPricing:', error);

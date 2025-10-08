@@ -13,9 +13,7 @@ class LocalSearchService {
   async initialize() {
     if (this.isInitialized) return;
     
-    console.log('🚀 Initializing Local Search Service...');
     this.isInitialized = true;
-    console.log('✅ Local Search Service initialized');
   }
 
   /**
@@ -41,10 +39,6 @@ class LocalSearchService {
     } = options;
 
     try {
-      console.log('🔍 Local search for:', query, 'pageSize:', pageSize);
-      console.log('🔍 Filter values:', { supertype, types, subtypes, rarity, artists, weaknesses, resistances });
-      console.log('🔍 Supertype filter details:', { supertype, length: supertype?.length, isArray: Array.isArray(supertype) });
-
       // Build the query
       let supabaseQuery = supabase
         .from('pokemon_cards')
@@ -75,7 +69,6 @@ class LocalSearchService {
 
       // Apply supertype filter
       if (supertype && supertype.length > 0) {
-        console.log('🔍 searchCards: Applying supertype filter:', supertype);
         supabaseQuery = supabaseQuery.in('supertype', supertype);
       }
 
@@ -100,38 +93,25 @@ class LocalSearchService {
       }
 
       // Apply sorting
-      console.log('🔢 Sort parameters received:', { sortBy, sortOrder });
       if (sortBy && sortOrder) {
         if (sortBy === 'number') {
-          // For numeric sorting, we'll handle it on the frontend since Supabase doesn't support CAST in ORDER BY with SELECT *
-          console.log('🔢 Number sorting will be handled on frontend');
-          supabaseQuery = supabaseQuery.order('name', { ascending: true }); // Default alphabetical order
+          supabaseQuery = supabaseQuery.order('number', { ascending: sortOrder === 'asc', nullsLast: true });
         } else if (sortBy === 'raw_market' || sortBy === 'graded_market') {
-          // For price fields, cast to NUMERIC and handle nulls properly
-          console.log('🔢 Sorting by price field:', sortBy, 'order:', sortOrder === 'asc' ? 'ascending' : 'descending');
           supabaseQuery = supabaseQuery.order(`CAST(${sortBy} AS NUMERIC)`, { 
             ascending: sortOrder === 'asc',
-            nullsFirst: false // Put null values at the end
+            nullsFirst: false
           });
         } else {
-          console.log('🔢 Sorting by field:', sortBy, 'order:', sortOrder === 'asc' ? 'ascending' : 'descending');
           supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' });
         }
       } else {
-        // Default sorting - alphabetical by name, frontend will handle numerical sorting
-        console.log('🔢 Default sorting by name (frontend will handle numerical sorting)');
         supabaseQuery = supabaseQuery.order('name', { ascending: true });
       }
 
-      // Apply pagination - but load ALL cards if sorting by number for proper numerical sorting
-      if (sortBy === 'number') {
-        console.log('🔢 Loading ALL cards for numerical sorting (no pagination)');
-        // Don't apply pagination when sorting by number - we need all cards to sort properly
-      } else {
-        const from = (page - 1) * pageSize;
-        const to = from + pageSize - 1;
-        supabaseQuery = supabaseQuery.range(from, to);
-      }
+      // Apply pagination - use database sorting for performance
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      supabaseQuery = supabaseQuery.range(from, to);
 
       // Execute query
       const { data: cards, error, count } = await supabaseQuery;
@@ -139,27 +119,6 @@ class LocalSearchService {
       if (error) {
         console.error('Local search error:', error);
         throw new Error(`Search failed: ${error.message}`);
-      }
-
-      // Debug: Check if we have any Trainer cards in the database
-      if (supertype && supertype.includes('Trainer')) {
-        console.log('🔍 Checking for Trainer cards in database...');
-        const { data: trainerCheck, error: trainerError } = await supabase
-          .from('pokemon_cards')
-          .select('id, name, supertype')
-          .eq('supertype', 'Trainer')
-          .limit(5);
-        
-        if (!trainerError && trainerCheck) {
-          console.log('🔍 Found Trainer cards in database:', trainerCheck);
-        } else {
-          console.log('🔍 No Trainer cards found in database or error:', trainerError);
-        }
-      }
-
-      // Debug: Log first few card names to see sorting
-      if (cards && cards.length > 0) {
-        console.log('🔢 First 5 card names:', cards.slice(0, 5).map(card => card.name));
       }
 
       // Format response to match Scrydex API format
@@ -171,7 +130,6 @@ class LocalSearchService {
         totalPages: Math.ceil((count || 0) / pageSize)
       };
 
-      console.log(`📊 Local search results: ${result.data.length} cards found (${result.total} total)`);
       return result;
 
     } catch (error) {
@@ -194,8 +152,6 @@ class LocalSearchService {
     } = options;
 
     try {
-      console.log('🔍 Fetching local expansions...');
-
       let supabaseQuery = supabase
         .from('pokemon_expansions')
         .select(`
@@ -235,7 +191,6 @@ class LocalSearchService {
         throw new Error(`Failed to fetch expansions: ${error.message}`);
       }
 
-      console.log(`📊 Local expansions: ${expansions?.length || 0} found`);
       return expansions || [];
 
     } catch (error) {
@@ -251,8 +206,6 @@ class LocalSearchService {
    */
   async getCardById(cardId) {
     try {
-      console.log('🔍 Fetching card by ID:', cardId);
-
       const { data: card, error } = await supabase
         .from('pokemon_cards')
         .select('*')
@@ -287,8 +240,6 @@ class LocalSearchService {
     } = options
 
     try {
-      console.log('🔍 Searching sealed products for:', query)
-      
       let supabaseQuery = supabase
         .from('sealed_products')
         .select('*', { count: 'exact' })
@@ -312,14 +263,12 @@ class LocalSearchService {
           supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
         } else if (sortBy === 'number') {
           // Sealed products don't have a 'number' column, use 'name' instead
-          console.log('⚠️ Sealed products don\'t have a number column, sorting by name instead')
           supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
         } else {
           // Try to order by the requested column, fallback to 'name' if it doesn't exist
           try {
             supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' })
           } catch (error) {
-            console.log(`⚠️ Column '${sortBy}' doesn't exist in sealed_products, using 'name' instead`)
             supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
           }
         }
@@ -338,8 +287,6 @@ class LocalSearchService {
         console.error('❌ Error fetching sealed products:', error)
         throw error
       }
-
-      console.log(`📦 Found ${sealedProducts?.length || 0} sealed products for query "${query}"`)
 
       return {
         data: sealedProducts || [],
@@ -370,8 +317,6 @@ class LocalSearchService {
     } = options
 
     try {
-      console.log('🔍 Getting sealed products for expansion:', expansionId)
-      
       let supabaseQuery = supabase
         .from('sealed_products')
         .select('*', { count: 'exact' })
@@ -388,14 +333,11 @@ class LocalSearchService {
           supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
         } else if (sortBy === 'number') {
           // Sealed products don't have a 'number' column, use 'name' instead
-          console.log('⚠️ Sealed products don\'t have a number column, sorting by name instead')
           supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
         } else {
-          // Try to order by the requested column, fallback to 'name' if it doesn't exist
           try {
             supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' })
           } catch (error) {
-            console.log(`⚠️ Column '${sortBy}' doesn't exist in sealed_products, using 'name' instead`)
             supabaseQuery = supabaseQuery.order('name', { ascending: sortOrder === 'asc' })
           }
         }
@@ -414,8 +356,6 @@ class LocalSearchService {
         console.error('❌ Error fetching sealed products:', error)
         throw error
       }
-
-      console.log(`📦 Found ${sealedProducts?.length || 0} sealed products for expansion ${expansionId}`)
 
       return {
         data: sealedProducts || [],
@@ -453,10 +393,6 @@ class LocalSearchService {
     } = options;
 
     try {
-      console.log('🔍 Fetching cards for expansion:', expansionId, 'pageSize:', pageSize);
-      console.log('🔍 Expansion filter values:', { supertype, types, subtypes, rarity, artists, weaknesses, resistances });
-      console.log('🔍 Expansion supertype filter details:', { supertype, length: supertype?.length, isArray: Array.isArray(supertype) });
-
       let supabaseQuery = supabase
         .from('pokemon_cards')
         .select('*', { count: 'exact' })
@@ -474,7 +410,6 @@ class LocalSearchService {
 
       // Apply supertype filter
       if (supertype && supertype.length > 0) {
-        console.log('🔍 searchCards: Applying supertype filter:', supertype);
         supabaseQuery = supabaseQuery.in('supertype', supertype);
       }
 
@@ -499,54 +434,26 @@ class LocalSearchService {
       }
 
       // Apply sorting
-      console.log('🔢 Expansion sort parameters received:', { sortBy, sortOrder });
       if (sortBy && sortOrder) {
         if (sortBy === 'number') {
-          // For numeric sorting, we'll handle it on the frontend since Supabase doesn't support CAST in ORDER BY with SELECT *
-          console.log('🔢 Expansion number sorting will be handled on frontend');
-          supabaseQuery = supabaseQuery.order('name', { ascending: true }); // Default alphabetical order
+          supabaseQuery = supabaseQuery.order('name', { ascending: true });
         } else if (sortBy === 'raw_market' || sortBy === 'graded_market') {
-          // For price fields, cast to NUMERIC and handle nulls properly
-          console.log('🔢 Expansion sorting by price field:', sortBy, 'order:', sortOrder === 'asc' ? 'ascending' : 'descending');
           supabaseQuery = supabaseQuery.order(`CAST(${sortBy} AS NUMERIC)`, { 
             ascending: sortOrder === 'asc',
-            nullsFirst: false // Put null values at the end
+            nullsFirst: false
           });
         } else {
-          console.log('🔢 Expansion sorting by field:', sortBy, 'order:', sortOrder === 'asc' ? 'ascending' : 'descending');
           supabaseQuery = supabaseQuery.order(sortBy, { ascending: sortOrder === 'asc' });
         }
       } else {
-        // Default sorting - alphabetical by name, frontend will handle numerical sorting
-        console.log('🔢 Expansion default sorting by name (frontend will handle numerical sorting)');
         supabaseQuery = supabaseQuery.order('name', { ascending: true });
       }
-
-      // For expansion views, always load ALL cards (no pagination)
-      console.log('📦 Expansion view - loading ALL cards (no pagination)');
-      // Don't apply pagination for expansion views - load entire set
 
       const { data: cards, error, count } = await supabaseQuery;
 
       if (error) {
         console.error('Get cards by expansion error:', error);
         throw new Error(`Failed to fetch expansion cards: ${error.message}`);
-      }
-
-      // Debug: Check if we have any Trainer cards in the database
-      if (supertype && supertype.includes('Trainer')) {
-        console.log('🔍 Expansion: Checking for Trainer cards in database...');
-        const { data: trainerCheck, error: trainerError } = await supabase
-          .from('pokemon_cards')
-          .select('id, name, supertype')
-          .eq('supertype', 'Trainer')
-          .limit(5);
-        
-        if (!trainerError && trainerCheck) {
-          console.log('🔍 Expansion: Found Trainer cards in database:', trainerCheck);
-        } else {
-          console.log('🔍 Expansion: No Trainer cards found in database or error:', trainerError);
-        }
       }
 
       const result = {
@@ -557,7 +464,6 @@ class LocalSearchService {
         totalPages: Math.ceil((count || 0) / pageSize)
       };
 
-      console.log(`📊 Expansion cards: ${result.data.length} found (${result.total} total)`);
       return result;
 
     } catch (error) {
@@ -572,8 +478,6 @@ class LocalSearchService {
    */
   async getDatabaseStats() {
     try {
-      console.log('🔍 Fetching database statistics...');
-
       const [cardsResult, expansionsResult] = await Promise.all([
         supabase
           .from('pokemon_cards')
@@ -583,14 +487,11 @@ class LocalSearchService {
           .select('*', { count: 'exact', head: true })
       ]);
 
-      const stats = {
+      return {
         totalCards: cardsResult.count || 0,
         totalExpansions: expansionsResult.count || 0,
         lastUpdated: new Date().toISOString()
       };
-
-      console.log('📊 Database stats:', stats);
-      return stats;
 
     } catch (error) {
       console.error('Get database stats error:', error);
@@ -613,8 +514,6 @@ class LocalSearchService {
     } = options;
 
     try {
-      console.log('🔍 Advanced local search with filters:', filters);
-
       let supabaseQuery = supabase
         .from('pokemon_cards')
         .select('*', { count: 'exact' });
@@ -671,16 +570,13 @@ class LocalSearchService {
         throw new Error(`Advanced search failed: ${error.message}`);
       }
 
-      const result = {
+      return {
         data: cards || [],
         total: count || 0,
         page: page,
         pageSize: pageSize,
         totalPages: Math.ceil((count || 0) / pageSize)
       };
-
-      console.log(`📊 Advanced search results: ${result.data.length} cards found (${result.total} total)`);
-      return result;
 
     } catch (error) {
       console.error('Advanced search error:', error);

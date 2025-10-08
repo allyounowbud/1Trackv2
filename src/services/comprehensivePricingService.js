@@ -28,7 +28,6 @@ class ComprehensivePricingService {
     }
 
     try {
-      console.log('🚀 Initializing Comprehensive Pricing Service...');
 
       // Initialize all sub-services
       await Promise.all([
@@ -40,7 +39,6 @@ class ComprehensivePricingService {
       // Check if pricing sync is needed and trigger if necessary
       const needsSync = await pricingSyncService.isPricingSyncNeeded();
       if (needsSync) {
-        console.log('💰 Auto-triggering pricing sync on initialization...');
         pricingSyncService.triggerPricingSync();
       }
 
@@ -50,7 +48,6 @@ class ComprehensivePricingService {
       }
 
       this.isInitialized = true;
-      console.log('✅ Comprehensive Pricing Service initialized');
     } catch (error) {
       console.error('❌ Failed to initialize Comprehensive Pricing Service:', error);
       throw error;
@@ -75,7 +72,6 @@ class ComprehensivePricingService {
       priority = 'balanced' // 'speed', 'balanced', 'freshness'
     } = options;
 
-    console.log(`💰 Getting pricing for ${apiId} (priority: ${priority})`);
 
     try {
       switch (priority) {
@@ -109,7 +105,6 @@ class ComprehensivePricingService {
    */
   async getFastPricing(apiId) {
     try {
-      console.log(`⚡ Fast pricing lookup for ${apiId}`);
       return await databasePricingService.getCardPricing(apiId);
     } catch (error) {
       console.error(`❌ Fast pricing failed for ${apiId}:`, error);
@@ -125,13 +120,11 @@ class ComprehensivePricingService {
    */
   async getFreshPricing(apiId, options = {}) {
     try {
-      console.log(`🌐 Fresh pricing lookup for ${apiId}`);
       
       // Check availability first
       const availability = await realTimePricingService.checkPricingAvailability(apiId);
       
       if (availability.needsRealTime) {
-        console.log(`🔄 Fetching real-time pricing for ${apiId}`);
         const realTimePricing = await realTimePricingService.fetchRealTimePricing(apiId);
         if (realTimePricing) {
           return realTimePricing;
@@ -139,7 +132,6 @@ class ComprehensivePricingService {
       }
 
       // Fallback to database
-      console.log(`📦 Fallback to database pricing for ${apiId}`);
       return await databasePricingService.getCardPricing(apiId);
     } catch (error) {
       console.error(`❌ Fresh pricing failed for ${apiId}:`, error);
@@ -167,7 +159,6 @@ class ComprehensivePricingService {
       maxConcurrent = 5
     } = options;
 
-    console.log(`💰 Getting pricing for ${apiIds.length} cards (priority: ${priority})`);
 
     try {
       switch (priority) {
@@ -201,7 +192,6 @@ class ComprehensivePricingService {
     }
 
     try {
-      console.log(`📦 Getting sealed product pricing for ${apiId}`);
       return await databasePricingService.getSealedProductPricing(apiId);
     } catch (error) {
       console.error(`❌ Error getting sealed product pricing for ${apiId}:`, error);
@@ -218,7 +208,6 @@ class ComprehensivePricingService {
       clearInterval(this.autoSyncInterval);
     }
 
-    console.log(`⏰ Starting automatic pricing sync every ${intervalHours} hours`);
     
     // Run immediately if needed
     pricingSyncService.autoSyncIfNeeded();
@@ -241,7 +230,6 @@ class ComprehensivePricingService {
       this.autoSyncInterval = null;
     }
     this.autoSyncEnabled = false;
-    console.log('⏹️ Stopped automatic pricing sync');
   }
 
   /**
@@ -251,7 +239,6 @@ class ComprehensivePricingService {
    */
   async triggerPricingSync(options = {}) {
     try {
-      console.log('💰 Manually triggering pricing sync...');
       const result = await pricingSyncService.triggerPricingSync();
       
       // Clear smart cache after sync to ensure fresh data
@@ -312,9 +299,7 @@ class ComprehensivePricingService {
    * Clear all caches
    */
   clearAllCaches() {
-    console.log('🗑️ Clearing all pricing caches...');
     smartPricingService.clearCache();
-    console.log('✅ All pricing caches cleared');
   }
 
   /**
@@ -324,7 +309,6 @@ class ComprehensivePricingService {
    */
   async healthCheck(apiId = 'sv1-025') {
     try {
-      console.log(`🏥 Running pricing health check with ${apiId}...`);
       
       const startTime = Date.now();
       

@@ -22,7 +22,6 @@ export const LanguageProvider = ({ children }) => {
       try {
         const savedLanguage = getLanguagePreference();
         setPreferredLanguageState(savedLanguage);
-        console.log('🌐 Loaded language preference:', savedLanguage);
       } catch (error) {
         console.error('Failed to load language preference:', error);
         setPreferredLanguageState('en'); // Default to English
@@ -40,9 +39,8 @@ export const LanguageProvider = ({ children }) => {
       if (language === 'en' || language === 'ja') {
         setLanguagePreference(language);
         setPreferredLanguageState(language);
-        console.log('🌐 Language preference updated to:', language);
       } else {
-        console.warn('Invalid language code:', language);
+        // Invalid language code - ignore
       }
     } catch (error) {
       console.error('Failed to save language preference:', error);

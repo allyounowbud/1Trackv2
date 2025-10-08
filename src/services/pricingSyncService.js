@@ -41,7 +41,6 @@ class PricingSyncService {
       const now = new Date();
       const hoursSinceSync = (now - lastSync) / (1000 * 60 * 60);
 
-      console.log(`🕐 Hours since last pricing sync: ${hoursSinceSync.toFixed(1)}`);
       return hoursSinceSync >= 12;
     } catch (error) {
       console.error('Error checking pricing sync status:', error);
@@ -55,13 +54,11 @@ class PricingSyncService {
    */
   async triggerPricingSync() {
     if (this.syncInProgress) {
-      console.log('⏳ Pricing sync already in progress');
       return { success: false, message: 'Sync already in progress' };
     }
 
     try {
       this.syncInProgress = true;
-      console.log('💰 Triggering pricing-only sync...');
 
       // Call Supabase Edge Function for pricing sync
       const { data, error } = await supabase.functions.invoke('scrydex-sync?action=pricing-sync', {
@@ -78,7 +75,6 @@ class PricingSyncService {
       // Update sync status
       await this.updatePricingSyncStatus();
 
-      console.log('✅ Pricing sync completed successfully:', data);
       return { success: true, data };
 
     } catch (error) {
@@ -108,7 +104,6 @@ class PricingSyncService {
       if (error) {
         console.error('Failed to update pricing sync status:', error);
       } else {
-        console.log('✅ Updated pricing sync status');
       }
     } catch (error) {
       console.error('Error updating pricing sync status:', error);
@@ -123,11 +118,9 @@ class PricingSyncService {
     try {
       const needsSync = await this.isPricingSyncNeeded();
       if (needsSync) {
-        console.log('💰 Auto-pricing sync needed, triggering...');
         const result = await this.triggerPricingSync();
         return result.success;
       }
-      console.log('💰 Pricing is up to date, no sync needed');
       return false;
     } catch (error) {
       console.error('Auto-pricing sync failed:', error);
@@ -233,7 +226,6 @@ class PricingSyncService {
   scheduleAutoSync(intervalHours = 12) {
     const intervalMs = intervalHours * 60 * 60 * 1000;
     
-    console.log(`⏰ Scheduling automatic pricing sync every ${intervalHours} hours`);
     
     // Run immediately if needed
     this.autoSyncIfNeeded();

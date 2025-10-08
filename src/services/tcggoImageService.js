@@ -14,13 +14,11 @@ class TcgGoImageService {
   // Initialize the service
   async initialize() {
     try {
-      // Test connection to TCGGo API
-      console.log('🖼️ Initializing TCGGo Image Service...')
       this.isInitialized = true
-      console.log('✅ TCGGo Image Service initialized')
+      return true
     } catch (error) {
-      console.error('❌ Failed to initialize TCGGo Image Service:', error)
-      throw error
+      this.isInitialized = false
+      return false
     }
   }
 
@@ -39,7 +37,6 @@ class TcgGoImageService {
     }
 
     try {
-      console.log(`🔍 Searching CardMarket for images: ${cardName}`)
       
       // Use our backend proxy to search CardMarket
       const response = await fetch(`${this.baseUrl}?cardName=${encodeURIComponent(cardName)}&game=${game}`, {
@@ -51,7 +48,6 @@ class TcgGoImageService {
       }
 
       const data = await response.json()
-      console.log('🖼️ CardMarket image search results:', data)
 
       return data.results || []
     } catch (error) {
@@ -67,7 +63,6 @@ class TcgGoImageService {
     }
 
     try {
-      console.log(`🖼️ Fetching TCGGo image for card ID: ${cardId}`)
       
       const response = await fetch(`${this.baseUrl}/cards/${cardId}/images?game=${game}`, {
         headers: this.getAuthHeaders()
@@ -78,7 +73,6 @@ class TcgGoImageService {
       }
 
       const data = await response.json()
-      console.log('🖼️ TCGGo card image:', data)
 
       return data
     } catch (error) {
@@ -99,16 +93,13 @@ class TcgGoImageService {
       // Check cache first
       const cacheKey = `${searchQuery}-${game}`
       if (this.imageCache.has(cacheKey)) {
-        console.log(`🔄 Using cached TCGGo result for: ${searchQuery}`)
         return this.imageCache.get(cacheKey)
       }
       
-      console.log(`🔍 Searching TCGGo for: "${searchQuery}" (card: "${cardName}", set: "${setName}")`)
       
       const results = await this.searchCardImages(searchQuery, game)
       
       if (results.length === 0) {
-        console.log(`No CardMarket images found for: ${searchQuery}`)
         return null
       }
 
@@ -147,7 +138,6 @@ class TcgGoImageService {
       let result = null
       
       if (bestMatch && bestMatch.image_url) {
-        console.log(`✅ Found CardMarket match for ${cardName} (score: ${bestScore}): ${bestMatch.image_url}`)
         result = {
           id: bestMatch.id,
           name: bestMatch.name,
@@ -156,7 +146,6 @@ class TcgGoImageService {
           source: 'cardmarket'
         }
       } else if (bestMatch && bestMatch.image_url && bestScore > 25) {
-        console.log(`⚠️ Using fallback CardMarket result for ${cardName} (score: ${bestScore}): ${bestMatch.image_url}`)
         result = {
           id: bestMatch.id,
           name: bestMatch.name,
@@ -179,7 +168,6 @@ class TcgGoImageService {
   // Test connection to CardMarket API via our backend
   async testConnection() {
     try {
-      console.log('🔍 Testing CardMarket API connection via backend...')
       
       const response = await fetch(`${this.baseUrl}?cardName=charizard&game=pokemon`, {
         headers: this.getAuthHeaders()
@@ -190,7 +178,6 @@ class TcgGoImageService {
       }
 
       const data = await response.json()
-      console.log('✅ CardMarket API connection successful:', data)
       return true
     } catch (error) {
       console.error('❌ CardMarket API connection test failed:', error)

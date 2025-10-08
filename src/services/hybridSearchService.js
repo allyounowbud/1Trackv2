@@ -1,14 +1,11 @@
 /**
  * Hybrid Search Service
- * Combines Scrydex API for singles and TCGGo/PriceCharting API for sealed products
- * RapidAPI is used for image enhancement and TCGGo pricing
+ * Uses local Supabase database for both singles and sealed products
+ * Optimized for fast performance with no external API dependencies
  * Automatically routes searches based on product type
  */
 
 import localSearchService from './localSearchService'
-import priceChartingApiService from './priceChartingApiService'
-import rapidApiService from './rapidApiService'
-import tcggoSealedPricingService from './tcggoSealedPricingService'
 import searchCacheService from './searchCacheService'
 
 class HybridSearchService {
@@ -22,35 +19,10 @@ class HybridSearchService {
       // Initialize local search service (fast, uses Supabase data)
       await localSearchService.initialize()
       
-      // Initialize PriceCharting service (optional - may fail if no API key)
-      const priceChartingInitialized = await priceChartingApiService.initialize()
-      if (!priceChartingInitialized) {
-        console.warn('⚠️ PriceCharting not available - sealed product pricing disabled')
-      }
-      
-      // Initialize RapidAPI service for image enhancement (optional - may fail if no API key)
-      const rapidApiInitialized = await rapidApiService.initialize()
-      if (!rapidApiInitialized) {
-        console.warn('⚠️ RapidAPI not available - image enhancement disabled')
-      }
-      
-      // Initialize TCGGo Sealed Pricing service (optional - may fail if no API key)
-      const tcggoSealedInitialized = await tcggoSealedPricingService.initialize()
-      if (!tcggoSealedInitialized) {
-        console.warn('⚠️ TCGGo Sealed Pricing not available - falling back to PriceCharting')
-      }
-      
+      // Skip external API services - we now use local database for everything
       this.isInitialized = true
-      console.log('✅ Hybrid Search Service initialized')
       return true
     } catch (error) {
-      console.error('❌ Failed to initialize Hybrid Search Service:', error)
-      // Still mark as initialized if local search service works
-      if (localSearchService.isInitialized) {
-        this.isInitialized = true
-        console.log('✅ Hybrid Search Service initialized (limited functionality)')
-        return true
-      }
       return false
     }
   }
@@ -105,11 +77,8 @@ class HybridSearchService {
         weaknesses = null,
         resistances = null
       } = options // Optimized pagination for fast loading
-      console.log('🔍 HybridSearch smartSearch - pageSize:', pageSize, 'page:', page, 'sortBy:', sortBy, 'sortOrder:', sortOrder, 'filters:', { supertype, types, subtypes, rarity, artists, weaknesses, resistances });
       
       // Use local search service for both Pokémon cards and sealed products
-      console.log('🎯 Using local database search for Pokémon cards and sealed products')
-      
       let singlesResults = []
       let sealedResults = []
       let totalSingles = 0
@@ -149,10 +118,9 @@ class HybridSearchService {
         if (localResults && localResults.data) {
           singlesResults = localResults.data
           totalSingles = localResults.total || 0
-          console.log(`✅ Found ${singlesResults.length} Pokémon cards in local database`)
         }
       } catch (localError) {
-        console.warn('⚠️ Local Pokémon cards search failed:', localError.message)
+        // Silent fail
       }
       
       try {
@@ -168,17 +136,15 @@ class HybridSearchService {
           if (sealedSearchResults && sealedSearchResults.data) {
             sealedResults = sealedSearchResults.data
             totalSealed = sealedSearchResults.total || 0
-            console.log(`✅ Found ${sealedResults.length} sealed products in local database`)
           }
         }
       } catch (sealedError) {
-        console.warn('⚠️ Local sealed products search failed:', sealedError.message)
+        // Silent fail
       }
       
       // Return combined results if we found anything
       if (singlesResults.length > 0 || sealedResults.length > 0) {
         const totalResults = totalSingles + totalSealed
-        console.log(`✅ Found ${singlesResults.length} singles + ${sealedResults.length} sealed = ${totalResults} total results`)
         
         return {
           singles: singlesResults,
@@ -229,33 +195,24 @@ class HybridSearchService {
       const isSingleQuery = this.isSingleCardQuery(query)
 
 
-      // If it's clearly a sealed product query, only search PriceCharting
+      // If it's clearly a sealed product query, search local database
       if (isSealedQuery && !isSingleQuery) {
-        if (priceChartingApiService.isInitialized) {
-          const sealedResults = await priceChartingApiService.searchSealedProducts(query, game)
+        try {
+          const sealedResults = await localSearchService.searchSealedProducts(query, {
+            page,
+            pageSize,
+            sortBy: 'name',
+            sortOrder: 'asc'
+          })
           
-          // Format and sort sealed products by expansion
-          let formattedProducts = []
-          if (sealedResults && Array.isArray(sealedResults)) {
-            formattedProducts = sealedResults.map(product => 
-              priceChartingApiService.formatProductData(product)
-            )
+           if (sealedResults && sealedResults.data) {
+            results.sealed = sealedResults.data
+            results.total = sealedResults.total || 0
+          } else {
+            results.sealed = []
+            results.total = 0
           }
-          
-          // If we have an expansion ID, filter and sort by expansion
-          if (expansionId) {
-            formattedProducts = await this.sortSealedProductsByExpansion(formattedProducts, expansionId)
-          }
-          
-          // Apply pagination to sorted results
-          const startIndex = (page - 1) * pageSize
-          const endIndex = startIndex + pageSize
-          const paginatedProducts = formattedProducts.slice(startIndex, endIndex)
-          
-          results.sealed = paginatedProducts
-          results.total = formattedProducts.length
-        } else {
-          console.log('🔍 PriceCharting not available - no sealed products found')
+        } catch (error) {
           results.sealed = []
           results.total = 0
         }
@@ -276,26 +233,20 @@ class HybridSearchService {
         } catch (error) {
         }
 
-        // Search sealed via PriceCharting (if available)
-        if (priceChartingApiService.isInitialized) {
-          try {
-            const sealedResults = await priceChartingApiService.searchSealedProducts(query, game)
-            let formattedProducts = []
-            if (sealedResults && Array.isArray(sealedResults)) {
-              formattedProducts = sealedResults.map(product => 
-                priceChartingApiService.formatProductData(product)
-              )
-            }
-            
-            // If we have an expansion ID, filter and sort by expansion
-            if (expansionId) {
-              formattedProducts = await this.sortSealedProductsByExpansion(formattedProducts, expansionId)
-            }
-            
-            results.sealed = formattedProducts
-          } catch (error) {
+        // Search sealed via local database
+        try {
+          const sealedResults = await localSearchService.searchSealedProducts(query, {
+            page,
+            pageSize: Math.max(1, Math.floor(pageSize / 2)), // Split page size between singles and sealed
+            sortBy: 'name',
+            sortOrder: 'asc'
+          })
+          
+          if (sealedResults && sealedResults.data) {
+            results.sealed = sealedResults.data
           }
-        } else {
+        } catch (error) {
+          // Silent fail
         }
 
         // For combined results, we need to handle pagination differently
@@ -320,7 +271,6 @@ class HybridSearchService {
 
       return results
     } catch (error) {
-      console.error('❌ Hybrid search failed:', error)
       throw error
     }
   }
@@ -331,47 +281,25 @@ class HybridSearchService {
       throw new Error('Search service not initialized')
     }
 
-    // Try TCGGo first (better pricing from TCGPlayer/CardMarket)
-    if (tcggoSealedPricingService.isReady()) {
-      try {
-        console.log('🔍 Using TCGGo for sealed product search')
-        const results = await tcggoSealedPricingService.searchSealedProducts(query, game)
+    try {
+      const results = await localSearchService.searchSealedProducts(query, {
+        page: 1,
+        pageSize: 30,
+        sortBy: 'name',
+        sortOrder: 'asc'
+      })
+      
         return {
-          products: results.map(product => ({
-            ...product,
-            source: 'tcggo'
-          })),
-          total: results.length,
-          source: 'tcggo'
-        }
-      } catch (error) {
-        console.warn('⚠️ TCGGo sealed search failed, falling back to PriceCharting:', error.message)
+        products: results.data || [],
+        total: results.total || 0,
+        source: 'local'
       }
-    }
-
-    // Fallback to PriceCharting
-    if (!priceChartingApiService.isInitialized) {
-      console.warn('⚠️ Neither TCGGo nor PriceCharting available - cannot search sealed products')
+    } catch (error) {
       return {
         products: [],
         total: 0,
-        source: 'none'
+        source: 'error'
       }
-    }
-
-    try {
-      console.log('🔍 Using PriceCharting for sealed product search')
-      const results = await priceChartingApiService.searchSealedProducts(query, game)
-      return {
-        products: results.products.map(product => 
-          priceChartingApiService.formatProductData(product)
-        ),
-        total: results.total,
-        source: 'pricecharting'
-      }
-    } catch (error) {
-      console.error('❌ Sealed product search failed:', error)
-      throw error
     }
   }
 
@@ -389,7 +317,6 @@ class HybridSearchService {
         source: 'local'
       }
     } catch (error) {
-      console.error('❌ Singles search failed:', error)
       throw error
     }
   }
@@ -401,13 +328,9 @@ class HybridSearchService {
     }
 
     try {
-      if (source === 'pricecharting') {
-        return await priceChartingApiService.getProductDetails(productId)
-      } else {
+      // Only use local database now
         return await localSearchService.getCardById(productId)
-      }
     } catch (error) {
-      console.error('❌ Product details failed:', error)
       throw error
     }
   }
@@ -419,18 +342,13 @@ class HybridSearchService {
     }
 
     try {
-      if (source === 'pricecharting') {
-        return await priceChartingApiService.getProductPricing(productId)
-      } else {
-        // Local pricing is included in card details
+      // Only use local database now
         const cardDetails = await localSearchService.getCardById(productId)
         return {
           market_price: cardDetails.raw_market || cardDetails.graded_market || 0,
           source: 'local'
-        }
       }
     } catch (error) {
-      console.error('❌ Product pricing failed:', error)
       throw error
     }
   }
@@ -456,17 +374,11 @@ class HybridSearchService {
         sortOrder = null
       } = options // Optimized pagination for fast loading
       
-      console.log('🔍 Getting sealed products for expansion:', expansionId)
-      
       // Get sealed products from database (fast and consistent)
-      console.log('📦 Getting sealed products from database')
-      
       try {
         const sealedResults = await localSearchService.getSealedProductsByExpansion(expansionId, options)
         
         if (sealedResults && sealedResults.data && sealedResults.data.length > 0) {
-          console.log(`📦 Found ${sealedResults.data.length} sealed products in database for expansion ${expansionId}`)
-          
           // Format the sealed products data to match expected structure
           const formattedSealedProducts = sealedResults.data.map(product => ({
             id: product.tcggo_id || product.id,
@@ -500,158 +412,12 @@ class HybridSearchService {
             hasMore: sealedResults.hasMore,
             source: 'database'
           }
-        } else {
-          console.log('📦 No sealed products found in database for expansion:', expansionId)
         }
       } catch (error) {
-        console.error('❌ Error getting sealed products from database:', error)
+        // Silent fail
       }
       
-      // Fallback to TCGGo API if no data in database
-      console.log('📦 No database results, falling back to TCGGo API')
-      
-      // Try TCGGo first, then fallback to PriceCharting
-      let sealedProducts = []
-      let pricingSource = 'none'
-      
-      // Try TCGGo first (better pricing from TCGPlayer/CardMarket)
-      console.log('🔍 Checking TCGGo service status:', tcggoSealedPricingService.isReady())
-      if (tcggoSealedPricingService.isReady()) {
-        try {
-          console.log('🔍 Trying TCGGo for expansion sealed products')
-          const expansions = await localSearchService.getExpansions()
-          const expansion = expansions.find(exp => exp.id === expansionId)
-          console.log('🔍 Found expansion:', expansion?.name, 'ID:', expansion?.id)
-          if (expansion) {
-            // Pass the expansion ID for CardMarket API (it will handle episode ID mapping internally)
-            console.log('🚀 Calling TCGGo API for sealed products...')
-            sealedProducts = await tcggoSealedPricingService.getSealedProductsForExpansion(expansion.name, 'pokemon', expansion.id)
-            pricingSource = 'tcggo'
-            console.log(`📦 TCGGo API returned ${sealedProducts.length} sealed products for ${expansion.name}`)
-            console.log('📦 First few products:', sealedProducts.slice(0, 3).map(p => ({ name: p.name, pricing: p.pricing })))
-          } else {
-            console.warn('⚠️ Expansion not found for ID:', expansionId)
-          }
-        } catch (error) {
-          console.warn('⚠️ TCGGo expansion search failed:', error.message)
-          console.error('❌ Full error:', error)
-        }
-      } else {
-        console.warn('⚠️ TCGGo service not ready')
-      }
-      
-      // Fallback to PriceCharting if TCGGo didn't work or found no results
-      if (sealedProducts.length === 0 && priceChartingApiService.isInitialized) {
-        // Get expansion details from local database
-        const expansions = await localSearchService.getExpansions()
-        const expansion = expansions.find(exp => exp.id === expansionId)
-        if (expansion) {
-          // Try multiple search strategies for better results
-          let priceChartingSealed = []
-          
-          // Strategy 1: Search with expansion name
-          const query1 = `pokemon ${expansion.name}`
-          console.log(`🔍 Trying PriceCharting query 1: ${query1}`)
-          try {
-            priceChartingSealed = await priceChartingApiService.searchSealedProducts(query1, 'pokemon')
-          } catch (error) {
-            console.log(`❌ PriceCharting query 1 failed:`, error.message)
-            priceChartingSealed = []
-          }
-          
-          // Strategy 2: If no results, try with expansion code
-          if (!priceChartingSealed || priceChartingSealed.length === 0) {
-            const query2 = `pokemon ${expansion.code}`
-            console.log(`🔍 Trying PriceCharting query 2: ${query2}`)
-            try {
-              priceChartingSealed = await priceChartingApiService.searchSealedProducts(query2, 'pokemon')
-            } catch (error) {
-              console.log(`❌ PriceCharting query 2 failed:`, error.message)
-              priceChartingSealed = []
-            }
-          }
-          
-          // Strategy 3: If still no results, try broader sealed product search
-          if (!priceChartingSealed || priceChartingSealed.length === 0) {
-            const query3 = `pokemon elite trainer box`
-            console.log(`🔍 Trying PriceCharting query 3: ${query3}`)
-            try {
-              priceChartingSealed = await priceChartingApiService.searchSealedProducts(query3, 'pokemon')
-            } catch (error) {
-              console.log(`❌ PriceCharting query 3 failed:`, error.message)
-              priceChartingSealed = []
-            }
-          }
-          
-          if (priceChartingSealed && priceChartingSealed.length > 0) {
-            console.log(`📦 Found ${priceChartingSealed.length} PriceCharting sealed products for expansion ${expansionId}`)
-            pricingSource = 'pricecharting'
-            
-            // Format PriceCharting results
-            sealedProducts = priceChartingSealed.map(product => 
-              priceChartingApiService.formatProductData(product)
-            )
-            
-            // Filter results to only include products that match the expansion
-            const expansionName = expansion.name?.toLowerCase() || '';
-            const expansionCode = expansion.code?.toLowerCase() || '';
-            
-            sealedProducts = sealedProducts.filter(product => {
-              // Use raw PriceCharting field names for filtering
-              const productName = product['product-name']?.toLowerCase() || '';
-              const productSetName = product['console-name']?.toLowerCase() || '';
-              
-              // Remove "Pokemon" prefix from set name for comparison (same logic as formatProductData)
-              let cleanSetName = productSetName;
-              if (cleanSetName.startsWith('pokemon ')) {
-                cleanSetName = cleanSetName.substring(8); // Remove "Pokemon " (8 characters)
-              }
-              
-              // Check if the product name or set name contains the expansion name or code
-              const matchesExpansion = productName.includes(expansionName) || 
-                                     productName.includes(expansionCode) ||
-                                     cleanSetName.includes(expansionName) ||
-                                     cleanSetName.includes(expansionCode) ||
-                                     productSetName.includes(expansionName) ||
-                                     productSetName.includes(expansionCode);
-              
-              // Also exclude any single cards (products with # in name)
-              const isNotSingleCard = !productName.includes('#');
-              
-              return matchesExpansion && isNotSingleCard;
-            });
-            
-            console.log(`📦 Filtered sealed products for ${expansionName}: ${sealedProducts.length} of ${priceChartingSealed.length}`)
-          }
-        }
-      }
-      
-      // Return results from either TCGGo or PriceCharting
-      if (sealedProducts.length > 0) {
-        const result = {
-          data: sealedProducts,
-          total: sealedProducts.length,
-          page: 1,
-          pageSize: sealedProducts.length,
-          hasMore: false,
-          source: pricingSource
-        }
-        
-        // Cache the result
-        await searchCacheService.setCachedResults(
-          cacheKey, 
-          '', 
-          'pokemon', 
-          'sealed', 
-          result, 
-          result.total, 
-          1, 
-          sealedProducts.length, 
-          expansionId
-        )
-        
-        return result
-      }
+      // No database results - return empty result
       
       const emptyResult = {
         data: [],
@@ -662,81 +428,8 @@ class HybridSearchService {
         source: 'none'
       }
       
-      // Cache empty result too
-      await searchCacheService.setCachedResults(
-        cacheKey, 
-        '', 
-        'pokemon',
-        'sealed', 
-        emptyResult, 
-        0, 
-        page, 
-        pageSize, 
-        expansionId
-      )
-      
       return emptyResult
     } catch (error) {
-      console.error('❌ Error getting sealed products for expansion:', error)
-      
-      // Fallback to PriceCharting on error
-      if (priceChartingApiService.isInitialized) {
-        try {
-          // Get expansion details from local database
-          const expansions = await localSearchService.getExpansions()
-          const expansion = expansions.find(exp => exp.id === expansionId)
-          if (expansion) {
-            const query = `pokemon ${expansion.name}`
-            const priceChartingSealed = await priceChartingApiService.searchSealedProducts(query, 'pokemon')
-            
-            if (priceChartingSealed && priceChartingSealed.length > 0) {
-              console.log(`📦 Fallback: Found ${priceChartingSealed.length} PriceCharting sealed products for expansion ${expansionId}`)
-              
-              // Apply the same filtering logic as the main path
-              const expansionName = expansion.name?.toLowerCase() || '';
-              const expansionCode = expansion.code?.toLowerCase() || '';
-              
-              const filteredSealed = priceChartingSealed.filter(product => {
-                // Use raw PriceCharting field names for filtering
-                const productName = product['product-name']?.toLowerCase() || '';
-                const productSetName = product['console-name']?.toLowerCase() || '';
-                
-                // Remove "Pokemon" prefix from set name for comparison (same logic as formatProductData)
-                let cleanSetName = productSetName;
-                if (cleanSetName.startsWith('pokemon ')) {
-                  cleanSetName = cleanSetName.substring(8); // Remove "Pokemon " (8 characters)
-                }
-                
-                // Check if the product name or set name contains the expansion name or code
-                const matchesExpansion = productName.includes(expansionName) || 
-                                       productName.includes(expansionCode) ||
-                                       cleanSetName.includes(expansionName) ||
-                                       cleanSetName.includes(expansionCode) ||
-                                       productSetName.includes(expansionName) ||
-                                       productSetName.includes(expansionCode);
-                
-                // Also exclude any single cards (products with # in name)
-                const isNotSingleCard = !productName.includes('#');
-                
-                return matchesExpansion && isNotSingleCard;
-              });
-              
-              console.log(`📦 Fallback: Filtered sealed products for ${expansionName}: ${filteredSealed.length} of ${priceChartingSealed.length}`)
-              
-              return {
-                data: filteredSealed,
-                total: filteredSealed.length,
-                page: 1,
-                pageSize: filteredSealed.length,
-                hasMore: false,
-                source: 'pricecharting-fallback'
-              }
-            }
-          }
-        } catch (fallbackError) {
-          console.error('❌ Fallback to PriceCharting also failed:', fallbackError)
-        }
-      }
       
       return {
         data: [],
@@ -756,14 +449,12 @@ class HybridSearchService {
       const expansions = await localSearchService.getExpansions()
       const expansion = expansions.find(exp => exp.id === expansionId)
       if (!expansion) {
-        console.warn('⚠️ Expansion not found:', expansionId)
         return sealedProducts
       }
 
       const expansionName = expansion.name.toLowerCase()
       const expansionCode = expansion.code?.toLowerCase() || ''
       
-      console.log('🔍 Sorting sealed products for expansion:', expansionName, expansionCode)
 
       // Filter and sort sealed products that match this expansion
       const matchingProducts = sealedProducts.filter(product => {
@@ -777,10 +468,8 @@ class HybridSearchService {
                productSetName.includes(expansionCode)
       })
 
-      console.log(`🔍 Found ${matchingProducts.length} matching sealed products for ${expansionName}`)
       return matchingProducts
     } catch (error) {
-      console.warn('⚠️ Error sorting sealed products by expansion:', error)
       return sealedProducts
     }
   }
@@ -803,25 +492,27 @@ class HybridSearchService {
           const singleResults = await localSearchService.getExpansions()
           results.singles = singleResults || []
         } catch (error) {
-          console.warn('⚠️ Singles game search failed:', error)
+          // Silent fail
         }
       }
 
-      if (includeSealed && priceChartingApiService.isInitialized) {
+      if (includeSealed) {
         try {
-          const sealedResults = await priceChartingApiService.searchByGame(game, true)
-          results.sealed = sealedResults.products.map(product => 
-            priceChartingApiService.formatProductData(product)
-          )
+          const sealedResults = await localSearchService.searchSealedProducts(game, {
+            page: 1,
+            pageSize: 30,
+            sortBy: 'name',
+            sortOrder: 'asc'
+          })
+          results.sealed = sealedResults.data || []
         } catch (error) {
-          console.warn('⚠️ Sealed game search failed:', error)
+          // Silent fail
         }
       }
 
       results.total = results.singles.length + results.sealed.length
       return results
     } catch (error) {
-      console.error('❌ Game search failed:', error)
       throw error
     }
   }

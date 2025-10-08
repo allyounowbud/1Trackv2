@@ -30,11 +30,9 @@ class RapidApiService {
       // Test the connection
       await this.testConnection()
       this.isInitialized = true
-      console.log('✅ RapidAPI Service initialized')
       return true
     } catch (error) {
-      console.warn('⚠️ RapidAPI Service not available:', error.message)
-      // Don't throw error - allow app to continue without RapidAPI
+      // Service not available - this is expected in development
       this.isInitialized = false
       return false
     }
@@ -48,9 +46,7 @@ class RapidApiService {
       })
       
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`RapidAPI test failed: ${response.status}`, errorText)
-        throw new Error(`API test failed: ${response.status}`)
+        throw new Error(`API function not deployed (${response.status})`)
       }
       
       const data = await response.json()
@@ -59,10 +55,9 @@ class RapidApiService {
         throw new Error(data['error-message'] || 'API test failed')
       }
       
-      console.log('✅ RapidAPI connection successful')
       return data
     } catch (error) {
-      console.error('❌ RapidAPI connection failed:', error)
+      // Silently fail - this is expected if function isn't deployed
       throw error
     }
   }
@@ -70,20 +65,17 @@ class RapidApiService {
   // Find best image for a product
   async findBestImage(productName, game = 'pokemon', setName = null) {
     if (!this.isInitialized) {
-      console.warn('⚠️ RapidAPI not available for image enhancement')
       return null
     }
 
     try {
       // Search for images using TCGPlayer API
       const searchQuery = encodeURIComponent(`${productName} ${setName || ''}`)
-      console.log('🖼️ RapidAPI image search:', `${this.baseUrl}?endpoint=search&q=${searchQuery}&game=${game}`)
       const response = await fetch(`${this.baseUrl}?endpoint=search&q=${searchQuery}&game=${game}`, {
         headers: this.getAuthHeaders()
       })
       
       if (!response.ok) {
-        console.warn(`Image search failed: ${response.status}`)
         return null
       }
       
@@ -109,7 +101,6 @@ class RapidApiService {
       
       return null
     } catch (error) {
-      console.warn('⚠️ Error finding image:', error)
       return null
     }
   }
@@ -137,7 +128,6 @@ class RapidApiService {
       
       return data
     } catch (error) {
-      console.error('❌ Error getting product details:', error)
       throw error
     }
   }
@@ -165,7 +155,6 @@ class RapidApiService {
       
       return data
     } catch (error) {
-      console.error('❌ Error getting product pricing:', error)
       throw error
     }
   }
@@ -199,7 +188,6 @@ class RapidApiService {
       
       return product
     } catch (error) {
-      console.warn('⚠️ Error enhancing product image:', error)
       return product
     }
   }

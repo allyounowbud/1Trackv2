@@ -271,7 +271,6 @@ class ImageCacheService {
     expiredKeys.forEach(key => this.removeCachedImage(key));
     
     if (expiredKeys.length > 0) {
-      console.log(`🗑️ Cleaned up ${expiredKeys.length} expired image cache entries`);
     }
   }
 }

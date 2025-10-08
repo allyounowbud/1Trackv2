@@ -32,7 +32,6 @@ class RealTimePricingService {
       }
       
       this.isInitialized = true;
-      console.log('✅ Real-time pricing service initialized');
     } catch (error) {
       console.error('❌ Real-time pricing service initialization error:', error);
       throw error;
@@ -67,7 +66,6 @@ class RealTimePricingService {
     await this.respectRateLimit();
 
     try {
-      console.log(`🌐 Fetching real-time pricing for ${apiId}`);
       
       // Call Scrydex API through our backend
       const { data, error } = await supabase.functions.invoke('scrydex-api', {
@@ -83,7 +81,6 @@ class RealTimePricingService {
       }
 
       if (!data || !data.prices) {
-        console.log(`📦 No pricing data returned for ${apiId}`);
         return null;
       }
 
@@ -93,7 +90,6 @@ class RealTimePricingService {
       // Update database with fresh pricing
       await this.updateDatabasePricing(apiId, formattedPricing);
       
-      console.log(`✅ Real-time pricing updated for ${apiId}`);
       return formattedPricing;
 
     } catch (error) {
@@ -200,7 +196,6 @@ class RealTimePricingService {
       if (error) {
         console.error(`❌ Failed to update database pricing for ${apiId}:`, error);
       } else {
-        console.log(`💾 Updated database pricing for ${apiId}`);
       }
     } catch (error) {
       console.error(`❌ Error updating database pricing for ${apiId}:`, error);
@@ -217,7 +212,6 @@ class RealTimePricingService {
     const { maxConcurrent = 3 } = options;
     const results = {};
 
-    console.log(`🌐 Fetching real-time pricing for ${apiIds.length} cards`);
 
     // Process in batches to respect rate limits
     for (let i = 0; i < apiIds.length; i += maxConcurrent) {
@@ -241,7 +235,6 @@ class RealTimePricingService {
       }
     }
 
-    console.log(`✅ Real-time pricing fetched for ${Object.keys(results).length}/${apiIds.length} cards`);
     return results;
   }
 

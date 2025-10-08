@@ -109,7 +109,6 @@ export const SearchDropdown = ({
 
   // Handle option selection
   const handleSelectOption = (option) => {
-    console.log('Option clicked!', option);
     const optionValue = getOptionValue(option);
     const optionLabel = getOptionLabel(option);
     setSearchText(optionLabel);
@@ -118,7 +117,6 @@ export const SearchDropdown = ({
   };
 
   const handleCreateNew = async () => {
-    console.log('Create new clicked!', searchText.trim());
     const createFunction = onTemporaryCreate || onCreateNew;
     if (createFunction) {
       try {

@@ -105,7 +105,6 @@ class SearchCacheService {
     if (filters.sortBy) {
       const sortOrder = filters.sortOrder || 'asc';
       keyParts.push('sort:' + filters.sortBy + ':' + sortOrder);
-      console.log('🔑 Adding sort to cache key:', filters.sortBy, sortOrder);
     }
     
     return keyParts.join('|');
@@ -114,8 +113,6 @@ class SearchCacheService {
   // Get cached search results
   async getCachedResults(cacheKey) {
     try {
-      console.log('🔍 Checking cache for key:', cacheKey);
-      
       const { data, error } = await supabase
         .from('search_cache')
         .select('*')
@@ -126,17 +123,14 @@ class SearchCacheService {
       if (error) {
         if (error.code === 'PGRST116') {
           // No rows returned - this is normal for cache miss
-          console.log('📦 Cache miss for search:', cacheKey);
           this.stats.misses++; // Increment miss count
           return null;
         } else {
-          console.error('❌ Error fetching cached results:', error);
           return null;
         }
       }
 
       if (data) {
-        console.log('📦 Cache hit for search:', cacheKey);
         this.stats.hits++;
         return {
           results: data.results,
@@ -150,7 +144,6 @@ class SearchCacheService {
 
       return null;
     } catch (error) {
-      console.error('❌ Error in getCachedResults:', error);
       return null;
     }
   }
@@ -206,8 +199,6 @@ class SearchCacheService {
   // Store search results in cache
   async setCachedResults(cacheKey, query, game, searchType, results, total, page = 1, pageSize = 30, expansionId = null) {
     try {
-      console.log('💾 Attempting to cache search results:', { cacheKey, query, game, searchType, total });
-      
       // Get cache policy for this search type
       const policy = this.getCachePolicy(searchType);
       const expiresAt = new Date(Date.now() + policy.ttl);
@@ -218,7 +209,6 @@ class SearchCacheService {
       this.stats.creditSavings += this.estimateCreditCost(searchType, results);
 
       // Store individual cards and products
-      console.log('💾 Storing individual items...');
       await this.storeIndividualItems(results, game, query);
 
       const cacheData = {
@@ -234,7 +224,6 @@ class SearchCacheService {
         expires_at: expiresAt.toISOString()
       };
 
-      console.log('💾 Inserting into search_cache table...');
       const { data, error } = await supabase
         .from('search_cache')
         .upsert(cacheData, { 
@@ -242,15 +231,11 @@ class SearchCacheService {
         });
 
       if (error) {
-        console.error('❌ Error storing cached results:', error);
-        console.error('❌ Cache data:', cacheData);
         return false;
       }
 
-      console.log('✅ Cached search results successfully:', cacheKey);
       return true;
     } catch (error) {
-      console.error('❌ Error in setCachedResults:', error);
       return false;
     }
   }
@@ -468,7 +453,6 @@ class SearchCacheService {
         return false;
       }
 
-      console.log('🗑️ Cleared expired cache entries');
       return true;
     } catch (error) {
       console.error('Error in clearExpiredCache:', error);
@@ -491,13 +475,11 @@ class SearchCacheService {
       }
 
       if (nearExpiry && nearExpiry.length > 0) {
-        console.log(`🔄 Found ${nearExpiry.length} cache entries near expiry`);
-        
         // Mark for refresh (in a real implementation, you'd trigger background refresh)
         for (const entry of nearExpiry) {
           const policy = this.getCachePolicy(entry.search_type);
           if (policy.refreshInterval) {
-            console.log(`🔄 Marking for refresh: ${entry.cache_key} (${entry.search_type})`);
+            // Silently mark for refresh
           }
         }
       }
@@ -523,7 +505,6 @@ class SearchCacheService {
         return false;
       }
 
-      console.log('🗑️ Cleared cache for query:', query, game);
       return true;
     } catch (error) {
       console.error('Error in clearCacheForQuery:', error);
@@ -568,7 +549,6 @@ class SearchCacheService {
         return false;
       }
 
-      console.log('🗑️ Force cleared all search cache');
       return true;
     } catch (error) {
       console.error('Error in forceClearAllCache:', error);

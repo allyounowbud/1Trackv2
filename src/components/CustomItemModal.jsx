@@ -346,7 +346,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
             )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
-                <h2 className="text-[17px] font-semibold text-white truncate">
+                <h2 className="font-semibold text-white truncate" style={{ fontSize: '14px' }}>
                   {formData.name || (editingItem ? "Edit Custom Item" : "Add Custom Item")}
                 </h2>
                 <button

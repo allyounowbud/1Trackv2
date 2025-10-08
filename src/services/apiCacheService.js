@@ -330,7 +330,6 @@ class ApiCacheService {
     }
     
     if (cleanedCount > 0) {
-      console.log(`🧹 Cleaned up ${cleanedCount} expired cache entries`);
     }
   }
 
@@ -347,7 +346,6 @@ class ApiCacheService {
     this.cacheMetadata.clear();
     this.refreshIntervals.clear();
     
-    console.log('🗑️ All cache cleared');
   }
 
   /**
@@ -364,7 +362,6 @@ class ApiCacheService {
       }
     }
     
-    console.log(`🗑️ Cleared ${clearedCount} cache entries of type: ${type}`);
   }
 
   /**
@@ -447,7 +444,6 @@ class ApiCacheService {
       ...policy
     };
     
-    console.log(`📝 Updated cache policy for type: ${type}`);
   }
 
   /**
@@ -493,15 +489,6 @@ class ApiCacheService {
    */
   logStats() {
     const stats = this.getStats();
-    console.log('📊 Cache Statistics:');
-    console.log(`   Hit Rate: ${stats.hitRate}`);
-    console.log(`   Total Entries: ${stats.totalEntries}`);
-    console.log(`   Active Entries: ${stats.activeEntries}`);
-    console.log(`   API Calls Saved: ${stats.apiCallsSaved}`);
-    console.log(`   Credit Savings: ${stats.creditSavings.toFixed(2)}`);
-    console.log(`   Uptime: ${stats.uptimeHours} hours`);
-    console.log(`   Avg Savings/Hour: ${stats.averageSavingsPerHour}`);
-    console.log('   Type Breakdown:', stats.typeCounts);
   }
 
   /**
@@ -518,7 +505,6 @@ class ApiCacheService {
       creditSavings: 0,
       lastReset: Date.now()
     };
-    console.log('📊 Cache statistics reset');
   }
 }
 
