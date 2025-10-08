@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useModal } from '../contexts/ModalContext';
 // Notification service removed - using Scrydex API only
 import DesktopSideMenu from './DesktopSideMenu';
 
 const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => {
-  const { openModal, closeModal } = useModal();
+  const { openModal, closeModal, customBottomButtons, setCustomBottomButtons } = useModal();
+  const isModalInitializedRef = useRef(false);
   const [formData, setFormData] = useState({
     name: '',
     set_name: '',
@@ -50,7 +51,12 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
 
   // Prevent body scroll when modal is open and update modal context
   React.useEffect(() => {
-    if (isOpen) {
+    console.log('CustomItemModal useEffect triggered - isOpen:', isOpen, 'isModalInitialized:', isModalInitializedRef.current);
+    
+    if (isOpen && !isModalInitializedRef.current) {
+      console.log('Initializing modal for first time');
+      isModalInitializedRef.current = true;
+      
       // Get current scroll position
       const scrollY = window.scrollY;
       
@@ -67,8 +73,12 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
       // Store scroll position for restoration
       document.body.setAttribute('data-scroll-y', scrollY.toString());
       
+      console.log('Calling openModal with button handlers');
       openModal(createCustomButtonHandlers());
-    } else {
+    } else if (!isOpen && isModalInitializedRef.current) {
+      console.log('Modal closing, calling closeModal');
+      isModalInitializedRef.current = false;
+      
       // Restore scroll position and styles
       const scrollY = document.body.getAttribute('data-scroll-y') || '0';
       
@@ -91,30 +101,26 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
 
     return () => {
       // Cleanup on unmount
-      const scrollY = document.body.getAttribute('data-scroll-y') || '0';
-      
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      document.body.style.overflow = '';
-      document.body.style.overflowY = '';
-      document.body.style.overflowX = '';
-      document.body.style.touchAction = '';
-      document.body.style.webkitOverflowScrolling = '';
-      
-      document.body.removeAttribute('data-scroll-y');
-      
-      window.scrollTo(0, parseInt(scrollY));
-      closeModal();
+      if (isModalInitializedRef.current) {
+        const scrollY = document.body.getAttribute('data-scroll-y') || '0';
+        
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        document.body.style.overflowY = '';
+        document.body.style.overflowX = '';
+        document.body.style.touchAction = '';
+        document.body.style.webkitOverflowScrolling = '';
+        
+        document.body.removeAttribute('data-scroll-y');
+        
+        window.scrollTo(0, parseInt(scrollY));
+        closeModal();
+      }
     };
   }, [isOpen, openModal, closeModal]);
 
-  // Update buttons when isSubmitting or editingItem changes
-  React.useEffect(() => {
-    if (isOpen) {
-      openModal(createCustomButtonHandlers());
-    }
-  }, [isSubmitting, editingItem, isOpen]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -128,17 +134,22 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
     e.preventDefault();
     setIsSubmitting(true);
     setError('');
+    
+    // Update buttons to show submitting state
+    setCustomBottomButtons(createCustomButtonHandlers());
 
     // Validate required fields
     if (!formData.name.trim()) {
       setError('Item name is required');
       setIsSubmitting(false);
+      setCustomBottomButtons(createCustomButtonHandlers());
       return;
     }
 
     if (!formData.market_value || parseFloat(formData.market_value) <= 0) {
       setError('Valid market value is required');
       setIsSubmitting(false);
+      setCustomBottomButtons(createCustomButtonHandlers());
       return;
     }
 
@@ -213,6 +224,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
       setError(error.message || 'Failed to add custom item');
     } finally {
       setIsSubmitting(false);
+      setCustomBottomButtons(createCustomButtonHandlers());
     }
   };
 

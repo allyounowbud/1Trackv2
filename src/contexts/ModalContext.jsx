@@ -1,5 +1,5 @@
 // Cache bust v2.2.5 - Enhanced Mobile Safari modal fixes
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const ModalContext = createContext();
 
@@ -21,14 +21,14 @@ const isMobileSafari = () => {
 
 export const ModalProvider = ({ children }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [customBottomButtons, setCustomBottomButtons] = useState(null);
+  const isTransitioningRef = React.useRef(false);
 
-  const openModal = (buttons = null) => {
-    if (isTransitioning) return; // Prevent multiple rapid calls
+  const openModal = useCallback((buttons = null) => {
+    if (isTransitioningRef.current) return; // Prevent multiple rapid calls
     
-    console.log('Opening modal with buttons:', buttons);
-    setIsTransitioning(true);
+    console.log('ModalContext openModal called with buttons:', buttons);
+    isTransitioningRef.current = true;
     setIsModalOpen(true);
     setCustomBottomButtons(buttons);
     
@@ -36,13 +36,14 @@ export const ModalProvider = ({ children }) => {
     document.body.classList.add('modal-open');
     
     // Reset transition flag after a brief delay
-    setTimeout(() => setIsTransitioning(false), 100);
-  };
+    setTimeout(() => { isTransitioningRef.current = false; }, 100);
+  }, []);
   
-  const closeModal = () => {
-    if (isTransitioning) return; // Prevent multiple rapid calls
+  const closeModal = useCallback(() => {
+    if (isTransitioningRef.current) return; // Prevent multiple rapid calls
     
-    setIsTransitioning(true);
+    console.log('ModalContext closeModal called');
+    isTransitioningRef.current = true;
     setIsModalOpen(false);
     setCustomBottomButtons(null);
     
@@ -50,8 +51,8 @@ export const ModalProvider = ({ children }) => {
     document.body.classList.remove('modal-open');
     
     // Reset transition flag after a brief delay
-    setTimeout(() => setIsTransitioning(false), 100);
-  };
+    setTimeout(() => { isTransitioningRef.current = false; }, 100);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -65,7 +66,8 @@ export const ModalProvider = ({ children }) => {
       isModalOpen, 
       openModal, 
       closeModal, 
-      customBottomButtons 
+      customBottomButtons,
+      setCustomBottomButtons 
     }}>
       {children}
     </ModalContext.Provider>

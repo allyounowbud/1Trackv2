@@ -57,11 +57,10 @@ const BottomNavigation = ({ currentPath, customButtons }) => {
 
   // If custom button handlers are provided, render modal buttons instead
   if (customButtons) {
-    console.log('Rendering custom buttons with handlers:', customButtons);
     const { onCancel, onSubmit, isSubmitting, editingItem } = customButtons;
     
     return (
-      <div className="bottom-nav-fixed bg-gray-900 border-t border-gray-700 safe-bottom">
+      <div className="bottom-nav-fixed bg-gray-900 border-t border-gray-700 safe-bottom z-[10002]">
         <div className="flex items-center w-full py-2 px-4">
           <div className="flex space-x-3 w-full">
             <button
