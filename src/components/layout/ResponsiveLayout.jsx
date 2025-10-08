@@ -9,6 +9,7 @@ const ResponsiveLayout = ({ children }) => {
   const { isModalOpen } = useModal();
   const [isDesktop, setIsDesktop] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [isMobileSafari, setIsMobileSafari] = useState(false);
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -16,8 +17,16 @@ const ResponsiveLayout = ({ children }) => {
       setIsDesktop(isDesktopSize);
     };
 
+    const checkMobileSafari = () => {
+      const ua = navigator.userAgent;
+      const isIOS = /iPad|iPhone|iPod/.test(ua);
+      const isSafari = /Safari/.test(ua) && !/Chrome/.test(ua);
+      setIsMobileSafari(isIOS && isSafari);
+    };
+
     // Check on mount
     checkScreenSize();
+    checkMobileSafari();
 
     // Add event listener
     window.addEventListener('resize', checkScreenSize);
@@ -49,8 +58,9 @@ const ResponsiveLayout = ({ children }) => {
         {children}
       </div>
       
-      {/* Bottom Navigation - Always at bottom, never moves */}
-      {!isModalOpen && <BottomNavigation currentPath={location.pathname} />}
+      {/* Bottom Navigation - Hide on mobile Safari when modal is open */}
+      {!isModalOpen && !isMobileSafari && <BottomNavigation currentPath={location.pathname} />}
+      {!isModalOpen && isMobileSafari && !document.body.classList.contains('modal-open') && <BottomNavigation currentPath={location.pathname} />}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-/* Cache bust v2.2.4 - Mobile Safari fixes */
+/* Cache bust v2.2.5 - Enhanced Mobile Safari fixes */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 @tailwind base;
 @tailwind components;
@@ -95,9 +95,35 @@
     z-index: 10000 !important;
   }
 
-  /* Mobile Safari modal compatibility */
+  /* Mobile Safari modal compatibility - Multiple strategies */
   body.modal-open .bottom-nav-fixed {
     display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    transform: translateY(100%) !important;
+    transition: all 0.3s ease !important;
+  }
+
+  /* Additional mobile Safari strategy with data attribute */
+  body[data-modal-open="true"] .bottom-nav-fixed {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    transform: translateY(100%) !important;
+    transition: all 0.3s ease !important;
+  }
+
+  /* iOS Safari specific fixes */
+  @supports (-webkit-touch-callout: none) {
+    body.modal-open .bottom-nav-fixed,
+    body[data-modal-open="true"] .bottom-nav-fixed {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      transform: translateY(100%) !important;
+      height: 0 !important;
+      overflow: hidden !important;
+    }
   }
 
   /* Ensure bulk selector is above bottom navigation on mobile */
