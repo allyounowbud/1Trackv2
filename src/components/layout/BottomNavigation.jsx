@@ -55,13 +55,31 @@ const BottomNavigation = ({ currentPath, customButtons }) => {
     return location.pathname.startsWith(path);
   };
 
-  // If custom buttons are provided, render those instead
+  // If custom button handlers are provided, render modal buttons instead
   if (customButtons) {
-    console.log('Rendering custom buttons:', customButtons);
+    console.log('Rendering custom buttons with handlers:', customButtons);
+    const { onCancel, onSubmit, isSubmitting, editingItem } = customButtons;
+    
     return (
       <div className="bottom-nav-fixed bg-gray-900 border-t border-gray-700 safe-bottom">
         <div className="flex items-center w-full py-2 px-4">
-          {customButtons}
+          <div className="flex space-x-3 w-full">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              onClick={onSubmit}
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+            >
+              {isSubmitting ? (editingItem ? 'Updating...' : 'Adding...') : (editingItem ? 'Update Item' : 'Add Item')}
+            </button>
+          </div>
         </div>
       </div>
     );

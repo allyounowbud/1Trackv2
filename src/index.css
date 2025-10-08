@@ -1,4 +1,4 @@
-/* Cache bust v2.2.8 - Replaced bottom bar with modal buttons */
+/* Cache bust v2.2.10 - Fixed button rendering in bottom navigation */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 @tailwind base;
 @tailwind components;

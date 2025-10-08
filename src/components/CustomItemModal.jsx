@@ -40,26 +40,13 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
     }
   }, [editingItem]);
 
-  // Create custom bottom buttons for the modal
-  const createCustomButtons = () => (
-    <div className="flex space-x-3 w-full">
-      <button
-        type="button"
-        onClick={handleClose}
-        className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
-      >
-        Cancel
-      </button>
-      <button
-        type="submit"
-        onClick={handleSubmit}
-        disabled={isSubmitting}
-        className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
-      >
-        {isSubmitting ? (editingItem ? 'Updating...' : 'Adding...') : (editingItem ? 'Update Item' : 'Add Item')}
-      </button>
-    </div>
-  );
+  // Create custom button handlers for the modal
+  const createCustomButtonHandlers = () => ({
+    onCancel: handleClose,
+    onSubmit: handleSubmit,
+    isSubmitting,
+    editingItem
+  });
 
   // Prevent body scroll when modal is open and update modal context
   React.useEffect(() => {
@@ -80,7 +67,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
       // Store scroll position for restoration
       document.body.setAttribute('data-scroll-y', scrollY.toString());
       
-      openModal(createCustomButtons());
+      openModal(createCustomButtonHandlers());
     } else {
       // Restore scroll position and styles
       const scrollY = document.body.getAttribute('data-scroll-y') || '0';
@@ -125,7 +112,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
   // Update buttons when isSubmitting or editingItem changes
   React.useEffect(() => {
     if (isOpen) {
-      openModal(createCustomButtons());
+      openModal(createCustomButtonHandlers());
     }
   }, [isSubmitting, editingItem, isOpen]);
 
