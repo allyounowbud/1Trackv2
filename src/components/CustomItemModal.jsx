@@ -12,8 +12,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
     set_name: '',
     item_type: 'Collectible',
     market_value: '',
-    image_url: '',
-    background_color: 'transparent'
+    image_url: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -74,6 +73,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
       document.body.setAttribute('data-scroll-y', scrollY.toString());
       
       console.log('Calling openModal with button handlers');
+      console.log('Button handlers:', createCustomButtonHandlers());
       openModal(createCustomButtonHandlers());
     } else if (!isOpen && isModalInitializedRef.current) {
       console.log('Modal closing, calling closeModal');
@@ -165,8 +165,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
             set_name: formData.set_name.trim() || null,
             item_type: formData.item_type,
             market_value_cents: Math.round(parseFloat(formData.market_value) * 100),
-            image_url: formData.image_url.trim() || null,
-            background_color: formData.background_color === 'transparent' ? null : formData.background_color
+            image_url: formData.image_url.trim() || null
           })
           .eq('id', editingItem.id)
           .select()
@@ -184,8 +183,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
             item_type: formData.item_type,
             source: 'manual',
             market_value_cents: Math.round(parseFloat(formData.market_value) * 100),
-            image_url: formData.image_url.trim() || null,
-            background_color: formData.background_color === 'transparent' ? null : formData.background_color
+            image_url: formData.image_url.trim() || null
           })
           .select()
           .single();
@@ -204,8 +202,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
         set_name: '',
         item_type: 'Collectible',
         market_value: '',
-        image_url: '',
-        background_color: 'transparent'
+        image_url: ''
       });
       
       // Create success info in the expected format
@@ -234,8 +231,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
       set_name: '',
       item_type: 'Collectible',
       market_value: '',
-      image_url: '',
-      background_color: 'transparent'
+      image_url: ''
     });
     setError('');
     onClose();
@@ -341,36 +337,6 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
             />
           </div>
 
-          {/* Background Color */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Background Color
-            </label>
-            <div className="relative">
-              <input
-                type="color"
-                name="background_color"
-                value={formData.background_color === 'transparent' ? '#000000' : formData.background_color}
-                onChange={(e) => {
-                  const color = e.target.value;
-                  setFormData(prev => ({
-                    ...prev,
-                    background_color: color === '#000000' ? 'transparent' : color
-                  }));
-                }}
-                className="absolute inset-0 w-full h-10 opacity-0 cursor-pointer z-10"
-              />
-              <input
-                type="text"
-                name="background_color"
-                value={formData.background_color}
-                onChange={handleInputChange}
-                placeholder="transparent"
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <p className="text-xs text-gray-400 mt-1">Choose the dominant color of your image to fill empty space</p>
-          </div>
 
 
           {/* Submit Button */}
@@ -405,8 +371,7 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
             {/* Item Image Preview */}
             {formData.image_url && (
               <div 
-                className="h-[75px] w-[75px] rounded-lg overflow-hidden border border-gray-600 flex items-center justify-center"
-                style={{ backgroundColor: formData.background_color }}
+                className="h-[75px] w-[75px] rounded-lg overflow-hidden border border-gray-600 flex items-center justify-center bg-gray-800"
               >
                 <img
                   src={formData.image_url}
@@ -543,36 +508,6 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
               />
             </div>
 
-            {/* Background Color */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Background Color
-              </label>
-              <div className="relative">
-                <input
-                  type="color"
-                  name="background_color"
-                  value={formData.background_color === 'transparent' ? '#000000' : formData.background_color}
-                  onChange={(e) => {
-                    const color = e.target.value;
-                    setFormData(prev => ({
-                      ...prev,
-                      background_color: color === '#000000' ? 'transparent' : color
-                    }));
-                  }}
-                  className="absolute inset-0 w-full h-10 opacity-0 cursor-pointer z-10"
-                />
-                <input
-                  type="text"
-                  name="background_color"
-                  value={formData.background_color}
-                  onChange={handleInputChange}
-                  placeholder="transparent"
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-              <p className="text-xs text-gray-400 mt-1">Choose the dominant color of your image to fill empty space</p>
-            </div>
 
           </form>
         </div>
