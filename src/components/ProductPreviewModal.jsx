@@ -3,11 +3,13 @@ import { getCleanItemName } from '../utils/nameUtils';
 import translationUtils from '../utils/translationUtils.js';
 const { processLocalizedCard, getLocalizedImageUrl } = translationUtils;
 import { useLanguage } from '../contexts/LanguageContext';
+import { useModal } from '../contexts/ModalContext';
 import DesktopSideMenu from './DesktopSideMenu';
 import SafeImage from './SafeImage';
 import databasePricingService from '../services/databasePricingService';
 
 const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) => {
+  const { openModal, closeModal } = useModal();
   const [quantity, setQuantity] = useState(1);
   const [selectedTimeRange, setSelectedTimeRange] = useState('1M');
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'prices', 'details'
@@ -34,18 +36,21 @@ const ProductPreviewModal = ({ product, isOpen, onClose, onAddToCollection }) =>
     }
   };
 
-  // Prevent body scroll when modal is open
+  // Prevent body scroll when modal is open and update modal context
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      openModal();
     } else {
       document.body.style.overflow = 'unset';
+      closeModal();
     }
     
     return () => {
       document.body.style.overflow = 'unset';
+      closeModal();
     };
-  }, [isOpen]);
+  }, [isOpen, openModal, closeModal]);
 
   // Load pricing data from database when modal opens
   useEffect(() => {

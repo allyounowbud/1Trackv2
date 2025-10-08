@@ -25,19 +25,22 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const [retailerSearchQuery, setRetailerSearchQuery] = useState('');
   const [isRetailerFocused, setIsRetailerFocused] = useState(false);
 
-  // Prevent body scroll when modal is open
+  // Prevent body scroll when modal is open and update modal context
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      openModal();
     } else {
       document.body.style.overflow = 'unset';
+      closeModal();
     }
 
     // Cleanup on unmount
     return () => {
       document.body.style.overflow = 'unset';
+      closeModal();
     };
-  }, [isOpen]);
+  }, [isOpen, openModal, closeModal]);
 
   // Load retailers on component mount
   useEffect(() => {
