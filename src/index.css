@@ -94,6 +94,18 @@
     z-index: 10000 !important;
   }
 
+  /* Mobile Safari modal compatibility */
+  body.modal-open .bottom-nav-fixed {
+    display: none !important;
+  }
+
+  /* Ensure bulk selector is above bottom navigation on mobile */
+  @media (max-width: 1023px) {
+    .modal-overlay {
+      z-index: 10001 !important;
+    }
+  }
+
   /* PWA-specific fixes */
   @media (display-mode: standalone) {
     .app-container {

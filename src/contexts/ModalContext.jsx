@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const ModalContext = createContext();
 
@@ -13,8 +13,40 @@ export const useModal = () => {
 export const ModalProvider = ({ children }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const openModal = () => setIsModalOpen(true);
-  const closeModal = () => setIsModalOpen(false);
+  const openModal = () => {
+    setIsModalOpen(true);
+    // Add class to body for mobile Safari compatibility
+    document.body.classList.add('modal-open');
+    
+    // Force a re-render of the bottom navigation on mobile
+    const bottomNav = document.querySelector('.bottom-nav-fixed');
+    if (bottomNav) {
+      bottomNav.style.display = 'none';
+    }
+  };
+  
+  const closeModal = () => {
+    setIsModalOpen(false);
+    // Remove class from body
+    document.body.classList.remove('modal-open');
+    
+    // Restore bottom navigation on mobile
+    const bottomNav = document.querySelector('.bottom-nav-fixed');
+    if (bottomNav) {
+      bottomNav.style.display = '';
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      document.body.classList.remove('modal-open');
+      const bottomNav = document.querySelector('.bottom-nav-fixed');
+      if (bottomNav) {
+        bottomNav.style.display = '';
+      }
+    };
+  }, []);
 
   return (
     <ModalContext.Provider value={{ isModalOpen, openModal, closeModal }}>

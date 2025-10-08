@@ -2942,7 +2942,7 @@ const SearchApi = () => {
 
         {/* Custom Items Bulk Actions Bar - Fixed at bottom */}
         {isCustomSelectionMode && (
-          <div className="fixed bottom-16 left-0 right-0 modal-overlay">
+          <div className="fixed bottom-16 left-0 right-0 modal-overlay" style={{ zIndex: 10002 }}>
             <div className="bg-blue-500 border-t border-blue-400 px-4 py-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
