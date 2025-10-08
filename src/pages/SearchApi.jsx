@@ -863,6 +863,9 @@ const SearchApi = () => {
 
   // Perform search for cards in a specific expansion
   const performExpansionSearch = async (expansionId, page = 1, append = false, viewMode = null, skipCacheClear = false, currentFilterValues = null, forceCacheClear = false, currentSortBy = null, currentSortOrder = null) => {
+    // Define current view mode at the beginning
+    const currentViewMode = viewMode || expansionViewMode;
+    
     // Clear any existing timeouts
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
