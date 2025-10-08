@@ -43,15 +43,60 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
   // Prevent body scroll when modal is open and update modal context
   React.useEffect(() => {
     if (isOpen) {
+      // Get current scroll position
+      const scrollY = window.scrollY;
+      
+      // Lock scroll with multiple strategies for mobile Safari
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
       document.body.style.overflow = 'hidden';
+      document.body.style.overflowY = 'hidden';
+      document.body.style.overflowX = 'hidden';
+      document.body.style.touchAction = 'none';
+      document.body.style.webkitOverflowScrolling = 'touch';
+      
+      // Store scroll position for restoration
+      document.body.setAttribute('data-scroll-y', scrollY.toString());
+      
       openModal();
     } else {
-      document.body.style.overflow = 'unset';
+      // Restore scroll position and styles
+      const scrollY = document.body.getAttribute('data-scroll-y') || '0';
+      
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.overflow = '';
+      document.body.style.overflowY = '';
+      document.body.style.overflowX = '';
+      document.body.style.touchAction = '';
+      document.body.style.webkitOverflowScrolling = '';
+      
+      document.body.removeAttribute('data-scroll-y');
+      
+      // Restore scroll position
+      window.scrollTo(0, parseInt(scrollY));
+      
       closeModal();
     }
 
     return () => {
-      document.body.style.overflow = 'unset';
+      // Cleanup on unmount
+      const scrollY = document.body.getAttribute('data-scroll-y') || '0';
+      
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.overflow = '';
+      document.body.style.overflowY = '';
+      document.body.style.overflowX = '';
+      document.body.style.touchAction = '';
+      document.body.style.webkitOverflowScrolling = '';
+      
+      document.body.removeAttribute('data-scroll-y');
+      
+      window.scrollTo(0, parseInt(scrollY));
       closeModal();
     };
   }, [isOpen, openModal, closeModal]);

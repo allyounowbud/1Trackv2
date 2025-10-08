@@ -1,4 +1,4 @@
-/* Cache bust v2.2.6 - Fixed flickering modal issues */
+/* Cache bust v2.2.7 - Fixed scroll lock and bottom bar movement */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 @tailwind base;
 @tailwind components;
@@ -88,6 +88,11 @@
     /* Ensure it never moves */
     transform: none;
     -webkit-transform: none;
+    /* Prevent any movement or scrolling */
+    position: fixed !important;
+    will-change: auto;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
   }
 
   /* Modal overlay fixes - must be higher than bottom navigation */
@@ -98,6 +103,23 @@
   /* Mobile Safari modal compatibility - Simplified approach */
   body.modal-open .bottom-nav-fixed {
     display: none !important;
+  }
+
+  /* Additional scroll lock for modals */
+  body.modal-open {
+    position: fixed !important;
+    width: 100% !important;
+    overflow: hidden !important;
+    overflow-y: hidden !important;
+    overflow-x: hidden !important;
+    touch-action: none !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Prevent any scrollable elements from moving */
+  body.modal-open .main-content {
+    overflow: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 
   /* Ensure bulk selector is above bottom navigation on mobile */
