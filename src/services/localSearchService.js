@@ -55,11 +55,7 @@ class LocalSearchService {
         const searchTerm = query.trim();
         
         // Search in name, number, and artist fields
-        supabaseQuery = supabaseQuery.or(`
-          name.ilike.%${searchTerm}%,
-          number.ilike.%${searchTerm}%,
-          artist.ilike.%${searchTerm}%
-        `);
+        supabaseQuery = supabaseQuery.or(`name.ilike.%${searchTerm}%,number.ilike.%${searchTerm}%,artist.ilike.%${searchTerm}%`);
       }
 
       // Apply expansion filter

@@ -560,6 +560,9 @@ const SearchApi = () => {
       clearTimeout(searchTimeout);
     }
     
+    // Define current view mode at the beginning
+    const currentViewMode = viewMode || expansionViewMode;
+    
     // Reset state for new search
     if (page === 1) {
       setIsLoading(true);
@@ -912,7 +915,6 @@ const SearchApi = () => {
       console.log('🎯 Applying filters:', filtersToUse);
 
       let results;
-      const currentViewMode = viewMode || expansionViewMode;
       
       if (currentViewMode === 'sealed') {
         // Get sealed products directly from database (no cache needed)
