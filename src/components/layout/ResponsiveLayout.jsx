@@ -58,9 +58,8 @@ const ResponsiveLayout = ({ children }) => {
         {children}
       </div>
       
-      {/* Bottom Navigation - Hide on mobile Safari when modal is open */}
-      {!isModalOpen && !isMobileSafari && <BottomNavigation currentPath={location.pathname} />}
-      {!isModalOpen && isMobileSafari && !document.body.classList.contains('modal-open') && <BottomNavigation currentPath={location.pathname} />}
+      {/* Bottom Navigation - Always render, let CSS handle hiding */}
+      {!isModalOpen && <BottomNavigation currentPath={location.pathname} />}
     </div>
   );
 };

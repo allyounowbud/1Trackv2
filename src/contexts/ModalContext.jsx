@@ -21,64 +21,63 @@ const isMobileSafari = () => {
 
 export const ModalProvider = ({ children }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   const openModal = () => {
+    if (isTransitioning) return; // Prevent multiple rapid calls
+    
+    setIsTransitioning(true);
     setIsModalOpen(true);
     
-    // Multiple strategies for mobile Safari
+    // Single strategy: Use CSS class only to avoid conflicts
     document.body.classList.add('modal-open');
     
-    // Strategy 1: Hide bottom nav with CSS class
-    const bottomNav = document.querySelector('.bottom-nav-fixed');
-    if (bottomNav) {
-      bottomNav.style.display = 'none';
-      bottomNav.style.visibility = 'hidden';
-      bottomNav.style.opacity = '0';
-      bottomNav.style.transform = 'translateY(100%)';
-      bottomNav.style.transition = 'all 0.3s ease';
+    // For mobile Safari, use a more reliable approach
+    if (isMobileSafari()) {
+      const bottomNav = document.querySelector('.bottom-nav-fixed');
+      if (bottomNav) {
+        // Use a single, reliable hiding method
+        bottomNav.style.display = 'none';
+        bottomNav.style.pointerEvents = 'none';
+      }
     }
     
-    // Strategy 2: For mobile Safari, also hide via data attribute
-    if (isMobileSafari()) {
-      document.body.setAttribute('data-modal-open', 'true');
-      // Force a repaint
-      document.body.style.transform = 'translateZ(0)';
-      setTimeout(() => {
-        document.body.style.transform = '';
-      }, 0);
-    }
+    // Reset transition flag after a brief delay
+    setTimeout(() => setIsTransitioning(false), 100);
   };
   
   const closeModal = () => {
+    if (isTransitioning) return; // Prevent multiple rapid calls
+    
+    setIsTransitioning(true);
     setIsModalOpen(false);
     
-    // Remove all modal-related classes and attributes
+    // Clean up modal state
     document.body.classList.remove('modal-open');
-    document.body.removeAttribute('data-modal-open');
     
-    // Restore bottom navigation
-    const bottomNav = document.querySelector('.bottom-nav-fixed');
-    if (bottomNav) {
-      bottomNav.style.display = '';
-      bottomNav.style.visibility = '';
-      bottomNav.style.opacity = '';
-      bottomNav.style.transform = '';
-      bottomNav.style.transition = '';
+    // Restore bottom navigation for mobile Safari
+    if (isMobileSafari()) {
+      const bottomNav = document.querySelector('.bottom-nav-fixed');
+      if (bottomNav) {
+        bottomNav.style.display = '';
+        bottomNav.style.pointerEvents = '';
+      }
     }
+    
+    // Reset transition flag after a brief delay
+    setTimeout(() => setIsTransitioning(false), 100);
   };
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       document.body.classList.remove('modal-open');
-      document.body.removeAttribute('data-modal-open');
-      const bottomNav = document.querySelector('.bottom-nav-fixed');
-      if (bottomNav) {
-        bottomNav.style.display = '';
-        bottomNav.style.visibility = '';
-        bottomNav.style.opacity = '';
-        bottomNav.style.transform = '';
-        bottomNav.style.transition = '';
+      if (isMobileSafari()) {
+        const bottomNav = document.querySelector('.bottom-nav-fixed');
+        if (bottomNav) {
+          bottomNav.style.display = '';
+          bottomNav.style.pointerEvents = '';
+        }
       }
     };
   }, []);
