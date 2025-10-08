@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Loader2, Star, X, ChevronDown, Plus, MoreVertical } from 'lucide-react';
+import { Search, Filter, Loader2, Star, X, ChevronDown, Plus, MoreVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import localSearchService from '../services/localSearchService';
 import hybridSearchService from '../services/hybridSearchService';
 import priceChartingApiService from '../services/priceChartingApiService';
@@ -115,6 +115,12 @@ const SearchApi = () => {
   const [isFilterSidebarOpen, setIsFilterSidebarOpen] = useState(false);
   const [sortBy, setSortBy] = useState('number');
   const [sortOrder, setSortOrder] = useState('asc');
+  
+  // Price sorting state for sealed products
+  const [priceSortOrder, setPriceSortOrder] = useState('asc'); // 'asc' for low to high, 'desc' for high to low
+  
+  // Force re-render when filter values change to update dynamic counts
+  const [filterUpdateTrigger, setFilterUpdateTrigger] = useState(0);
   
   // Filter categories state
   const [expandedFilters, setExpandedFilters] = useState({});
@@ -861,6 +867,17 @@ const SearchApi = () => {
     handleExpansionSelect(expansion);
   };
 
+  // Toggle price sorting for sealed products
+  const togglePriceSorting = async () => {
+    const newSortOrder = priceSortOrder === 'asc' ? 'desc' : 'asc';
+    setPriceSortOrder(newSortOrder);
+    
+    // Refresh the search with new price sorting
+    if (selectedExpansion) {
+      await performExpansionSearch(selectedExpansion.id, 1, false, 'sealed', true, filterValues, true, 'pricing_market', newSortOrder);
+    }
+  };
+
   // Perform search for cards in a specific expansion
   const performExpansionSearch = async (expansionId, page = 1, append = false, viewMode = null, skipCacheClear = false, currentFilterValues = null, forceCacheClear = false, currentSortBy = null, currentSortOrder = null) => {
     // Define current view mode at the beginning
@@ -927,8 +944,8 @@ const SearchApi = () => {
         const sealedResults = await localSearchService.getSealedProductsByExpansion(expansionId, {
           page,
           pageSize: 30,
-          sortBy: 'name', // Sealed products don't have a 'number' column, use 'name' instead
-          sortOrder: 'asc'
+          sortBy: currentSortBy === 'pricing_market' ? 'pricing_market' : 'name', // Use price sorting if specified, otherwise name
+          sortOrder: currentSortOrder || priceSortOrder
         });
         
         console.log(`📦 Sealed results from database: count: ${sealedResults.data?.length || 0}`);
@@ -1617,75 +1634,141 @@ const SearchApi = () => {
     setActiveFilters([]);
   };
 
+  // Calculate dynamic filter counts based on current selections
+  const getDynamicFilterCounts = (filterType) => {
+    if (!selectedExpansion) return {};
+    
+    // Get all cards for the current expansion
+    const allCards = searchResults || [];
+    
+    // Create a copy of current filter values, excluding the current filter type
+    const otherFilters = { ...filterValues };
+    delete otherFilters[filterType];
+    
+    // Filter cards based on other active filters
+    const filteredCards = allCards.filter(card => {
+      // Apply all other filters except the current one
+      for (const [filterKey, filterValues] of Object.entries(otherFilters)) {
+        if (filterValues && filterValues.length > 0) {
+          if (filterKey === 'supertype' && !filterValues.includes(card.supertype)) return false;
+          if (filterKey === 'types' && !filterValues.some(type => card.types?.includes(type))) return false;
+          if (filterKey === 'subtypes' && !filterValues.some(subtype => card.subtypes?.includes(subtype))) return false;
+          if (filterKey === 'rarity' && !filterValues.includes(card.rarity)) return false;
+          if (filterKey === 'artists' && !filterValues.includes(card.artist)) return false;
+          if (filterKey === 'weaknesses' && !filterValues.some(weakness => card.weaknesses?.some(w => w.type === weakness))) return false;
+          if (filterKey === 'resistances' && !filterValues.some(resistance => card.resistances?.some(r => r.type === resistance))) return false;
+        }
+      }
+      return true;
+    });
+    
+    // Count occurrences for the current filter type
+    const counts = {};
+    filteredCards.forEach(card => {
+      if (filterType === 'supertype' && card.supertype) {
+        counts[card.supertype] = (counts[card.supertype] || 0) + 1;
+      } else if (filterType === 'types' && card.types) {
+        card.types.forEach(type => {
+          counts[type] = (counts[type] || 0) + 1;
+        });
+      } else if (filterType === 'subtypes' && card.subtypes) {
+        card.subtypes.forEach(subtype => {
+          counts[subtype] = (counts[subtype] || 0) + 1;
+        });
+      } else if (filterType === 'rarity' && card.rarity) {
+        counts[card.rarity] = (counts[card.rarity] || 0) + 1;
+      } else if (filterType === 'artists' && card.artist) {
+        counts[card.artist] = (counts[card.artist] || 0) + 1;
+      } else if (filterType === 'weaknesses' && card.weaknesses) {
+        card.weaknesses.forEach(weakness => {
+          if (weakness.type) {
+            counts[weakness.type] = (counts[weakness.type] || 0) + 1;
+          }
+        });
+      } else if (filterType === 'resistances' && card.resistances) {
+        card.resistances.forEach(resistance => {
+          if (resistance.type) {
+            counts[resistance.type] = (counts[resistance.type] || 0) + 1;
+          }
+        });
+      }
+    });
+    
+    return counts;
+  };
+
   // Get filter options based on type and search term
   const getFilterOptions = (filterType, searchTerm) => {
-    const options = {
+    const dynamicCounts = getDynamicFilterCounts(filterType);
+    
+    // Define the base options with icons
+    const baseOptions = {
       supertype: [
-        { value: 'Pokémon', label: 'Pokémon', count: 152 },
-        { value: 'Trainer', label: 'Trainer', count: 36 }
+        { value: 'Pokémon', label: 'Pokémon' },
+        { value: 'Trainer', label: 'Trainer' }
       ],
       types: [
-        { value: 'Grass', label: 'Grass', count: 25, icon: <img src="https://scrydex.com/assets/grass-ec3509d75db6cd146139044107045ccb5bcbb528b02c3de89d709a7be4a0bf90.png" alt="Grass" className="w-4 h-4" /> },
-        { value: 'Fighting', label: 'Fighting', count: 22, icon: <img src="https://scrydex.com/assets/fighting-5fcb6e1f157032efac4f6830d88759e83e66530354a297b112fff24c152e8d3c.png" alt="Fighting" className="w-4 h-4" /> },
-        { value: 'Psychic', label: 'Psychic', count: 19, icon: <img src="https://scrydex.com/assets/psychic-503107a3ed9d9cce58e290677918f057ea6dc4e75042f2a627a5dd8a8bf6af9e.png" alt="Psychic" className="w-4 h-4" /> },
-        { value: 'Water', label: 'Water', count: 17, icon: <img src="https://scrydex.com/assets/water-6b0bc3ea40b358d372e8be04aa90be9fb74e3e46ced6824f6b264cc2a7c7e32a.png" alt="Water" className="w-4 h-4" /> },
-        { value: 'Colorless', label: 'Colorless', count: 17, icon: '⭐' },
-        { value: 'Fire', label: 'Fire', count: 16, icon: <img src="https://scrydex.com/assets/fire-76e636965a1e28800904de4abbf84ade3b019bbbce7021987f379971f881c2b5.png" alt="Fire" className="w-4 h-4" /> },
-        { value: 'Darkness', label: 'Darkness', count: 12, icon: <img src="https://scrydex.com/assets/darkness-d766bdc83589235f104c3c3892cff4de80048e7a729f24b6e5e53a1838c7ebfa.png" alt="Darkness" className="w-4 h-4" /> },
-        { value: 'Lightning', label: 'Lightning', count: 11, icon: <img src="https://scrydex.com/assets/lightning-732a70ef2e2dab4cc564fbf4d85cad48b0ac9ece462be3d42166a6fea4085773.png" alt="Lightning" className="w-4 h-4" /> },
-        { value: 'Metal', label: 'Metal', count: 9, icon: <img src="https://scrydex.com/assets/metal-076b10c3700a68913c376f841b46a1d63c3895247385b4360bc70739289179b7.png" alt="Metal" className="w-4 h-4" /> },
-        { value: 'Dragon', label: 'Dragon', count: 4, icon: <img src="https://scrydex.com/assets/dragon-3445aa07cd2c2380ae8e61f4ec47c7d678b4ab4268db16f95f66a04ecdd5200f.png" alt="Dragon" className="w-4 h-4" /> }
+        { value: 'Grass', label: 'Grass', icon: <img src="https://scrydex.com/assets/grass-ec3509d75db6cd146139044107045ccb5bcbb528b02c3de89d709a7be4a0bf90.png" alt="Grass" className="w-4 h-4" /> },
+        { value: 'Fighting', label: 'Fighting', icon: <img src="https://scrydex.com/assets/fighting-5fcb6e1f157032efac4f6830d88759e83e66530354a297b112fff24c152e8d3c.png" alt="Fighting" className="w-4 h-4" /> },
+        { value: 'Psychic', label: 'Psychic', icon: <img src="https://scrydex.com/assets/psychic-503107a3ed9d9cce58e290677918f057ea6dc4e75042f2a627a5dd8a8bf6af9e.png" alt="Psychic" className="w-4 h-4" /> },
+        { value: 'Water', label: 'Water', icon: <img src="https://scrydex.com/assets/water-6b0bc3ea40b358d372e8be04aa90be9fb74e3e46ced6824f6b264cc2a7c7e32a.png" alt="Water" className="w-4 h-4" /> },
+        { value: 'Colorless', label: 'Colorless', icon: '⭐' },
+        { value: 'Fire', label: 'Fire', icon: <img src="https://scrydex.com/assets/fire-76e636965a1e28800904de4abbf84ade3b019bbbce7021987f379971f881c2b5.png" alt="Fire" className="w-4 h-4" /> },
+        { value: 'Darkness', label: 'Darkness', icon: <img src="https://scrydex.com/assets/darkness-d766bdc83589235f104c3c3892cff4de80048e7a729f24b6e5e53a1838c7ebfa.png" alt="Darkness" className="w-4 h-4" /> },
+        { value: 'Lightning', label: 'Lightning', icon: <img src="https://scrydex.com/assets/lightning-732a70ef2e2dab4cc564fbf4d85cad48b0ac9ece462be3d42166a6fea4085773.png" alt="Lightning" className="w-4 h-4" /> },
+        { value: 'Metal', label: 'Metal', icon: <img src="https://scrydex.com/assets/metal-076b10c3700a68913c376f841b46a1d63c3895247385b4360bc70739289179b7.png" alt="Metal" className="w-4 h-4" /> },
+        { value: 'Dragon', label: 'Dragon', icon: <img src="https://scrydex.com/assets/dragon-3445aa07cd2c2380ae8e61f4ec47c7d678b4ab4268db16f95f66a04ecdd5200f.png" alt="Dragon" className="w-4 h-4" /> }
       ],
       subtypes: [
-        { value: 'Basic', label: 'Basic', count: 83 },
-        { value: 'Stage 1', label: 'Stage 1', count: 52 },
-        { value: 'MEGA', label: 'MEGA', count: 28 },
-        { value: 'ex', label: 'ex', count: 28 },
-        { value: 'Stage 2', label: 'Stage 2', count: 17 },
-        { value: 'Item', label: 'Item', count: 16 },
-        { value: 'Supporter', label: 'Supporter', count: 14 },
-        { value: 'Stadium', label: 'Stadium', count: 5 },
-        { value: 'Pokémon Tool', label: 'Pokémon Tool', count: 1 }
+        { value: 'Basic', label: 'Basic' },
+        { value: 'Stage 1', label: 'Stage 1' },
+        { value: 'MEGA', label: 'MEGA' },
+        { value: 'ex', label: 'ex' },
+        { value: 'Stage 2', label: 'Stage 2' },
+        { value: 'Item', label: 'Item' },
+        { value: 'Supporter', label: 'Supporter' },
+        { value: 'Stadium', label: 'Stadium' },
+        { value: 'Pokémon Tool', label: 'Pokémon Tool' }
       ],
       rarity: [
-        { value: 'Common', label: 'Common', count: 67 },
-        { value: 'Uncommon', label: 'Uncommon', count: 43 },
-        { value: 'Illustration Rare', label: 'Illustration Rare', count: 22 },
-        { value: 'Ultra Rare', label: 'Ultra Rare', count: 22 },
-        { value: 'Rare', label: 'Rare', count: 12 },
-        { value: 'Special Illustration Rare', label: 'Special Illustration Rare', count: 10 },
-        { value: 'Double Rare', label: 'Double Rare', count: 10 },
-        { value: 'Mega Hyper Rare', label: 'Mega Hyper Rare', count: 2 }
+        { value: 'Common', label: 'Common' },
+        { value: 'Uncommon', label: 'Uncommon' },
+        { value: 'Illustration Rare', label: 'Illustration Rare' },
+        { value: 'Ultra Rare', label: 'Ultra Rare' },
+        { value: 'Rare', label: 'Rare' },
+        { value: 'Special Illustration Rare', label: 'Special Illustration Rare' },
+        { value: 'Double Rare', label: 'Double Rare' },
+        { value: 'Mega Hyper Rare', label: 'Mega Hyper Rare' }
       ],
       artists: [
-        { value: '5ban Graphics', label: '5ban Graphics', count: 15 },
-        { value: 'Studio Bora Inc.', label: 'Studio Bora Inc.', count: 7 },
-        { value: 'Toyste Beach', label: 'Toyste Beach', count: 6 },
-        { value: 'AYUMI ODASHIMA', label: 'AYUMI ODASHIMA', count: 5 },
-        { value: 'aky CG Works', label: 'aky CG Works', count: 4 },
-        { value: 'Atsushi Furusawa', label: 'Atsushi Furusawa', count: 3 },
-        { value: 'Saboteri', label: 'Saboteri', count: 3 },
-        { value: 'mashu', label: 'mashu', count: 3 },
-        { value: 'satoma', label: 'satoma', count: 3 },
-        { value: 'takuyoa', label: 'takuyoa', count: 3 }
+        { value: '5ban Graphics', label: '5ban Graphics' },
+        { value: 'Studio Bora Inc.', label: 'Studio Bora Inc.' },
+        { value: 'Toyste Beach', label: 'Toyste Beach' },
+        { value: 'AYUMI ODASHIMA', label: 'AYUMI ODASHIMA' },
+        { value: 'aky CG Works', label: 'aky CG Works' },
+        { value: 'Atsushi Furusawa', label: 'Atsushi Furusawa' },
+        { value: 'Saboteri', label: 'Saboteri' },
+        { value: 'mashu', label: 'mashu' },
+        { value: 'satoma', label: 'satoma' },
+        { value: 'takuyoa', label: 'takuyoa' }
       ],
       weaknesses: [
-        { value: 'Fire', label: 'Fire', count: 34, icon: <img src="https://scrydex.com/assets/fire-76e636965a1e28800904de4abbf84ade3b019bbbce7021987f379971f881c2b5.png" alt="Fire" className="w-4 h-4" /> },
-        { value: 'Fighting', label: 'Fighting', count: 26, icon: <img src="https://scrydex.com/assets/fighting-5fcb6e1f157032efac4f6830d88759e83e66530354a297b112fff24c152e8d3c.png" alt="Fighting" className="w-4 h-4" /> },
-        { value: 'Grass', label: 'Grass', count: 18, icon: <img src="https://scrydex.com/assets/grass-ec3509d75db6cd146139044107045ccb5bcbb528b02c3de89d709a7be4a0bf90.png" alt="Grass" className="w-4 h-4" /> },
-        { value: 'Darkness', label: 'Darkness', count: 18, icon: <img src="https://scrydex.com/assets/darkness-d766bdc83589235f104c3c3892cff4de80048e7a729f24b6e5e53a1838c7ebfa.png" alt="Darkness" className="w-4 h-4" /> },
-        { value: 'Lightning', label: 'Lightning', count: 16, icon: <img src="https://scrydex.com/assets/lightning-732a70ef2e2dab4cc564fbf4d85cad48b0ac9ece462be3d42166a6fea4085773.png" alt="Lightning" className="w-4 h-4" /> },
-        { value: 'Water', label: 'Water', count: 16, icon: <img src="https://scrydex.com/assets/water-6b0bc3ea40b358d372e8be04aa90be9fb74e3e46ced6824f6b264cc2a7c7e32a.png" alt="Water" className="w-4 h-4" /> },
-        { value: 'Psychic', label: 'Psychic', count: 12, icon: <img src="https://scrydex.com/assets/psychic-503107a3ed9d9cce58e290677918f057ea6dc4e75042f2a627a5dd8a8bf6af9e.png" alt="Psychic" className="w-4 h-4" /> },
-        { value: 'Metal', label: 'Metal', count: 8, icon: <img src="https://scrydex.com/assets/metal-076b10c3700a68913c376f841b46a1d63c3895247385b4360bc70739289179b7.png" alt="Metal" className="w-4 h-4" /> }
+        { value: 'Fire', label: 'Fire', icon: <img src="https://scrydex.com/assets/fire-76e636965a1e28800904de4abbf84ade3b019bbbce7021987f379971f881c2b5.png" alt="Fire" className="w-4 h-4" /> },
+        { value: 'Fighting', label: 'Fighting', icon: <img src="https://scrydex.com/assets/fighting-5fcb6e1f157032efac4f6830d88759e83e66530354a297b112fff24c152e8d3c.png" alt="Fighting" className="w-4 h-4" /> },
+        { value: 'Grass', label: 'Grass', icon: <img src="https://scrydex.com/assets/grass-ec3509d75db6cd146139044107045ccb5bcbb528b02c3de89d709a7be4a0bf90.png" alt="Grass" className="w-4 h-4" /> },
+        { value: 'Darkness', label: 'Darkness', icon: <img src="https://scrydex.com/assets/darkness-d766bdc83589235f104c3c3892cff4de80048e7a729f24b6e5e53a1838c7ebfa.png" alt="Darkness" className="w-4 h-4" /> },
+        { value: 'Lightning', label: 'Lightning', icon: <img src="https://scrydex.com/assets/lightning-732a70ef2e2dab4cc564fbf4d85cad48b0ac9ece462be3d42166a6fea4085773.png" alt="Lightning" className="w-4 h-4" /> },
+        { value: 'Water', label: 'Water', icon: <img src="https://scrydex.com/assets/water-6b0bc3ea40b358d372e8be04aa90be9fb74e3e46ced6824f6b264cc2a7c7e32a.png" alt="Water" className="w-4 h-4" /> },
+        { value: 'Psychic', label: 'Psychic', icon: <img src="https://scrydex.com/assets/psychic-503107a3ed9d9cce58e290677918f057ea6dc4e75042f2a627a5dd8a8bf6af9e.png" alt="Psychic" className="w-4 h-4" /> },
+        { value: 'Metal', label: 'Metal', icon: <img src="https://scrydex.com/assets/metal-076b10c3700a68913c376f841b46a1d63c3895247385b4360bc70739289179b7.png" alt="Metal" className="w-4 h-4" /> }
       ],
       resistances: [
-        { value: 'Fighting', label: 'Fighting', count: 24, icon: <img src="https://scrydex.com/assets/fighting-5fcb6e1f157032efac4f6830d88759e83e66530354a297b112fff24c152e8d3c.png" alt="Fighting" className="w-4 h-4" /> },
-        { value: 'Grass', label: 'Grass', count: 9, icon: <img src="https://scrydex.com/assets/grass-ec3509d75db6cd146139044107045ccb5bcbb528b02c3de89d709a7be4a0bf90.png" alt="Grass" className="w-4 h-4" /> }
+        { value: 'Fighting', label: 'Fighting', icon: <img src="https://scrydex.com/assets/fighting-5fcb6e1f157032efac4f6830d88759e83e66530354a297b112fff24c152e8d3c.png" alt="Fighting" className="w-4 h-4" /> },
+        { value: 'Grass', label: 'Grass', icon: <img src="https://scrydex.com/assets/grass-ec3509d75db6cd146139044107045ccb5bcbb528b02c3de89d709a7be4a0bf90.png" alt="Grass" className="w-4 h-4" /> }
       ]
     };
 
-    let filterOptions = options[filterType] || [];
+    let filterOptions = baseOptions[filterType] || [];
     
     // Filter by search term
     if (searchTerm) {
@@ -2403,17 +2486,31 @@ const SearchApi = () => {
             {selectedExpansion && (
               <div className="space-y-3">
                 {/* Filter Controls Row */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
                   {/* Filter Button with Badge */}
                   <div className="relative">
-                    <button
-                      onClick={() => setIsFilterSidebarOpen(true)}
-                      className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
-                      title="Filter and Sort"
-                    >
-                      <Filter className="w-5 h-5 text-gray-400" />
-                    </button>
-                    {activeFilters.length > 0 && (
+                    {expansionViewMode === 'sealed' ? (
+                      <button
+                        onClick={togglePriceSorting}
+                        className="h-9 w-9 flex items-center justify-center bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+                        title={priceSortOrder === 'asc' ? 'Sort by Price: Low to High' : 'Sort by Price: High to Low'}
+                      >
+                        {priceSortOrder === 'asc' ? (
+                          <ArrowUp className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <ArrowDown className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setIsFilterSidebarOpen(true)}
+                        className="h-9 w-9 flex items-center justify-center bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+                        title="Filter and Sort"
+                      >
+                        <Filter className="w-4 h-4 text-gray-400" />
+                      </button>
+                    )}
+                    {activeFilters.length > 0 && expansionViewMode !== 'sealed' && (
                       <div className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                         {activeFilters.length}
                       </div>
@@ -2450,6 +2547,7 @@ const SearchApi = () => {
                       setHasMore(false);
                       setCurrentPage(1);
                       setIsLoading(true); // Show loading state
+                      setPriceSortOrder('asc'); // Reset to low-to-high when switching to sealed
                       
                       console.log('📦 Switching to sealed products from database');
                       performExpansionSearch(selectedExpansion.id, 1, false, 'sealed', true, filterValues);
@@ -3260,6 +3358,7 @@ const SearchApi = () => {
                                   <div
                                     key={`${filterType}-${option.value}`}
                                     className="flex items-center justify-between py-2.5 px-2 hover:bg-gray-800 rounded-md cursor-pointer transition-colors"
+                                    onClick={() => toggleFilterValue(filterType, option.value)}
                                   >
                                     <div className="flex items-center">
                                       {option.icon && (
@@ -3271,7 +3370,7 @@ const SearchApi = () => {
                                     </div>
                                     <div className="flex items-center">
                                       <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full mr-3">
-                                        {option.count}
+                                        {getDynamicFilterCounts(filterType)[option.value] || 0}
                                       </span>
                                       <input
                                         type="checkbox"
@@ -3281,7 +3380,7 @@ const SearchApi = () => {
                                           e.stopPropagation();
                                           toggleFilterValue(filterType, option.value);
                                         }} // Handle click directly and prevent bubbling
-                                        className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                        className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500 pointer-events-none"
                                       />
                                     </div>
                                   </div>

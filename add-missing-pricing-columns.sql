@@ -62,3 +62,4 @@ ADD COLUMN IF NOT EXISTS graded_currency VARCHAR(10),
 ADD COLUMN IF NOT EXISTS graded_trends JSONB;
 
 
+

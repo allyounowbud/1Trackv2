@@ -7,3 +7,4 @@ UPDATE sync_status
 SET last_successful_page = 1 
 WHERE id = 1;
 
+
