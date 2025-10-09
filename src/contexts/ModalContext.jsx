@@ -22,36 +22,23 @@ const isMobileSafari = () => {
 export const ModalProvider = ({ children }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [customBottomButtons, setCustomBottomButtons] = useState(null);
-  const isTransitioningRef = React.useRef(false);
 
   const openModal = useCallback((buttons = null) => {
-    if (isTransitioningRef.current) return; // Prevent multiple rapid calls
-    
-    console.log('ModalContext openModal called with buttons:', buttons);
-    isTransitioningRef.current = true;
+    console.log('✅ ModalContext openModal called with buttons:', buttons);
     setIsModalOpen(true);
     setCustomBottomButtons(buttons);
     
     // Single strategy: Use CSS class only to avoid conflicts
     document.body.classList.add('modal-open');
-    
-    // Reset transition flag after a brief delay
-    setTimeout(() => { isTransitioningRef.current = false; }, 100);
   }, []);
   
   const closeModal = useCallback(() => {
-    if (isTransitioningRef.current) return; // Prevent multiple rapid calls
-    
-    console.log('ModalContext closeModal called');
-    isTransitioningRef.current = true;
+    console.log('🔒 ModalContext closeModal called');
     setIsModalOpen(false);
     setCustomBottomButtons(null);
     
     // Clean up modal state
     document.body.classList.remove('modal-open');
-    
-    // Reset transition flag after a brief delay
-    setTimeout(() => { isTransitioningRef.current = false; }, 100);
   }, []);
 
   // Cleanup on unmount

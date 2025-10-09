@@ -6,14 +6,18 @@ import cardSearchService from '../services/cardSearchService';
 import SafeImage from '../components/SafeImage';
 import CardPreviewModal from '../components/CardPreviewModal';
 import CustomItemModal from '../components/CustomItemModal';
+import AddToCollectionModal from '../components/AddToCollectionModal';
 import { supabase } from '../lib/supabaseClient';
 import { useModal } from '../contexts/ModalContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryClient';
 
 const SearchApi = () => {
   const navigate = useNavigate();
   const { game: gameParam, expansionId: expansionParam } = useParams();
   const location = useLocation();
   const { openModal, closeModal } = useModal();
+  const queryClient = useQueryClient();
   
   // Available games with icons
   const games = [
@@ -103,6 +107,8 @@ const SearchApi = () => {
   // Modal state
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState(null);
+  const [isAddToCollectionModalOpen, setIsAddToCollectionModalOpen] = useState(false);
+  const [selectedCardForCollection, setSelectedCardForCollection] = useState(null);
   
   // Back to top button state
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -1173,14 +1179,33 @@ const SearchApi = () => {
     setIsCardModalOpen(true);
   };
 
-  // Handle add to collection - navigate to add item page with pre-filled data
+  // Handle add to collection - show modal locally
   const handleAddToCollection = (card) => {
-    // Prepare card data for the add item page
+    // Prepare card data for the modal
+    // Use the same logic as the search page display
+    let marketValue = 0;
+    
+    if (card.raw_price) {
+      marketValue = parseFloat(card.raw_price);
+    } else if (card.graded_price) {
+      marketValue = parseFloat(card.graded_price);
+    } else if (card.market_value_cents) {
+      marketValue = card.market_value_cents / 100;
+    }
+    
+    console.log('🔍 Card market data:', {
+      name: card.name,
+      raw_price: card.raw_price,
+      graded_price: card.graded_price,
+      market_value_cents: card.market_value_cents,
+      calculated_market_value: marketValue
+    });
+    
     const cardData = {
       name: card.name,
       set_name: card.expansion_name || card.set_name,
       item_type: 'Card',
-      market_value: card.raw_price || card.graded_price || 0,
+      market_value: marketValue,
       image_url: card.image_url,
       description: `${card.rarity} card from ${card.expansion_name || card.set_name}`,
       number: card.number,
@@ -1189,8 +1214,10 @@ const SearchApi = () => {
       api_id: card.id
     };
     
-    // Navigate to collection page and trigger the modal instantly
-    navigate('/', { state: { showAddModal: true, prefilledData: cardData } });
+    // Set the selected card and open the modal
+    setSelectedCardForCollection(cardData);
+    setIsAddToCollectionModalOpen(true);
+    openModal();
   };
 
   // Navigation functions
@@ -3081,6 +3108,33 @@ const SearchApi = () => {
           isOpen={isCardModalOpen}
           onClose={() => setIsCardModalOpen(false)}
           onAddToCollection={handleAddToCollection}
+        />
+      )}
+
+      {/* Add to Collection Modal */}
+      {isAddToCollectionModalOpen && selectedCardForCollection && (
+        <AddToCollectionModal
+          product={{
+            name: selectedCardForCollection.name,
+            set: selectedCardForCollection.set_name,
+            marketValue: parseFloat(selectedCardForCollection.market_value || 0),
+            imageUrl: selectedCardForCollection.image_url,
+            source: 'api'
+          }}
+          isOpen={isAddToCollectionModalOpen}
+          onClose={() => {
+            setIsAddToCollectionModalOpen(false);
+            setSelectedCardForCollection(null);
+            closeModal();
+          }}
+          onSuccess={() => {
+            setIsAddToCollectionModalOpen(false);
+            setSelectedCardForCollection(null);
+            closeModal();
+            // Invalidate collection queries to refresh data
+            queryClient.invalidateQueries({ queryKey: queryKeys.orders });
+            queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary });
+          }}
         />
       )}
 

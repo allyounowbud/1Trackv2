@@ -4,9 +4,17 @@ import { getCleanItemName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
 import DesktopSideMenu from './DesktopSideMenu';
 
-// Cache bust: Updated theme colors - v2
+// Cache bust: Updated theme colors - v3 - Fixed JSX structure
 const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const { openModal, closeModal } = useModal();
+  
+  // Debug: Log the product data being passed to the modal
+  console.log('🎯 AddToCollectionModal received product:', {
+    name: product?.name,
+    marketValue: product?.marketValue,
+    source: product?.source,
+    api_id: product?.api_id
+  });
   const [formData, setFormData] = useState({
     // Purchase details
     buyDate: new Date().toISOString().split('T')[0], // Today's date
@@ -24,6 +32,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const [retailers, setRetailers] = useState([]);
   const [retailerSearchQuery, setRetailerSearchQuery] = useState('');
   const [isRetailerFocused, setIsRetailerFocused] = useState(false);
+  const [activePriceField, setActivePriceField] = useState('perItem'); // 'perItem' or 'total'
 
   // Prevent body scroll when modal is open and update modal context
   useEffect(() => {
@@ -76,19 +85,28 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
     }
   }, [product]);
 
-  // Auto-calculate total price when quantity or price per item changes
+  // Auto-calculate prices when quantity, price per item, or total price changes
   useEffect(() => {
     const quantity = parseFloat(formData.quantity) || 0;
     const pricePerItem = parseFloat(formData.pricePerItem) || 0;
-    const totalPrice = quantity * pricePerItem;
+    const totalPrice = parseFloat(formData.buyPrice) || 0;
     
-    if (totalPrice > 0) {
+    if (activePriceField === 'perItem' && quantity > 0 && pricePerItem > 0) {
+      // Calculate total from price per item
+      const calculatedTotal = quantity * pricePerItem;
       setFormData(prev => ({
         ...prev,
-        buyPrice: totalPrice.toFixed(2)
+        buyPrice: calculatedTotal.toFixed(2)
+      }));
+    } else if (activePriceField === 'total' && quantity > 0 && totalPrice > 0) {
+      // Calculate price per item from total
+      const calculatedPerItem = totalPrice / quantity;
+      setFormData(prev => ({
+        ...prev,
+        pricePerItem: calculatedPerItem.toFixed(2)
       }));
     }
-  }, [formData.quantity, formData.pricePerItem]);
+  }, [formData.quantity, formData.pricePerItem, formData.buyPrice, activePriceField]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -124,19 +142,88 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         throw new Error('Please fill in all required fields');
       }
 
+      let itemId;
+      
+      if (product.source === 'api' && product.api_id) {
+        // For API-sourced cards, check if item already exists by name and set
+        const { data: existingItem } = await supabase
+          .from('items')
+          .select('id')
+          .eq('name', product.name)
+          .eq('set_name', product.set || '')
+          .single();
+
+        if (existingItem) {
+          itemId = existingItem.id;
+        } else {
+          // Create new item with market value from Pokemon card data
+          const marketValueCents = Math.round((product.marketValue || 0) * 100);
+          console.log('💾 Creating item with Pokemon card market value:', {
+            name: product.name,
+            pokemon_card_id: product.api_id,
+            marketValue: product.marketValue,
+            marketValueCents: marketValueCents
+          });
+          
+          const { data: newItem, error: itemError } = await supabase
+            .from('items')
+            .insert({
+              name: product.name,
+              set_name: product.set || '',
+              image_url: product.imageUrl || '',
+              item_type: 'Card',
+              market_value_cents: marketValueCents
+            })
+            .select('id')
+            .single();
+          
+          if (itemError) throw itemError;
+          itemId = newItem.id;
+        }
+      } else {
+        // For manual items, use the old logic
+        const itemName = product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set);
+        
+        const { data: existingItem } = await supabase
+          .from('items')
+          .select('id')
+          .eq('name', itemName)
+          .eq('set_name', product.set || '')
+          .single();
+
+        if (existingItem) {
+          itemId = existingItem.id;
+        } else {
+          const { data: newItem, error: itemError } = await supabase
+            .from('items')
+            .insert({
+              name: itemName,
+              set_name: product.set || '',
+              image_url: product.imageUrl || '',
+              item_type: 'Card'
+            })
+            .select('id')
+            .single();
+          
+          if (itemError) throw itemError;
+          itemId = newItem.id;
+        }
+      }
+
       // Prepare order data
+      const buyPriceCents = Math.round(parseFloat(formData.pricePerItem) * 100); // Price per item in cents
+      const totalCostCents = Math.round(parseFloat(formData.buyPrice) * 100); // Total cost in cents
+      
       const orderData = {
-        user_id: (await supabase.auth.getUser()).data.user?.id,
-        item_name: product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set),
-        item_set: product.set || '',
-        item_image_url: product.imageUrl || '',
-        market_value: parseFloat(product.marketValue) || 0,
-        quantity: parseInt(formData.quantity),
-        buy_price: parseFloat(formData.buyPrice),
+        item_id: itemId,
+        order_type: 'buy',
         buy_date: formData.buyDate,
+        buy_price_cents: buyPriceCents, // Price per item
+        buy_quantity: parseInt(formData.quantity),
+        total_cost_cents: totalCostCents, // Total cost for all items
         buy_location: formData.buyLocation || null,
         buy_notes: formData.buyNotes || null,
-        status: 'owned'
+        status: 'ordered'
       };
 
       // Insert order
@@ -151,8 +238,8 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       // Show success state
       setSuccessData({
         quantity: formData.quantity,
-        item: orderData.item_name,
-        set: orderData.item_set,
+        item: product.name,
+        set: product.set || '',
         price: formData.buyPrice
       });
 
@@ -178,273 +265,285 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
     }
   };
 
-  // Check if we're on desktop
-  const isDesktop = window.innerWidth >= 1024;
+  // Check if we're on desktop - prefer mobile style unless very large screen
+  const isDesktop = window.innerWidth >= 1536; // Only show desktop version on extra large screens (2xl)
 
   if (isDesktop) {
     return (
       <DesktopSideMenu isOpen={isOpen} onClose={onClose} title="Add to Collection">
         <div className="p-6 space-y-6">
-
-      {/* Product Info */}
-      <div className="p-4 border-b border-gray-700 bg-gray-900">
-        <div className="flex items-center space-x-3">
-          {product.imageUrl && (
-            <img
-              src={product.imageUrl}
-              alt={product.name}
-              className="w-12 h-12 object-cover rounded"
-            />
-          )}
-          <div>
-            <h3 className="text-white font-medium" style={{ fontSize: '14px' }}>{product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set)}</h3>
-            {product.set && (
-              <p className="text-gray-400" style={{ fontSize: '12px' }}>{product.set}</p>
-            )}
-            {product.marketValue && (
-              <p className="text-emerald-400" style={{ fontSize: '12px' }}>
-                Market Value: ${product.marketValue.toFixed(2)}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-        <div className="flex-1 p-6 overflow-y-auto min-h-0 bg-gray-900">
-          {error && (
-            <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-6">
-              <p className="text-red-400 text-sm">{error}</p>
-            </div>
-          )}
-
-          {/* Purchase Details Section */}
-          <div className="space-y-6">
-            <h3 className="text-lg font-semibold text-white border-b border-gray-700 pb-2">Purchase Details</h3>
-            
-            {/* Top Row - Date and Retailer */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Order Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Order Date
-                </label>
-                <input
-                  type="date"
-                  name="buyDate"
-                  value={formData.buyDate}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  style={{ 
-                    backgroundColor: '#111827',
-                    minWidth: '0',
-                    maxWidth: '100%',
-                    boxSizing: 'border-box'
-                  }}
+          {/* Product Info */}
+          <div className="p-4 border-b border-gray-700 bg-gray-900">
+            <div className="flex items-center space-x-3">
+              {product.imageUrl && (
+                <img
+                  src={product.imageUrl}
+                  alt={product.name}
+                  className="w-12 h-12 object-cover rounded"
                 />
-              </div>
-
-              {/* Retailer */}
+              )}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Purchase Location
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    name="buyLocation"
-                    value={formData.buyLocation}
-                    onChange={(e) => {
-                      handleInputChange(e);
-                      setRetailerSearchQuery(e.target.value);
-                    }}
-                    onFocus={() => {
-                      setIsRetailerFocused(true);
-                      setRetailerSearchQuery(formData.buyLocation || '');
-                    }}
-                    onBlur={() => {
-                      setTimeout(() => setIsRetailerFocused(false), 150);
-                    }}
-                    placeholder="Type to search retailers..."
-                    className="w-full px-4 py-3 pr-8 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                    style={{ backgroundColor: '#111827', color: 'white' }}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck="false"
-                  />
-                  {formData.buyLocation && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, buyLocation: '' }));
-                        setRetailerSearchQuery('');
-                        setIsRetailerFocused(false);
+                <h3 className="text-white font-medium" style={{ fontSize: '14px' }}>{product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set)}</h3>
+                {product.set && (
+                  <p className="text-gray-400" style={{ fontSize: '12px' }}>{product.set}</p>
+                )}
+                {product.marketValue !== undefined && product.marketValue !== null && (
+                  <p className="text-emerald-400" style={{ fontSize: '12px' }}>
+                    Value: ${product.marketValue.toFixed(2)}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 p-6 overflow-y-auto min-h-0 bg-gray-900">
+              {error && (
+                <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-6">
+                  <p className="text-red-400 text-sm">{error}</p>
+                </div>
+              )}
+
+              {/* Purchase Details Section */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold text-white border-b border-gray-700 pb-2">Purchase Details</h3>
+                
+                {/* Top Row - Date and Retailer */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Order Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Order Date
+                    </label>
+                    <input
+                      type="date"
+                      name="buyDate"
+                      value={formData.buyDate}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
+                      style={{ 
+                        backgroundColor: '#111827',
+                        minWidth: '0',
+                        maxWidth: '100%',
+                        boxSizing: 'border-box'
                       }}
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                  {(isRetailerFocused || retailerSearchQuery !== '') && (
-                    <div className="absolute z-10 w-full mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-lg max-h-40 overflow-y-auto" style={{ backgroundColor: '#111827', borderColor: '#374151' }}>
-                      {(() => {
-                        const filteredRetailers = retailers.filter(retailer => 
-                          retailerSearchQuery === '' || retailer.display_name.toLowerCase().includes(retailerSearchQuery.toLowerCase())
-                        );
-                        const exactMatch = filteredRetailers.find(retailer => 
-                          retailer.display_name.toLowerCase() === retailerSearchQuery.toLowerCase()
-                        );
-                        
-                        return (
-                          <>
-                            {filteredRetailers.slice(0, 4).map(retailer => (
-                              <button
-                                key={retailer.id}
-                                type="button"
-                                onClick={() => {
-                                  setFormData(prev => ({ ...prev, buyLocation: retailer.display_name }));
-                                  setRetailerSearchQuery('');
-                                  setIsRetailerFocused(false);
-                                }}
-                                className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 text-sm"
-                              >
-                                {retailer.display_name}
-                              </button>
-                            ))}
-                            {!exactMatch && retailerSearchQuery !== '' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setFormData(prev => ({ ...prev, buyLocation: retailerSearchQuery }));
-                                  setRetailerSearchQuery('');
-                                  setIsRetailerFocused(false);
-                                }}
-                                className="w-full px-3 py-2 text-left text-indigo-400 hover:bg-gray-700 text-sm border-t border-gray-700"
-                              >
-                                Add "{retailerSearchQuery}"
-                              </button>
-                            )}
-                          </>
-                        );
-                      })()}
+                    />
+                  </div>
+
+                  {/* Retailer */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Purchase Location
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="buyLocation"
+                        value={formData.buyLocation}
+                        onChange={(e) => {
+                          handleInputChange(e);
+                          setRetailerSearchQuery(e.target.value);
+                        }}
+                        onFocus={() => {
+                          setIsRetailerFocused(true);
+                          setRetailerSearchQuery(formData.buyLocation || '');
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => setIsRetailerFocused(false), 150);
+                        }}
+                        placeholder="Type to search retailers..."
+                        className="w-full px-4 py-3 pr-8 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
+                        style={{ backgroundColor: '#111827', color: 'white' }}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck="false"
+                      />
+                      {formData.buyLocation && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, buyLocation: '' }));
+                            setRetailerSearchQuery('');
+                            setIsRetailerFocused(false);
+                          }}
+                          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                      {(isRetailerFocused || retailerSearchQuery !== '') && (
+                        <div className="absolute z-10 w-full mt-1 bg-gray-900 border border-indigo-400/50 rounded-lg shadow-lg max-h-40 overflow-y-auto ring-0.5 ring-indigo-400/50" style={{ backgroundColor: '#111827' }}>
+                          {(() => {
+                            const filteredRetailers = retailers.filter(retailer => 
+                              retailerSearchQuery === '' || retailer.display_name.toLowerCase().includes(retailerSearchQuery.toLowerCase())
+                            );
+                            const exactMatch = filteredRetailers.find(retailer => 
+                              retailer.display_name.toLowerCase() === retailerSearchQuery.toLowerCase()
+                            );
+                            
+                            return (
+                              <>
+                                {filteredRetailers.slice(0, 4).map(retailer => (
+                                  <button
+                                    key={retailer.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setFormData(prev => ({ ...prev, buyLocation: retailer.display_name }));
+                                      setRetailerSearchQuery('');
+                                      setIsRetailerFocused(false);
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 text-sm"
+                                  >
+                                    {retailer.display_name}
+                                  </button>
+                                ))}
+                                {!exactMatch && retailerSearchQuery !== '' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFormData(prev => ({ ...prev, buyLocation: retailerSearchQuery }));
+                                      setRetailerSearchQuery('');
+                                      setIsRetailerFocused(false);
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-indigo-400 hover:bg-gray-700 text-sm border-t border-gray-700"
+                                  >
+                                    Add "{retailerSearchQuery}"
+                                  </button>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            </div>
-            
-            {/* Pricing Row - Quantity, Price per Item, and Total */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Quantity */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Quantity
-                </label>
-                <input
-                  type="number"
-                  name="quantity"
-                  value={formData.quantity}
-                  onChange={handleInputChange}
-                  min="1"
-                  required
-                  placeholder="1"
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  style={{ backgroundColor: '#111827' }}
-                />
-              </div>
+                
+                {/* Quantity Row */}
+                <div className="grid grid-cols-1 gap-4">
+                  {/* Quantity */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Quantity
+                    </label>
+                    <input
+                      type="number"
+                      name="quantity"
+                      value={formData.quantity}
+                      onChange={handleInputChange}
+                      min="1"
+                      required
+                      placeholder="1"
+                      className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
+                      style={{ backgroundColor: '#111827' }}
+                    />
+                  </div>
+                </div>
 
-              {/* Price Per Item */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Price (per item)
-                </label>
-                <input
-                  type="number"
-                  name="pricePerItem"
-                  value={formData.pricePerItem}
-                  onChange={handleInputChange}
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  style={{ backgroundColor: '#111827' }}
-                />
-              </div>
+                {/* Price Row - Side by side */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Price Per Item */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Price (per item)
+                    </label>
+                    <input
+                      type="number"
+                      name="pricePerItem"
+                      value={formData.pricePerItem}
+                      onChange={handleInputChange}
+                      onFocus={() => setActivePriceField('perItem')}
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      className={`w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors ${
+                        activePriceField === 'perItem' 
+                          ? 'text-white' 
+                          : 'text-gray-400'
+                      }`}
+                      style={{ backgroundColor: '#111827' }}
+                    />
+                  </div>
 
-              {/* Total Buy Price */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Total Price
-                </label>
-                <input
-                  type="number"
-                  name="buyPrice"
-                  value={formData.buyPrice}
-                  onChange={handleInputChange}
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  style={{ backgroundColor: '#111827' }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Submit Button */}
-        <div className="p-6 border-t border-gray-700 bg-gray-900">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-4 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base"
-          >
-            {isSubmitting ? (
-              <div className="flex items-center justify-center space-x-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Adding to Collection...</span>
-              </div>
-            ) : (
-              'Add to Collection'
-            )}
-          </button>
-        </div>
-      </form>
-
-      {/* Processing Animation Modal */}
-      {showProcessing && successData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 max-w-sm w-full mx-4">
-            {/* Spinning Animation */}
-            <div className="flex justify-center mb-6">
-              <div className="relative">
-                {/* Outer spinning ring */}
-                <div className="w-20 h-20 border-4 border-gray-700 border-t-indigo-500 rounded-full animate-spin"></div>
-                {/* Inner pulsing dot */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                  <div className="w-3 h-3 bg-indigo-500 rounded-full animate-pulse"></div>
+                  {/* Total Price */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Total Price
+                    </label>
+                    <input
+                      type="number"
+                      name="buyPrice"
+                      value={formData.buyPrice}
+                      onChange={handleInputChange}
+                      onFocus={() => setActivePriceField('total')}
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      className={`w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors ${
+                        activePriceField === 'total' 
+                          ? 'text-white' 
+                          : 'text-gray-400'
+                      }`}
+                      style={{ backgroundColor: '#111827' }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Processing Message */}
-            <div className="text-center">
-              <h3 className="text-lg font-semibold text-white mb-2">Adding to Collection</h3>
-              <div className="text-sm text-gray-300 space-y-1 mb-4">
-                <p><span className="font-medium">{successData.quantity}x</span> {successData.item}</p>
-                {successData.set && <p className="text-gray-400">{successData.set}</p>}
-                <p className="text-indigo-400 font-medium">${parseFloat(successData.price).toFixed(2)}</p>
-              </div>
-              <p className="text-xs text-gray-400">Updating your collection...</p>
+            {/* Submit Button */}
+            <div className="p-6 border-t border-gray-700 bg-gray-900">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-4 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base"
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Adding to Collection...</span>
+                  </div>
+                ) : (
+                  'Add to Collection'
+                )}
+              </button>
             </div>
-          </div>
-        </div>
-      )}
+          </form>
+
+          {/* Processing Animation Modal */}
+          {showProcessing && successData && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 max-w-sm w-full mx-4">
+                {/* Spinning Animation */}
+                <div className="flex justify-center mb-6">
+                  <div className="relative">
+                    {/* Outer spinning ring */}
+                    <div className="w-20 h-20 border-4 border-gray-700 border-t-indigo-500 rounded-full animate-spin"></div>
+                    {/* Inner pulsing dot */}
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                      <div className="w-3 h-3 bg-indigo-500 rounded-full animate-pulse"></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Processing Message */}
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-white mb-2">Adding to Collection</h3>
+                  <div className="text-sm text-gray-300 space-y-1 mb-4">
+                    <p><span className="font-medium">{successData.quantity}x</span> {successData.item}</p>
+                    {successData.set && <p className="text-gray-400">{successData.set}</p>}
+                    <p className="text-indigo-400 font-medium">${parseFloat(successData.price).toFixed(2)}</p>
+                  </div>
+                  <p className="text-xs text-gray-400">Updating your collection...</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </DesktopSideMenu>
     );
@@ -452,7 +551,33 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
 
   // Mobile version - iPhone-style design
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]">
+    <>
+      {/* Dark theme date picker styles */}
+      <style jsx>{`
+        input[type="date"]::-webkit-calendar-picker-indicator {
+          cursor: pointer;
+          filter: invert(0.5) sepia(1) saturate(5) hue-rotate(200deg);
+        }
+        
+        input[type="date"]::-webkit-datetime-edit {
+          color: white;
+        }
+        
+        input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+          background: transparent;
+        }
+        
+        input[type="date"]::-webkit-datetime-edit-text {
+          color: white;
+        }
+        
+        input[type="date"]::-webkit-datetime-edit-month-field,
+        input[type="date"]::-webkit-datetime-edit-day-field,
+        input[type="date"]::-webkit-datetime-edit-year-field {
+          color: white;
+        }
+      `}</style>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]">
       <div 
         className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[95vh] overflow-y-auto animate-slide-up"
         style={{
@@ -469,7 +594,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-white">Add to Collection</h2>
-              <p className="text-sm text-gray-400 mt-1">Add new orders quickly</p>
+              <p className="text-sm text-gray-400 mt-1">Creates new entries in the order book</p>
             </div>
             <button
               onClick={handleClose}
@@ -486,7 +611,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         {/* Product Info */}
         <div className="px-6 py-4 border-b border-gray-700/50">
           <div className="flex items-center space-x-4">
-            <div className="w-16 h-16 bg-gray-800/50 rounded-2xl flex items-center justify-center flex-shrink-0">
+            <div className="w-16 h-16 flex items-center justify-center flex-shrink-0">
               {product.imageUrl ? (
                 <img 
                   src={product.imageUrl} 
@@ -502,9 +627,9 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
               {product.set && (
                 <p className="text-gray-400 text-xs mt-1">{product.set}</p>
               )}
-              {product.marketValue && (
+              {product.marketValue !== undefined && product.marketValue !== null && (
                 <p className="text-blue-400 text-xs mt-1">
-                  Market Value: ${product.marketValue.toFixed(2)}
+                  Value: ${product.marketValue.toFixed(2)}
                 </p>
               )}
             </div>
@@ -515,15 +640,13 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
           <div className="flex-1 px-6 py-4 overflow-y-auto min-h-0">
             {error && (
-            <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-6">
-              <p className="text-red-400 text-sm">{error}</p>
-            </div>
-          )}
+              <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-6">
+                <p className="text-red-400 text-sm">{error}</p>
+              </div>
+            )}
 
-            {/* Purchase Details Section */}
+            {/* Form Fields */}
             <div className="space-y-4">
-              <h3 className="text-base font-semibold text-white">Purchase Details</h3>
-              
               {/* Order Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -535,11 +658,20 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                   value={formData.buyDate}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-4 py-4 bg-gray-800/50 border border-gray-600/50 rounded-2xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors cursor-pointer"
+                  style={{ 
+                    backgroundColor: '#111827',
+                    colorScheme: 'dark',
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'textfield'
+                  }}
+                  onClick={(e) => {
+                    e.target.showPicker && e.target.showPicker();
+                  }}
                 />
               </div>
 
-              {/* Retailer */}
+              {/* Purchase Location */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Purchase Location
@@ -561,7 +693,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                       setTimeout(() => setIsRetailerFocused(false), 150);
                     }}
                     placeholder="Type to search retailers..."
-                    className="w-full px-4 py-3 pr-8 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    className="w-full px-4 py-3 pr-8 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
                     style={{ backgroundColor: '#111827', color: 'white' }}
                     autoComplete="off"
                     autoCorrect="off"
@@ -584,7 +716,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                     </button>
                   )}
                   {(isRetailerFocused || retailerSearchQuery !== '') && (
-                    <div className="absolute z-10 w-full mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-lg max-h-40 overflow-y-auto" style={{ backgroundColor: '#111827', borderColor: '#374151' }}>
+                    <div className="absolute z-10 w-full mt-1 bg-gray-900 border border-indigo-400/50 rounded-lg shadow-lg max-h-40 overflow-y-auto ring-0.5 ring-indigo-400/50" style={{ backgroundColor: '#111827' }}>
                       {(() => {
                         const filteredRetailers = retailers.filter(retailer => 
                           retailerSearchQuery === '' || retailer.display_name.toLowerCase().includes(retailerSearchQuery.toLowerCase())
@@ -629,10 +761,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                   )}
                 </div>
               </div>
-            </div>
-            
-            {/* Pricing Row - Quantity, Price per Item, and Total */}
-            <div className="grid grid-cols-1 gap-4">
+
               {/* Quantity */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -646,101 +775,113 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                   min="1"
                   required
                   placeholder="1"
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
                   style={{ backgroundColor: '#111827' }}
                 />
               </div>
 
-              {/* Price Per Item */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Price (per item)
-                </label>
-                <input
-                  type="number"
-                  name="pricePerItem"
-                  value={formData.pricePerItem}
-                  onChange={handleInputChange}
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  style={{ backgroundColor: '#111827' }}
-                />
-              </div>
+              {/* Price Row - Side by side */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Price Per Item */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Price (per item)
+                  </label>
+                  <input
+                    type="number"
+                    name="pricePerItem"
+                    value={formData.pricePerItem}
+                    onChange={handleInputChange}
+                    onFocus={() => setActivePriceField('perItem')}
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    className={`w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors ${
+                      activePriceField === 'perItem' 
+                        ? 'text-white' 
+                        : 'text-gray-400'
+                    }`}
+                    style={{ backgroundColor: '#111827' }}
+                  />
+                </div>
 
-              {/* Total Buy Price */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Total Price
-                </label>
-                <input
-                  type="number"
-                  name="buyPrice"
-                  value={formData.buyPrice}
-                  onChange={handleInputChange}
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  style={{ backgroundColor: '#111827' }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Submit Button */}
-        <div className="p-6 border-t border-gray-700 bg-gray-900">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-4 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base"
-          >
-            {isSubmitting ? (
-              <div className="flex items-center justify-center space-x-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Adding to Collection...</span>
-              </div>
-            ) : (
-              'Add to Collection'
-            )}
-          </button>
-        </div>
-      </form>
-
-      {/* Processing Animation Modal */}
-      {showProcessing && successData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 max-w-sm w-full mx-4">
-            {/* Spinning Animation */}
-            <div className="flex justify-center mb-6">
-              <div className="relative">
-                {/* Outer spinning ring */}
-                <div className="w-20 h-20 border-4 border-gray-700 border-t-indigo-500 rounded-full animate-spin"></div>
-                {/* Inner pulsing dot */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                  <div className="w-3 h-3 bg-indigo-500 rounded-full animate-pulse"></div>
+                {/* Total Price */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Total Price
+                  </label>
+                  <input
+                    type="number"
+                    name="buyPrice"
+                    value={formData.buyPrice}
+                    onChange={handleInputChange}
+                    onFocus={() => setActivePriceField('total')}
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    className={`w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors ${
+                      activePriceField === 'total' 
+                        ? 'text-white' 
+                        : 'text-gray-400'
+                    }`}
+                    style={{ backgroundColor: '#111827' }}
+                  />
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Processing Message */}
-            <div className="text-center">
-              <h3 className="text-lg font-semibold text-white mb-2">Adding to Collection</h3>
-              <div className="text-sm text-gray-300 space-y-1 mb-4">
-                <p><span className="font-medium">{successData.quantity}x</span> {successData.item}</p>
-                {successData.set && <p className="text-gray-400">{successData.set}</p>}
-                <p className="text-indigo-400 font-medium">${parseFloat(successData.price).toFixed(2)}</p>
+          {/* Submit Button */}
+          <div className="p-6 border-t border-gray-700 bg-gray-900">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-4 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base"
+            >
+              {isSubmitting ? (
+                <div className="flex items-center justify-center space-x-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Adding to Collection...</span>
+                </div>
+              ) : (
+                'Add to Collection'
+              )}
+            </button>
+          </div>
+        </form>
+
+        {/* Processing Animation Modal */}
+        {showProcessing && successData && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 max-w-sm w-full mx-4">
+              {/* Spinning Animation */}
+              <div className="flex justify-center mb-6">
+                <div className="relative">
+                  {/* Outer spinning ring */}
+                  <div className="w-20 h-20 border-4 border-gray-700 border-t-indigo-500 rounded-full animate-spin"></div>
+                  {/* Inner pulsing dot */}
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                    <div className="w-3 h-3 bg-indigo-500 rounded-full animate-pulse"></div>
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-gray-400">Updating your collection...</p>
+
+              {/* Processing Message */}
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-white mb-2">Adding to Collection</h3>
+                <div className="text-sm text-gray-300 space-y-1 mb-4">
+                  <p><span className="font-medium">{successData.quantity}x</span> {successData.item}</p>
+                  {successData.set && <p className="text-gray-400">{successData.set}</p>}
+                  <p className="text-indigo-400 font-medium">${parseFloat(successData.price).toFixed(2)}</p>
+                </div>
+                <p className="text-xs text-gray-400">Updating your collection...</p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-        </div>
+        )}
       </div>
     </div>
+    </>
   );
 };
 
