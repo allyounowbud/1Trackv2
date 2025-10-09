@@ -52,10 +52,31 @@ export const setupInstallPrompt = () => {
     deferredPrompt = null;
     hideInstallButton();
   });
+  
+  // Hide install button when navigating away from login page
+  const handleRouteChange = () => {
+    if (window.location.pathname !== '/login') {
+      hideInstallButton();
+    } else if (deferredPrompt) {
+      showInstallButton();
+    }
+  };
+  
+  // Listen for route changes (for single-page app navigation)
+  window.addEventListener('popstate', handleRouteChange);
+  
+  // Also observe for URL changes in SPA
+  const observer = new MutationObserver(handleRouteChange);
+  observer.observe(document.body, { childList: true, subtree: true });
 };
 
 // Show install button
 const showInstallButton = () => {
+  // Only show the install button on the login page
+  if (window.location.pathname !== '/login') {
+    return;
+  }
+  
   // You can customize this to show an install button in your UI
   
   // Example: Show a custom install button
@@ -134,15 +155,13 @@ const hideOfflineNotification = () => {
 // Initialize PWA features
 export const initializePWA = async () => {
   try {
-    // Register service worker
-    const registration = await navigator.serviceWorker.register('/sw.js', {
-      scope: '/'
-    });
-    
-    // Force immediate update if new service worker is available
-    if (registration.waiting) {
-      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-      window.location.reload();
+    // TEMPORARILY DISABLED FOR DEBUGGING - Unregister all service workers
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (let registration of registrations) {
+        await registration.unregister();
+      }
+      console.log('🔴 ALL SERVICE WORKERS UNREGISTERED FOR DEBUGGING');
     }
     
     // Setup install prompt

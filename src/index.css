@@ -8,6 +8,27 @@
   .hover\:scale-102:hover {
     transform: scale(1.02);
   }
+  
+  /* iPhone-style slide-up animation */
+  @keyframes slideUp {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+  
+  /* Touch optimization */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
 }
 
 @layer base {

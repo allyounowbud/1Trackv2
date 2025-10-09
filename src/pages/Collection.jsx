@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
@@ -51,7 +51,29 @@ const Collection = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [ordersToDelete, setOrdersToDelete] = useState([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState(new Set());
+  const [showEditPriceModal, setShowEditPriceModal] = useState(false);
+  const [editPriceData, setEditPriceData] = useState(null);
+  const [showOverridePriceModal, setShowOverridePriceModal] = useState(false);
+  const [overridePriceData, setOverridePriceData] = useState(null);
+  const [marketValueOverrides, setMarketValueOverrides] = useState({});
+  const [showOrderBookModal, setShowOrderBookModal] = useState(false);
+  const [orderBookData, setOrderBookData] = useState(null);
+  const [selectedOrderBookIds, setSelectedOrderBookIds] = useState(new Set());
+  const [isOrderBookSelectionMode, setIsOrderBookSelectionMode] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+
+  // Load market value overrides from localStorage on component mount
+  useEffect(() => {
+    const savedOverrides = localStorage.getItem('marketValueOverrides');
+    if (savedOverrides) {
+      try {
+        setMarketValueOverrides(JSON.parse(savedOverrides));
+      } catch (error) {
+        console.error('Error loading market value overrides:', error);
+        setMarketValueOverrides({});
+      }
+    }
+  }, []);
   const [ordersToConfirmDelete, setOrdersToConfirmDelete] = useState([]);
   const [isOrderSelectionMode, setIsOrderSelectionMode] = useState(false);
 
@@ -59,6 +81,36 @@ const Collection = () => {
   const filterDropdownRef = useRef(null);
   const longPressRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
+
+  // Load market value overrides from localStorage on component mount
+  useEffect(() => {
+    const savedOverrides = localStorage.getItem('marketValueOverrides');
+    if (savedOverrides) {
+      try {
+        setMarketValueOverrides(JSON.parse(savedOverrides));
+      } catch (error) {
+        console.error('Error loading market value overrides:', error);
+      }
+    }
+  }, []);
+
+
+  // Save market value overrides to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('marketValueOverrides', JSON.stringify(marketValueOverrides));
+  }, [marketValueOverrides]);
+
+  // Debug: Monitor override modal state changes
+  useEffect(() => {
+    console.log('🔍 Modal state changed:', {
+      showOverridePriceModal,
+      overridePriceData: overridePriceData !== null ? 'object exists' : 'null',
+      shouldRender: showOverridePriceModal && overridePriceData !== null
+    });
+  }, [showOverridePriceModal, overridePriceData]);
+
+  // Create a stable reference for overrides to prevent infinite re-renders
+  const overridesString = JSON.stringify(marketValueOverrides);
 
   // Selection functions
   const handleItemSelect = (itemId) => {
@@ -347,10 +399,14 @@ const Collection = () => {
   };
 
   // Calculate collection statistics
-  const collectionData = (() => {
+  const collectionData = useMemo(() => {
     const totalValueCents = orders.reduce((sum, order) => {
       if (!order.is_sold) {
-        return sum + ((order.market_value_cents || 0) * order.buy_quantity);
+        // Check if there's a custom override for this item
+        const overrideKey = `${order.item_id}`;
+        const overrideValue = marketValueOverrides[overrideKey];
+        const marketValue = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
+        return sum + (marketValue * order.buy_quantity);
       }
       return sum;
     }, 0);
@@ -365,7 +421,10 @@ const Collection = () => {
         return sum + (order.net_profit_cents || 0);
       } else {
         // For unsold items, calculate unrealized profit (market value - cost)
-        const marketValue = (order.market_value_cents || 0) * order.buy_quantity;
+        const overrideKey = `${order.item_id}`;
+        const overrideValue = marketValueOverrides[overrideKey];
+        const marketValueCents = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
+        const marketValue = marketValueCents * order.buy_quantity;
         const cost = order.total_cost_cents || 0;
         return sum + (marketValue - cost);
       }
@@ -468,7 +527,10 @@ const Collection = () => {
 
     // Convert to collection items format
     const items = Object.values(itemGroups).map((group, index) => {
-      const perItemValue = group.market_value_cents || 0;
+      // Check if there's a custom override for this item
+      const overrideKey = `${group.orders[0]?.item_id}`;
+      const overrideValue = marketValueOverrides[overrideKey];
+      const perItemValue = overrideValue ? overrideValue * 100 : (group.market_value_cents || 0);
       const totalValue = perItemValue * group.quantity;
       const profit = totalValue - group.totalPaid;
       const profitPercent = group.totalPaid > 0 ? (profit / group.totalPaid) * 100 : 0;
@@ -600,7 +662,7 @@ const Collection = () => {
       filteredProfit: selectedFilter === 'All' ? totalProfit : filteredData.profit,
       filteredProfitPercentage: selectedFilter === 'All' ? profitPercentage : filteredData.profitPercentage
     };
-  })();
+  }, [orders, selectedFilter, overridesString]);
 
   // Exit selection mode if there's only 1 item
   useEffect(() => {
@@ -679,7 +741,10 @@ const Collection = () => {
       // Add value for orders placed on this date
       if (ordersByDate[dateStr]) {
         ordersByDate[dateStr].forEach(order => {
-          cumulativeValue += (order.market_value_cents || 0) * order.buy_quantity;
+          const overrideKey = `${order.item_id}`;
+          const overrideValue = marketValueOverrides[overrideKey];
+          const marketValue = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
+          cumulativeValue += marketValue * order.buy_quantity;
         });
       }
       
@@ -1319,7 +1384,6 @@ const Collection = () => {
                           e.stopPropagation();
                           setSelectedItemId(item.id);
                           setShowItemMenu(true);
-                          openModal();
                         }}
                         className="text-gray-400 hover:text-white"
                       >
@@ -1384,18 +1448,14 @@ const Collection = () => {
       )}
 
       {/* Bulk Actions Bar - Fixed at bottom - Only show if more than 1 item */}
-      {(() => {
-        const totalItems = (collectionData.items || []).filter(item => {
-      if (selectedFilter === 'All') return true;
-      if (selectedFilter === 'Graded') {
-        return item.status.includes('PSA') || item.status.includes('BGS') || 
-               item.status.includes('CGC') || item.status.includes('SGC');
-      }
-      return item.status === selectedFilter;
-    }).length;
-        const shouldShow = isSelectionMode && totalItems > 1;
-        return shouldShow;
-      })() && (
+      {isSelectionMode && (collectionData.items || []).filter(item => {
+        if (selectedFilter === 'All') return true;
+        if (selectedFilter === 'Graded') {
+          return item.status.includes('PSA') || item.status.includes('BGS') || 
+                 item.status.includes('CGC') || item.status.includes('SGC');
+        }
+        return item.status === selectedFilter;
+      }).length > 1 && (
         <div className="fixed bottom-16 left-0 right-0 modal-overlay" style={{ zIndex: 10002 }}>
           <div className="bg-blue-500 border-t border-blue-400 px-4 py-3">
             <div className="flex items-center justify-between">
@@ -1506,56 +1566,175 @@ const Collection = () => {
       {/* Individual Item Menu Overlay - Hide when bulk actions bar is showing */}
       {showItemMenu && !isSelectionMode && (
         <div 
-          className="fixed inset-0 bg-black/50 flex items-end modal-overlay"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end modal-overlay transition-opacity duration-200"
           onClick={() => {
             setShowItemMenu(false);
-            closeModal();
           }}
         >
           <div 
-            className="w-full bg-gray-900 border border-gray-700 rounded-t-2xl max-h-[80vh] overflow-y-auto"
+            className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up"
             onClick={(e) => e.stopPropagation()}
+            style={{
+              animation: 'slideUp 0.3s ease-out'
+            }}
           >
-            {/* Header */}
-            <div className="px-4 py-4 border-b border-gray-700">
-              <h2 className="text-sm font-semibold text-white">
+            {/* iPhone-style drag handle */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
+            </div>
+
+            {/* Header with close button */}
+            <div className="px-6 py-4 border-b border-gray-700/50 relative">
+              <button
+                onClick={() => {
+                  setShowItemMenu(false);
+                }}
+                className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition-colors"
+              >
+                <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <h2 className="text-lg font-semibold text-white pr-12">
                 Manage Collected Product
               </h2>
             </div>
 
             {/* Action Options */}
-            <div className="pb-6">
-              {/* Edit Price Paid */}
-              <button className="w-full flex items-center justify-between p-4 hover:bg-gray-700/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-                  </svg>
+            <div className="px-4 pt-4 pb-8 space-y-2">
+              {/* View Order Book */}
+              <button 
+                className="w-full flex items-center justify-between p-5 bg-gray-800/50 hover:bg-gray-700/70 active:bg-gray-600/70 rounded-2xl transition-all duration-150 touch-manipulation"
+                onClick={() => {
+                  // Add haptic feedback simulation
+                  if (navigator.vibrate) {
+                    navigator.vibrate(10);
+                  }
+                  
+                  // Get all orders for this item
+                  const itemOrders = orders.filter(order => order.item_id === selectedItemId);
+                  const item = collectionData.items?.find(item => item.id === selectedItemId);
+                  
+                  // Debug logging
+                  console.log('🔍 Order Book Debug:', {
+                    selectedItemId,
+                    totalOrders: orders.length,
+                    filteredOrders: itemOrders.length,
+                    itemFound: !!item,
+                    itemName: item?.name,
+                    firstFewOrders: orders.slice(0, 3).map(o => ({ id: o.id, item_id: o.item_id, item_name: o.item_name }))
+                  });
+                  
+                  setOrderBookData({
+                    itemId: selectedItemId,
+                    itemName: item?.name || 'Unknown Item',
+                    orders: itemOrders
+                  });
+                  setShowOrderBookModal(true);
+                  setShowItemMenu(false);
+                }}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                      <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
+                    </svg>
+                  </div>
                   <div className="text-left">
-                    <div className="text-xs font-medium text-white">Edit Price Paid</div>
-                    <div className="text-xs text-gray-400">Change the price you paid for this product.</div>
+                    <div className="text-sm font-semibold text-white">View Order Book</div>
+                    <div className="text-xs text-gray-400 mt-0.5">View and manage all orders for this item</div>
                   </div>
                 </div>
-                <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                </svg>
+              </button>
+
+              {/* Override Market Price */}
+              <button 
+                className="w-full flex items-center justify-between p-5 bg-purple-500/10 hover:bg-purple-500/20 active:bg-purple-500/30 rounded-2xl transition-all duration-150 touch-manipulation border border-purple-500/20"
+                onClick={() => {
+                  console.log('🎯 Override Market Price clicked!');
+                  // Add haptic feedback simulation
+                  if (navigator.vibrate) {
+                    navigator.vibrate(10);
+                  }
+                  // Find the item data for overriding market price
+                  const item = collectionData.items?.find(item => item.id === selectedItemId);
+                  console.log('🎯 Found item:', item, 'selectedItemId:', selectedItemId);
+                  if (item) {
+                    const overrideKey = selectedItemId;
+                    const currentOverride = marketValueOverrides[overrideKey];
+                    const originalValue = item.value || 0;
+                    
+                    const overrideData = {
+                      itemId: selectedItemId,
+                      itemName: item.name,
+                      currentMarketValue: currentOverride ? currentOverride.toFixed(2) : originalValue.toFixed(2),
+                      originalMarketValue: originalValue.toFixed(2)
+                    };
+                    
+                    console.log('🎯 Setting override data:', overrideData);
+                    setOverridePriceData(overrideData);
+                    console.log('🎯 Setting showOverridePriceModal to true');
+                    setShowOverridePriceModal(true);
+                    
+                    // Delay closing the item menu to avoid conflicts
+                    setTimeout(() => {
+                      console.log('🎯 Setting showItemMenu to false (delayed)');
+                      setShowItemMenu(false);
+                    }, 50);
+                    
+                    // Debug check after state updates
+                    setTimeout(() => {
+                      console.log('🎯 After state update - should render modal now');
+                    }, 100);
+                  } else {
+                    console.log('🎯 ERROR: No item found for selectedItemId:', selectedItemId);
+                  }
+                }}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <div className="text-sm font-semibold text-purple-400">Override Market Price</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Set a custom market value for your view</div>
+                  </div>
+                </div>
+                <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                 </svg>
               </button>
 
               {/* Delete Product */}
               <button 
-                onClick={() => handleDeleteProduct(selectedItemId)}
-                className="w-full flex items-center justify-between p-4 hover:bg-gray-700/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd"/>
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/>
-                  </svg>
+                onClick={() => {
+                  // Add haptic feedback simulation
+                  if (navigator.vibrate) {
+                    navigator.vibrate([10, 20, 10]);
+                  }
+                  handleDeleteProduct(selectedItemId);
+                }}
+                className="w-full flex items-center justify-between p-5 bg-red-500/10 hover:bg-red-500/20 active:bg-red-500/30 rounded-2xl transition-all duration-150 touch-manipulation border border-red-500/20"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd"/>
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/>
+                    </svg>
+                  </div>
                   <div className="text-left">
-                    <div className="text-xs text-red-400 font-medium">Delete Product</div>
-                    <div className="text-xs text-gray-400">Remove this product from your collection.</div>
+                    <div className="text-sm font-semibold text-red-400">Delete Product</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Remove this product from your collection</div>
                   </div>
                 </div>
-                <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                 </svg>
               </button>
@@ -1784,7 +1963,7 @@ const Collection = () => {
       {/* Success Notification */}
       {showSuccessNotification && successData && (
         <div className="fixed top-4 left-4 right-4 z-50">
-          <div className="bg-green-500 border border-green-400 rounded-lg p-4 shadow-lg">
+          <div className="bg-indigo-500 border border-indigo-400 rounded-lg p-4 shadow-lg">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1793,10 +1972,10 @@ const Collection = () => {
               </div>
               <div className="ml-3 flex-1">
                 <p className="text-sm font-medium text-white">
-                  Order Added Successfully!
+                  {successData.title}
                 </p>
-                <p className="text-sm text-green-100">
-                  {successData.quantity}x {successData.item} - ${parseFloat(successData.price).toFixed(2)}
+                <p className="text-sm text-indigo-100">
+                  {successData.message}
                 </p>
               </div>
               <button
@@ -1887,6 +2066,400 @@ const Collection = () => {
                 }}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Override Market Price Modal */}
+      {showOverridePriceModal === true && (
+        <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]"
+          onClick={() => {
+            setShowOverridePriceModal(false);
+            setOverridePriceData(null);
+          }}
+        >
+          <div 
+            className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              animation: 'slideUp 0.3s ease-out'
+            }}
+          >
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
+            </div>
+
+            {/* Header with close button */}
+            <div className="px-6 py-4 border-b border-gray-700/50 relative">
+              <button
+                onClick={() => {
+                  setShowOverridePriceModal(false);
+                  setOverridePriceData(null);
+                }}
+                className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition-colors"
+              >
+                <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <h2 className="text-lg font-semibold text-white pr-12">
+                Override Market Price
+              </h2>
+              <p className="text-sm text-gray-400 mt-1 pr-12">
+                {overridePriceData?.itemName}
+              </p>
+            </div>
+
+            {/* Form content */}
+            <div className="px-6 py-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Custom Market Value
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-lg">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      defaultValue={overridePriceData?.currentMarketValue}
+                      className="w-full pl-8 pr-4 py-4 bg-gray-800/50 border border-gray-600 rounded-2xl text-white text-lg focus:border-purple-500 focus:outline-none transition-colors"
+                      placeholder="0.00"
+                      id="overridePriceInput"
+                    />
+                  </div>
+                </div>
+
+                {/* Info box */}
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/>
+                    </svg>
+                    <div>
+                      <div className="text-sm font-medium text-blue-400 mb-1">Personal Override</div>
+                      <div className="text-xs text-gray-300">
+                        This only affects your personal view. The original market value (${overridePriceData?.originalMarketValue}) remains unchanged for other users.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="px-6 pb-8 space-y-3">
+              <button
+                onClick={() => {
+                  const newMarketValue = parseFloat(document.getElementById('overridePriceInput').value) || 0;
+                  
+                  // Save the override to state (which will trigger localStorage save)
+                  setMarketValueOverrides(prev => ({
+                    ...prev,
+                    [overridePriceData.itemId]: newMarketValue
+                  }));
+                  
+                  // Add haptic feedback
+                  if (navigator.vibrate) {
+                    navigator.vibrate(10);
+                  }
+                  
+                  setShowOverridePriceModal(false);
+                  setOverridePriceData(null);
+                  
+                  // Show success notification
+        setSuccessData({
+          title: 'Market Value Updated!',
+          message: `$${overridePriceData.originalMarketValue} → $${newMarketValue.toFixed(2)}`
+        });
+                  setShowSuccessNotification(true);
+                  
+                  // Auto-dismiss after 4 seconds
+                  setTimeout(() => {
+                    setShowSuccessNotification(false);
+                  }, 4000);
+                }}
+                className="w-full py-4 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 rounded-2xl text-white font-semibold transition-all duration-150 touch-manipulation"
+              >
+                Set Custom Value
+              </button>
+              
+              <button
+                onClick={() => {
+                  // Remove the override (reset to original value)
+                  setMarketValueOverrides(prev => {
+                    const newOverrides = { ...prev };
+                    delete newOverrides[overridePriceData.itemId];
+                    return newOverrides;
+                  });
+                  
+                  // Add haptic feedback
+                  if (navigator.vibrate) {
+                    navigator.vibrate([10, 20, 10]);
+                  }
+                  
+                  setShowOverridePriceModal(false);
+                  setOverridePriceData(null);
+                  
+                  // Show success notification
+        setSuccessData({
+          title: 'Market Value Reset!',
+          message: `$${overridePriceData.currentMarketValue} → $${overridePriceData.originalMarketValue}`
+        });
+                  setShowSuccessNotification(true);
+                  
+                  // Auto-dismiss after 4 seconds
+                  setTimeout(() => {
+                    setShowSuccessNotification(false);
+                  }, 4000);
+                }}
+                className="w-full py-4 bg-orange-600/20 hover:bg-orange-600/30 active:bg-orange-600/40 rounded-2xl text-orange-400 font-medium transition-all duration-150 touch-manipulation border border-orange-500/20"
+              >
+                Reset to Original
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowOverridePriceModal(false);
+                  setOverridePriceData(null);
+                }}
+                className="w-full py-4 bg-gray-700/50 hover:bg-gray-600/70 active:bg-gray-500/70 rounded-2xl text-white font-medium transition-all duration-150 touch-manipulation"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Book Modal */}
+      {showOrderBookModal && orderBookData && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]"
+          onClick={() => {
+            setShowOrderBookModal(false);
+            setOrderBookData(null);
+            setSelectedOrderBookIds(new Set());
+            setIsOrderBookSelectionMode(false);
+          }}
+        >
+          <div 
+            className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[90vh] overflow-y-auto animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              animation: 'slideUp 0.3s ease-out'
+            }}
+          >
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
+            </div>
+
+            {/* Header with close button and selection mode toggle */}
+            <div className="px-6 py-4 border-b border-gray-700/50 relative">
+              <button
+                onClick={() => {
+                  setShowOrderBookModal(false);
+                  setOrderBookData(null);
+                  setSelectedOrderBookIds(new Set());
+                  setIsOrderBookSelectionMode(false);
+                }}
+                className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition-colors"
+              >
+                <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              
+              <div className="flex items-center justify-between pr-12">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">
+                    Order Book
+                  </h2>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {orderBookData.itemName} • {orderBookData.orders.length} orders
+                  </p>
+                </div>
+                
+                {orderBookData.orders.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setIsOrderBookSelectionMode(!isOrderBookSelectionMode);
+                      if (isOrderBookSelectionMode) {
+                        setSelectedOrderBookIds(new Set());
+                      }
+                      if (navigator.vibrate) {
+                        navigator.vibrate(10);
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 rounded-xl text-blue-400 text-sm font-medium transition-colors"
+                  >
+                    {isOrderBookSelectionMode ? 'Cancel' : 'Select'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Bulk Actions Bar */}
+            {isOrderBookSelectionMode && selectedOrderBookIds.size > 0 && (
+              <div className="px-6 py-3 bg-blue-600/10 border-b border-blue-500/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-blue-400 text-sm font-medium">
+                    {selectedOrderBookIds.size} selected
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        // TODO: Implement bulk edit
+                        if (navigator.vibrate) {
+                          navigator.vibrate(10);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 rounded-lg text-blue-400 text-xs font-medium transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        // TODO: Implement bulk delete
+                        if (navigator.vibrate) {
+                          navigator.vibrate([10, 20, 10]);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 rounded-lg text-red-400 text-xs font-medium transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Orders List */}
+            <div className="px-6 py-4">
+              {orderBookData.orders.length === 0 ? (
+                <div className="text-center py-12">
+                  <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-300 mb-2">No Orders Found</h3>
+                  <p className="text-gray-500 text-sm">This item doesn't have any order history yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {orderBookData.orders.map((order, index) => (
+                    <div
+                      key={order.id || index}
+                      className={`p-4 rounded-2xl transition-all duration-150 ${
+                        selectedOrderBookIds.has(order.id) 
+                          ? 'bg-blue-600/20 border border-blue-500/30' 
+                          : 'bg-gray-800/50 hover:bg-gray-700/70'
+                      } ${isOrderBookSelectionMode ? 'cursor-pointer' : ''}`}
+                      onClick={() => {
+                        if (isOrderBookSelectionMode) {
+                          const newSelected = new Set(selectedOrderBookIds);
+                          if (newSelected.has(order.id)) {
+                            newSelected.delete(order.id);
+                          } else {
+                            newSelected.add(order.id);
+                          }
+                          setSelectedOrderBookIds(newSelected);
+                          if (navigator.vibrate) {
+                            navigator.vibrate(10);
+                          }
+                        }
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {isOrderBookSelectionMode && (
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                              selectedOrderBookIds.has(order.id) 
+                                ? 'bg-blue-600 border-blue-600' 
+                                : 'border-gray-500'
+                            }`}>
+                              {selectedOrderBookIds.has(order.id) && (
+                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                          )}
+                          
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-white font-medium">
+                                ${order.buy_price_cents ? (order.buy_price_cents / 100).toFixed(2) : '0.00'}
+                              </span>
+                              <span className="text-gray-400 text-sm">
+                                × {order.buy_quantity || 1}
+                              </span>
+                            </div>
+                            <div className="text-gray-400 text-xs">
+                              {order.buy_date ? new Date(order.buy_date).toLocaleDateString() : 'No date'}
+                              {order.buy_location && ` • ${order.buy_location}`}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {!isOrderBookSelectionMode && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // TODO: Implement edit individual order
+                                if (navigator.vibrate) {
+                                  navigator.vibrate(10);
+                                }
+                              }}
+                              className="p-2 hover:bg-gray-600/50 rounded-lg transition-colors"
+                            >
+                              <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                              </svg>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // TODO: Implement delete individual order
+                                if (navigator.vibrate) {
+                                  navigator.vibrate([10, 20, 10]);
+                                }
+                              }}
+                              className="p-2 hover:bg-red-600/20 rounded-lg transition-colors"
+                            >
+                              <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
+                              </svg>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            {!isOrderBookSelectionMode && orderBookData.orders.length > 0 && (
+              <div className="px-6 py-4 border-t border-gray-700/50">
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowOrderBookModal(false);
+                      setOrderBookData(null);
+                    }}
+                    className="flex-1 py-3 bg-gray-700/50 hover:bg-gray-600/70 rounded-2xl text-white font-medium transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2000,6 +2573,119 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
           </div>
         </form>
       </div>
+
+      {/* Edit Price Modal */}
+      {showEditPriceModal && editPriceData && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end modal-overlay transition-opacity duration-200"
+          onClick={() => {
+            setShowEditPriceModal(false);
+            setEditPriceData(null);
+          }}
+        >
+          <div 
+            className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              animation: 'slideUp 0.3s ease-out'
+            }}
+          >
+            {/* iPhone-style drag handle */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
+            </div>
+
+            {/* Header with close button */}
+            <div className="px-6 py-4 border-b border-gray-700/50 relative">
+              <button
+                onClick={() => {
+                  setShowEditPriceModal(false);
+                  setEditPriceData(null);
+                }}
+                className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition-colors"
+              >
+                <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <h2 className="text-lg font-semibold text-white pr-12">
+                Edit Price Paid
+              </h2>
+              <p className="text-sm text-gray-400 mt-1 pr-12">
+                {editPriceData.itemName}
+              </p>
+            </div>
+
+            {/* Form Content */}
+            <div className="px-6 py-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Price Paid (Total)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-lg">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      defaultValue={editPriceData.currentPrice}
+                      className="w-full pl-8 pr-4 py-4 bg-gray-800/50 border border-gray-600 rounded-2xl text-white text-lg focus:border-blue-500 focus:outline-none transition-colors"
+                      placeholder="0.00"
+                      id="priceInput"
+                    />
+                  </div>
+                </div>
+                
+                <div className="text-xs text-gray-400">
+                  This will update the total amount you paid for all copies of this item.
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="px-6 pb-8 space-y-3">
+              <button
+                onClick={() => {
+                  const newPrice = parseFloat(document.getElementById('priceInput').value) || 0;
+                  const newPriceCents = Math.round(newPrice * 100);
+                  
+                  // TODO: Implement actual price update functionality
+                  console.log('Update price for item:', editPriceData.itemId, 'to:', newPriceCents, 'cents');
+                  
+                  // Add haptic feedback
+                  if (navigator.vibrate) {
+                    navigator.vibrate(10);
+                  }
+                  
+                  setShowEditPriceModal(false);
+                  setEditPriceData(null);
+                  
+                  // Show success notification
+                  setSuccessData({
+                    title: 'Price Updated',
+                    message: `Price updated to $${newPrice.toFixed(2)}`
+                  });
+                  setShowSuccessNotification(true);
+                }}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-2xl text-white font-semibold transition-all duration-150 touch-manipulation"
+              >
+                Save Changes
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowEditPriceModal(false);
+                  setEditPriceData(null);
+                }}
+                className="w-full py-4 bg-gray-700/50 hover:bg-gray-600/70 active:bg-gray-500/70 rounded-2xl text-white font-medium transition-all duration-150 touch-manipulation"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

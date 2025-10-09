@@ -450,67 +450,80 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
     );
   }
 
-  // Mobile version (original modal) - Updated to match desktop design
+  // Mobile version - iPhone-style design
   return (
-    <div className="fixed inset-0 bg-gray-900 flex flex-col overflow-hidden modal-overlay">
-      {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-gray-700 bg-gray-900">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Add to Collection</h2>
-          <p className="text-sm text-gray-400">Add new orders quickly</p>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]">
+      <div 
+        className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[95vh] overflow-y-auto animate-slide-up"
+        style={{
+          animation: 'slideUp 0.3s ease-out'
+        }}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
         </div>
-        <button
-          onClick={handleClose}
-          disabled={isSubmitting}
-          className="p-2 rounded-lg hover:bg-gray-900 transition-colors"
-        >
-          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
 
-      {/* Product Info */}
-      <div className="p-6 border-b border-gray-700 bg-gray-900">
-        <div className="flex items-center space-x-4">
-          <div className="w-16 h-16 bg-gray-900 rounded-lg flex items-center justify-center flex-shrink-0">
-            {product.imageUrl ? (
-              <img 
-                src={product.imageUrl} 
-                alt={product.name}
-                className="w-12 h-12 object-contain"
-              />
-            ) : (
-              <div className="text-gray-400 text-2xl">📦</div>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-white font-medium" style={{ fontSize: '14px' }}>{product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set)}</h3>
-            <p className="text-gray-400" style={{ fontSize: '12px' }}>{product.set}</p>
-            {product.marketValue && (
-              <p className="text-blue-400" style={{ fontSize: '12px' }}>
-                Market Value: ${product.marketValue.toFixed(2)}
-              </p>
-            )}
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-700/50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Add to Collection</h2>
+              <p className="text-sm text-gray-400 mt-1">Add new orders quickly</p>
+            </div>
+            <button
+              onClick={handleClose}
+              disabled={isSubmitting}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition-colors"
+            >
+              <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-        <div className="flex-1 p-6 overflow-y-auto min-h-0 bg-gray-900">
-          {error && (
+        {/* Product Info */}
+        <div className="px-6 py-4 border-b border-gray-700/50">
+          <div className="flex items-center space-x-4">
+            <div className="w-16 h-16 bg-gray-800/50 rounded-2xl flex items-center justify-center flex-shrink-0">
+              {product.imageUrl ? (
+                <img 
+                  src={product.imageUrl} 
+                  alt={product.name}
+                  className="w-12 h-12 object-contain"
+                />
+              ) : (
+                <div className="text-gray-400 text-2xl">📦</div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-white font-medium text-sm">{product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set)}</h3>
+              {product.set && (
+                <p className="text-gray-400 text-xs mt-1">{product.set}</p>
+              )}
+              {product.marketValue && (
+                <p className="text-blue-400 text-xs mt-1">
+                  Market Value: ${product.marketValue.toFixed(2)}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 px-6 py-4 overflow-y-auto min-h-0">
+            {error && (
             <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-6">
               <p className="text-red-400 text-sm">{error}</p>
             </div>
           )}
 
-          {/* Purchase Details Section */}
-          <div className="space-y-6">
-            <h3 className="text-lg font-semibold text-white border-b border-gray-700 pb-2">Purchase Details</h3>
-            
-            {/* Top Row - Date and Retailer */}
-            <div className="grid grid-cols-1 gap-4">
+            {/* Purchase Details Section */}
+            <div className="space-y-4">
+              <h3 className="text-base font-semibold text-white">Purchase Details</h3>
+              
               {/* Order Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -522,13 +535,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                   value={formData.buyDate}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  style={{ 
-                    backgroundColor: '#111827',
-                    minWidth: '0',
-                    maxWidth: '100%',
-                    boxSizing: 'border-box'
-                  }}
+                  className="w-full px-4 py-4 bg-gray-800/50 border border-gray-600/50 rounded-2xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 />
               </div>
 
@@ -731,6 +738,8 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 };
