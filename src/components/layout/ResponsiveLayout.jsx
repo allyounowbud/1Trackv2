@@ -3,10 +3,12 @@ import { useLocation } from 'react-router-dom';
 import BottomNavigation from './BottomNavigation';
 import DesktopSidebar from './DesktopSidebar';
 import { useModal } from '../../contexts/ModalContext';
+import { useCart } from '../../contexts/CartContext';
 
 const ResponsiveLayout = ({ children }) => {
   const location = useLocation();
   const { isModalOpen, customBottomButtons } = useModal();
+  const { isCartMenuOpen } = useCart();
   const [isDesktop, setIsDesktop] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [isMobileSafari, setIsMobileSafari] = useState(false);
@@ -58,8 +60,8 @@ const ResponsiveLayout = ({ children }) => {
         {children}
       </div>
       
-      {/* Bottom Navigation - Hide when modal is open */}
-      {!isModalOpen && (
+      {/* Bottom Navigation - Hide when modal is open or cart menu is open */}
+      {!isModalOpen && !isCartMenuOpen && (
         <BottomNavigation 
           currentPath={location.pathname} 
           customButtons={null}

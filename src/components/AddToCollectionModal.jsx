@@ -591,20 +591,9 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-700/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">Add to Collection</h2>
-              <p className="text-sm text-gray-400 mt-1">Creates new entries in the order book</p>
-            </div>
-            <button
-              onClick={handleClose}
-              disabled={isSubmitting}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition-colors"
-            >
-              <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+          <div>
+            <h2 className="text-lg font-semibold text-white">Add to Collection</h2>
+            <p className="text-sm text-gray-400">Creates new entries in the order book</p>
           </div>
         </div>
 
@@ -647,28 +636,49 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
 
             {/* Form Fields */}
             <div className="space-y-4">
-              {/* Order Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Order Date
-                </label>
-                <input
-                  type="date"
-                  name="buyDate"
-                  value={formData.buyDate}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors cursor-pointer"
-                  style={{ 
-                    backgroundColor: '#111827',
-                    colorScheme: 'dark',
-                    WebkitAppearance: 'none',
-                    MozAppearance: 'textfield'
-                  }}
-                  onClick={(e) => {
-                    e.target.showPicker && e.target.showPicker();
-                  }}
-                />
+              {/* Order Date and Quantity Row */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Order Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Order Date
+                  </label>
+                  <input
+                    type="date"
+                    name="buyDate"
+                    value={formData.buyDate}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors cursor-pointer"
+                    style={{ 
+                      backgroundColor: '#111827',
+                      colorScheme: 'dark',
+                      WebkitAppearance: 'none',
+                      MozAppearance: 'textfield'
+                    }}
+                    onClick={(e) => {
+                      e.target.showPicker && e.target.showPicker();
+                    }}
+                  />
+                </div>
+
+                {/* Quantity */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    value={formData.quantity}
+                    onChange={handleInputChange}
+                    min="1"
+                    required
+                    placeholder="1"
+                    className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
+                    style={{ backgroundColor: '#111827' }}
+                  />
+                </div>
               </div>
 
               {/* Purchase Location */}
@@ -762,23 +772,6 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 </div>
               </div>
 
-              {/* Quantity */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Quantity
-                </label>
-                <input
-                  type="number"
-                  name="quantity"
-                  value={formData.quantity}
-                  onChange={handleInputChange}
-                  min="1"
-                  required
-                  placeholder="1"
-                  className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
-                  style={{ backgroundColor: '#111827' }}
-                />
-              </div>
 
               {/* Price Row - Side by side */}
               <div className="grid grid-cols-2 gap-4">
@@ -831,22 +824,31 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
             </div>
           </div>
 
-          {/* Submit Button */}
+          {/* Action Buttons */}
           <div className="p-6 border-t border-gray-700 bg-gray-900">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-4 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-base"
-            >
-              {isSubmitting ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Adding to Collection...</span>
-                </div>
-              ) : (
-                'Add to Collection'
-              )}
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={handleClose}
+                disabled={isSubmitting}
+                className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Adding...</span>
+                  </div>
+                ) : (
+                  'Add to Collection'
+                )}
+              </button>
+            </div>
           </div>
         </form>
 

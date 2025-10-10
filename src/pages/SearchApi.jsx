@@ -7,8 +7,10 @@ import SafeImage from '../components/SafeImage';
 import CardPreviewModal from '../components/CardPreviewModal';
 import CustomItemModal from '../components/CustomItemModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
+import CartBottomMenu from '../components/CartBottomMenu';
 import { supabase } from '../lib/supabaseClient';
 import { useModal } from '../contexts/ModalContext';
+import { useCart } from '../contexts/CartContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryClient';
 
@@ -17,6 +19,7 @@ const SearchApi = () => {
   const { game: gameParam, expansionId: expansionParam } = useParams();
   const location = useLocation();
   const { openModal, closeModal } = useModal();
+  const { isCartMenuOpen, isMultiSelectMode: contextMultiSelectMode, openCartMenu, closeCartMenu: contextCloseCartMenu, enterMultiSelectMode, exitMultiSelectMode: contextExitMultiSelectMode } = useCart();
   const queryClient = useQueryClient();
   
   // Available games with icons
@@ -109,6 +112,18 @@ const SearchApi = () => {
   const [selectedCard, setSelectedCard] = useState(null);
   const [isAddToCollectionModalOpen, setIsAddToCollectionModalOpen] = useState(false);
   const [selectedCardForCollection, setSelectedCardForCollection] = useState(null);
+  
+  // Cart state for multi-item orders
+  const [cartItems, setCartItems] = useState([]);
+  const [isCartMode, setIsCartMode] = useState(false);
+  const [selectedItems, setSelectedItems] = useState(new Set());
+  const [holdTimeout, setHoldTimeout] = useState(null);
+  const [justCompletedHoldSelect, setJustCompletedHoldSelect] = useState(false);
+  
+  // Success popup states for multi-order creation
+  const [showMultiOrderProcessing, setShowMultiOrderProcessing] = useState(false);
+  const [showMultiOrderSuccess, setShowMultiOrderSuccess] = useState(false);
+  const [multiOrderSuccessData, setMultiOrderSuccessData] = useState(null);
   
   // Back to top button state
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -1173,16 +1188,19 @@ const SearchApi = () => {
     }
   }; 
 
-  // Handle card click
-  const handleCardClick = (card) => {
-    setSelectedCard(card);
-    setIsCardModalOpen(true);
-  };
 
-  // Handle add to collection - show modal locally
-  const handleAddToCollection = (card) => {
-    // Prepare card data for the modal
-    // Use the same logic as the search page display
+  // Auto-exit multi-select mode when cart becomes empty
+  useEffect(() => {
+    if (contextMultiSelectMode && cartItems.length === 0) {
+      contextExitMultiSelectMode();
+      setSelectedItems(new Set());
+      contextCloseCartMenu();
+    }
+  }, [cartItems.length, contextMultiSelectMode, contextExitMultiSelectMode, contextCloseCartMenu]);
+
+  // Cart management functions
+  const addToCart = (card) => {
+    // Prepare card data for the cart
     let marketValue = 0;
     
     if (card.raw_price) {
@@ -1193,31 +1211,348 @@ const SearchApi = () => {
       marketValue = card.market_value_cents / 100;
     }
     
-    console.log('🔍 Card market data:', {
-      name: card.name,
-      raw_price: card.raw_price,
-      graded_price: card.graded_price,
-      market_value_cents: card.market_value_cents,
-      calculated_market_value: marketValue
-    });
-    
     const cardData = {
+      id: card.id,
       name: card.name,
-      set_name: card.expansion_name || card.set_name,
-      item_type: 'Card',
-      market_value: marketValue,
-      image_url: card.image_url,
-      description: `${card.rarity} card from ${card.expansion_name || card.set_name}`,
-      number: card.number,
+      set: card.expansion_name || card.set_name,
+      marketValue: marketValue,
+      imageUrl: card.image_url,
       rarity: card.rarity,
       source: 'api',
       api_id: card.id
     };
     
-    // Set the selected card and open the modal
-    setSelectedCardForCollection(cardData);
-    setIsAddToCollectionModalOpen(true);
-    openModal();
+    // Check if item is already in cart
+    const existingItem = cartItems.find(item => item.id === card.id);
+    if (existingItem) {
+      // Update quantity
+      setCartItems(prev => 
+        prev.map(item => 
+          item.id === card.id 
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      );
+    } else {
+      // Add new item to cart
+      setCartItems(prev => [...prev, { ...cardData, quantity: 1 }]);
+    }
+  };
+
+  const removeFromCart = (cardId) => {
+    setCartItems(prev => prev.filter(item => item.id !== cardId));
+  };
+
+  const updateCartQuantity = (cardId, quantity) => {
+    if (quantity <= 0) {
+      removeFromCart(cardId);
+    } else {
+      setCartItems(prev => 
+        prev.map(item => 
+          item.id === cardId 
+            ? { ...item, quantity: quantity }
+            : item
+        )
+      );
+    }
+  };
+
+
+  const clearCart = () => {
+    setCartItems([]);
+    setSelectedItems(new Set());
+    setIsCartMode(false);
+    contextExitMultiSelectMode();
+    contextCloseCartMenu();
+  };
+
+
+  // Direct order creation from cart menu
+  const createOrderDirectly = async (orderData) => {
+    if (cartItems.length === 0) return;
+
+    try {
+      // Set success data for popup
+      const totalValue = cartItems.reduce((sum, item) => {
+        const itemPrice = orderData.itemPrices[item.id] || item.marketValue || 0;
+        return sum + (itemPrice * item.quantity);
+      }, 0);
+
+      setMultiOrderSuccessData({
+        itemCount: cartItems.length,
+        totalValue: totalValue,
+        items: cartItems.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: orderData.itemPrices[item.id] || item.marketValue || 0
+        }))
+      });
+
+      // Show processing popup
+      setShowMultiOrderProcessing(true);
+
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Generate a single order group ID for all items in this multi-order
+      const orderGroupId = crypto.randomUUID();
+
+      // Create or find items and create orders
+      const orderPromises = cartItems.map(async (item) => {
+        const itemPrice = orderData.itemPrices[item.id] || item.marketValue || 0;
+        
+        // Find or create item
+        let itemId;
+        const { data: existingItem } = await supabase
+          .from('items')
+          .select('id')
+          .eq('name', item.name)
+          .eq('set_name', item.set || '')
+          .single();
+
+        if (existingItem) {
+          itemId = existingItem.id;
+        } else {
+          const { data: newItem, error: itemError } = await supabase
+            .from('items')
+            .insert({
+              name: item.name,
+              set_name: item.set || '',
+              image_url: item.imageUrl,
+              item_type: 'Card',
+              market_value_cents: Math.round((item.marketValue || 0) * 100)
+            })
+            .select('id')
+            .single();
+
+          if (itemError) throw itemError;
+          itemId = newItem.id;
+        }
+
+        // Create order with order group ID
+        const buyPriceCents = Math.round(itemPrice * 100);
+        const totalCostCents = Math.round(itemPrice * item.quantity * 100);
+
+        const { data: order, error: orderError } = await supabase
+          .from('orders')
+          .insert({
+            item_id: itemId,
+            order_type: 'buy',
+            buy_date: orderData.orderDate,
+            buy_price_cents: buyPriceCents,
+            buy_quantity: item.quantity,
+            total_cost_cents: totalCostCents,
+            buy_location: orderData.purchaseLocation || null,
+            buy_notes: null,
+            status: 'ordered',
+            order_group_id: orderGroupId,
+            order_group_name: orderData.purchaseLocation ? `${orderData.purchaseLocation} Order` : 'Multi-Item Order',
+            order_group_notes: null
+          })
+          .select('*')
+          .single();
+
+        if (orderError) throw orderError;
+        return order;
+      });
+
+      await Promise.all(orderPromises);
+
+      // Show success popup
+      setShowMultiOrderProcessing(false);
+      setShowMultiOrderSuccess(true);
+
+      // Clear cart and exit multi-select mode after delay
+      setTimeout(() => {
+        setCartItems([]);
+        setSelectedItems(new Set());
+        contextExitMultiSelectMode();
+        contextCloseCartMenu();
+        setShowMultiOrderSuccess(false);
+        setMultiOrderSuccessData(null);
+      }, 1500);
+
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries(queryKeys.orders);
+      queryClient.invalidateQueries(queryKeys.collectionSummary);
+
+    } catch (error) {
+      console.error('❌ Error creating order:', error);
+      setShowMultiOrderProcessing(false);
+      setMultiOrderSuccessData(null);
+      // You might want to show an error message to the user here
+    }
+  };
+
+  // Hold-to-select functionality
+  const handleCardPressStart = (card) => {
+    console.log('🎯 handleCardPressStart called for:', card.name, 'MultiSelectMode:', contextMultiSelectMode);
+    if (contextMultiSelectMode) return;
+    
+    const timeout = setTimeout(() => {
+      console.log('🎯 Hold timeout triggered for:', card.name);
+      // Set flag to prevent click from interfering
+      setJustCompletedHoldSelect(true);
+      
+      // Enter multi-select mode first
+      enterMultiSelectMode();
+      setSelectedItems(new Set([card.id]));
+      
+      // Add to cart and then open menu
+      setCartItems(prev => {
+        // Check if item is already in cart
+        const existingItem = prev.find(item => item.id === card.id);
+        let newCart;
+        
+        if (existingItem) {
+          // Update quantity
+          newCart = prev.map(item => 
+            item.id === card.id 
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          );
+        } else {
+          // Prepare card data for the cart
+          let marketValue = 0;
+          
+          if (card.raw_price) {
+            marketValue = parseFloat(card.raw_price);
+          } else if (card.graded_price) {
+            marketValue = parseFloat(card.graded_price);
+          } else if (card.market_value_cents) {
+            marketValue = card.market_value_cents / 100;
+          }
+          
+          const cardData = {
+            id: card.id,
+            name: card.name,
+            set: card.expansion_name || card.set_name,
+            marketValue: marketValue,
+            imageUrl: card.image_url,
+            rarity: card.rarity,
+            source: 'api',
+            api_id: card.id
+          };
+          
+          // Add new item to cart
+          newCart = [...prev, { ...cardData, quantity: 1 }];
+        }
+        
+        // Open cart menu after cart is updated
+        setTimeout(() => {
+          openCartMenu();
+        }, 0);
+        
+        return newCart;
+      });
+    }, 500); // 500ms hold time
+    
+    setHoldTimeout(timeout);
+  };
+
+  const handleCardPressEnd = () => {
+    if (holdTimeout) {
+      clearTimeout(holdTimeout);
+      setHoldTimeout(null);
+    }
+    // Don't do anything else - let the hold timeout handle the selection
+  };
+
+  const handleCardClick = (card) => {
+    console.log('🎯 handleCardClick called for:', card.name, 'JustCompletedHoldSelect:', justCompletedHoldSelect);
+    
+    // If we just completed a hold-to-select, ignore this click
+    if (justCompletedHoldSelect) {
+      console.log('🎯 Ignoring click - just completed hold-to-select');
+      setJustCompletedHoldSelect(false);
+      return;
+    }
+    
+    if (contextMultiSelectMode) {
+      // Toggle selection
+      const newSelected = new Set(selectedItems);
+      if (newSelected.has(card.id)) {
+        newSelected.delete(card.id);
+        removeFromCart(card.id);
+      } else {
+        newSelected.add(card.id);
+        addToCart(card);
+      }
+      setSelectedItems(newSelected);
+    } else {
+      // Normal card click - open preview
+      setSelectedCard(card);
+      setIsCardModalOpen(true);
+    }
+  };
+
+  const exitMultiSelectMode = () => {
+    // Create order directly when Done is clicked
+    if (cartItems.length > 0) {
+      const orderData = {
+        orderDate: new Date().toISOString().split('T')[0],
+        purchaseLocation: '',
+        itemPrices: {}
+      };
+      createOrderDirectly(orderData);
+    }
+    contextExitMultiSelectMode();
+    setSelectedItems(new Set());
+    contextCloseCartMenu();
+  };
+
+  const cancelMultiSelect = () => {
+    // Clear cart and exit multi-select mode
+    setCartItems([]);
+    setSelectedItems(new Set());
+    contextExitMultiSelectMode();
+    contextCloseCartMenu();
+  };
+
+  // Handle add to collection - show modal locally
+  const handleAddToCollection = (card) => {
+    if (isCartMode) {
+      // Add to cart instead of opening single item modal
+      addToCart(card);
+    } else {
+      // Prepare card data for the modal
+      // Use the same logic as the search page display
+      let marketValue = 0;
+      
+      if (card.raw_price) {
+        marketValue = parseFloat(card.raw_price);
+      } else if (card.graded_price) {
+        marketValue = parseFloat(card.graded_price);
+      } else if (card.market_value_cents) {
+        marketValue = card.market_value_cents / 100;
+      }
+      
+      console.log('🔍 Card market data:', {
+        name: card.name,
+        raw_price: card.raw_price,
+        graded_price: card.graded_price,
+        market_value_cents: card.market_value_cents,
+        calculated_market_value: marketValue
+      });
+      
+      const cardData = {
+        name: card.name,
+        set_name: card.expansion_name || card.set_name,
+        item_type: 'Card',
+        market_value: marketValue,
+        image_url: card.image_url,
+        description: `${card.rarity} card from ${card.expansion_name || card.set_name}`,
+        number: card.number,
+        rarity: card.rarity,
+        source: 'api',
+        api_id: card.id
+      };
+      
+      // Set the selected card and open the modal
+      setSelectedCardForCollection(cardData);
+      setIsAddToCollectionModalOpen(true);
+      openModal();
+    }
   };
 
   // Navigation functions
@@ -2541,32 +2876,78 @@ const SearchApi = () => {
           </div>
         )}
 
+        {/* Multi-Select Mode Indicator */}
+        {contextMultiSelectMode && (
+          <div className="my-3 bg-indigo-900/20 border border-indigo-400/50 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
+                <span className="text-white text-sm font-bold">!</span>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-white">Multi-Select Mode</h3>
+                <p className="text-xs text-gray-300">Tap cards to select</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+
         {/* Search Results */}
         {searchResults.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mb-8">
-            {searchResults.map((card, index) => (
-               <div
-                 key={`${card.id}-${index}`}
-                 className="rounded-lg overflow-hidden border border-gray-700 hover:bg-indigo-900/30 hover:border-indigo-400 transition-colors cursor-pointer bg-transparent"
-                 onClick={() => handleCardClick(card)}
-               >
-                 {/* Card Image - Top Section */}
-                 <div className="aspect-[488/680] bg-transparent rounded-t-lg overflow-hidden p-2">
-                  <SafeImage
-                    src={card.image_url}
-                    alt={card.name}
-                    className="w-full h-full object-contain"
-                    onLoad={() => {}}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                </div>
+            {searchResults.map((card, index) => {
+              const isInCart = cartItems.some(item => item.id === card.id);
+              const isSelected = selectedItems.has(card.id);
+              const cartItem = cartItems.find(item => item.id === card.id);
+              
+              return (
+                <div
+                  key={`${card.id}-${index}`}
+                  className={`rounded-lg overflow-hidden border transition-colors cursor-pointer bg-transparent relative ${
+                    contextMultiSelectMode
+                      ? isSelected
+                        ? 'border-indigo-400 bg-indigo-900/30 hover:bg-indigo-900/50 hover:border-indigo-300'
+                        : 'border-gray-700 hover:bg-gray-800/50 hover:border-gray-600'
+                      : 'border-gray-700 hover:bg-gray-800/50 hover:border-gray-600'
+                  }`}
+                  onClick={(e) => {
+                    console.log('🎯 Card clicked:', card.name);
+                    handleCardClick(card);
+                  }}
+                  onMouseDown={(e) => {
+                    console.log('🎯 Mouse down on card:', card.name, 'target:', e.target);
+                    handleCardPressStart(card);
+                  }}
+                  onMouseUp={handleCardPressEnd}
+                  onMouseLeave={handleCardPressEnd}
+                  onTouchStart={(e) => {
+                    console.log('🎯 Touch start on card:', card.name, 'target:', e.target);
+                    handleCardPressStart(card);
+                  }}
+                  onTouchEnd={handleCardPressEnd}
+                >
+                  {/* Card Content Wrapper - prevents child events from interfering */}
+                  <div 
+                    className="w-full h-full pointer-events-none"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {/* Card Image - Top Section */}
+                    <div className="aspect-[488/680] bg-transparent rounded-t-lg overflow-hidden p-2 pointer-events-none">
+                      <SafeImage
+                        src={card.image_url}
+                        alt={card.name}
+                        className="w-full h-full object-contain pointer-events-none"
+                        onLoad={() => {}}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    </div>
 
-                {/* Card Info - Bottom Section */}
-                <div className="px-4 pb-3 pt-2">
+                    {/* Card Info - Bottom Section */}
+                    <div className="px-4 pb-3 pt-2 pointer-events-none">
                   {/* Card Info Group - Name, Set, Type */}
-                  <div className="space-y-0.5 mb-2">
+                  <div className="space-y-0.5 mb-2 pointer-events-none">
                     {/* Card Name */}
                     <h3 className="font-semibold text-white text-xs">{card.name}</h3>
                     
@@ -2578,8 +2959,8 @@ const SearchApi = () => {
                   </div>
                   
                   {/* Pricing and Add Button */}
-                  <div className="flex items-center justify-between">
-                    <div className="font-semibold text-white text-xs">
+                  <div className="flex items-center justify-between pointer-events-none">
+                    <div className="font-semibold text-white text-xs pointer-events-none">
                       {card.raw_price && (
                         <>
                           {formatPrice(card.raw_price)}
@@ -2609,20 +2990,36 @@ const SearchApi = () => {
                         <span className="text-gray-400">Pricing N/A</span>
                       )}
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAddToCollection(card);
-                      }}
-                      className="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center transition-colors"
-                      title="Add to Collection"
-                    >
-                      <Plus size={14} />
-                    </button>
+                    {contextMultiSelectMode ? (
+                      <div className="flex items-center gap-1 pointer-events-none">
+                        {isSelected ? (
+                          <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center pointer-events-none">
+                            <span className="text-white text-xs font-bold">✓</span>
+                          </div>
+                        ) : (
+                          <div className="w-6 h-6 border-2 border-gray-400 rounded-full flex items-center justify-center pointer-events-none">
+                            <span className="text-gray-400 text-xs">+</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddToCollection(card);
+                        }}
+                        className="w-6 h-6 border-2 border-gray-400 rounded-full flex items-center justify-center transition-colors pointer-events-auto hover:border-gray-300 hover:bg-gray-700"
+                        title="Add to Collection"
+                      >
+                        <span className="text-gray-400 text-xs hover:text-gray-300">+</span>
+                      </button>
+                    )}
+                    </div>
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -2788,8 +3185,11 @@ const SearchApi = () => {
                   </p>
                   <button
                     onClick={() => setIsCustomItemModalOpen(true)}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                    className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg font-medium transition-colors text-sm flex items-center gap-2"
                   >
+                    <div className="w-4 h-4 border border-gray-400 rounded-full flex items-center justify-center">
+                      <span className="text-gray-400 text-xs">+</span>
+                    </div>
                     Add New Item
                   </button>
                 </div>
@@ -2918,8 +3318,11 @@ const SearchApi = () => {
                   </p>
                   <button
                     onClick={() => setIsCustomItemModalOpen(true)}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                    className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg font-medium transition-colors text-sm flex items-center gap-2"
                   >
+                    <div className="w-4 h-4 border border-gray-400 rounded-full flex items-center justify-center">
+                      <span className="text-gray-400 text-xs">+</span>
+                    </div>
                     Add New Item
                   </button>
                 </div>
@@ -3137,6 +3540,21 @@ const SearchApi = () => {
           }}
         />
       )}
+
+
+      {/* Cart Bottom Menu */}
+      <CartBottomMenu
+        cartItems={cartItems}
+        isOpen={isCartMenuOpen}
+        onClose={contextCloseCartMenu}
+        onUpdateQuantity={updateCartQuantity}
+        onRemoveItem={removeFromCart}
+        onClearCart={clearCart}
+        onCreateOrder={createOrderDirectly}
+        onCancel={cancelMultiSelect}
+        onDone={exitMultiSelectMode}
+        isMultiSelectMode={contextMultiSelectMode}
+      />
 
       {/* Custom Item Modal */}
       <CustomItemModal
@@ -3377,6 +3795,57 @@ const SearchApi = () => {
             />
           </svg>
         </button>
+      )}
+
+      {/* Multi-Order Processing Popup */}
+      {showMultiOrderProcessing && multiOrderSuccessData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 max-w-sm w-full mx-4">
+            {/* Spinning Animation */}
+            <div className="flex justify-center mb-6">
+              <div className="relative">
+                <div className="w-16 h-16 border-4 border-gray-700 border-t-indigo-500 rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 bg-indigo-500 rounded-full opacity-20"></div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-white mb-2">Creating Order</h3>
+              <div className="text-sm text-gray-300 space-y-1 mb-4">
+                <p><span className="font-medium">{multiOrderSuccessData.itemCount} items</span> selected</p>
+                <p className="text-indigo-400 font-medium">${multiOrderSuccessData.totalValue.toFixed(2)}</p>
+              </div>
+              <p className="text-xs text-gray-400">Adding to your collection...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Order Success Popup */}
+      {showMultiOrderSuccess && multiOrderSuccessData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 max-w-sm w-full mx-4">
+            {/* Success Animation */}
+            <div className="flex justify-center mb-6">
+              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-white mb-2">Order Created!</h3>
+              <div className="text-sm text-gray-300 space-y-1 mb-4">
+                <p><span className="font-medium">{multiOrderSuccessData.itemCount} items</span> added to collection</p>
+                <p className="text-indigo-400 font-medium">${multiOrderSuccessData.totalValue.toFixed(2)}</p>
+              </div>
+              <p className="text-xs text-gray-400">Your collection has been updated</p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

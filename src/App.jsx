@@ -4,6 +4,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModalProvider } from './contexts/ModalContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { CartProvider } from './contexts/CartContext';
 import ResponsiveLayout from './components/layout/ResponsiveLayout';
 import Collection from './pages/Collection';
 import SearchApi from './pages/SearchApi';
@@ -37,7 +38,8 @@ function App() {
       <AuthProvider>
         <LanguageProvider>
           <ModalProvider>
-            <Router>
+            <CartProvider>
+              <Router>
               <div className="min-h-screen transition-colors duration-200">
                 <Routes>
                   <Route path="/login" element={<Login />} />
@@ -60,6 +62,7 @@ function App() {
                 </Routes>
               </div>
             </Router>
+            </CartProvider>
           </ModalProvider>
         </LanguageProvider>
       </AuthProvider>
