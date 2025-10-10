@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useModal } from '../contexts/ModalContext';
 
@@ -20,6 +20,9 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
   const [retailers, setRetailers] = useState([]);
   const [retailerSearchQuery, setRetailerSearchQuery] = useState('');
   const [isRetailerFocused, setIsRetailerFocused] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [dragData, setDragData] = useState({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
+  const modalRef = useRef(null);
 
   // Initialize item details when selectedItems change
   useEffect(() => {
@@ -101,8 +104,106 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
       setError('');
       setShowSuccess(false);
       setSuccessData(null);
-      onClose();
+      setIsClosing(true);
+      setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+        setDragData({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
+      }, 300);
     }
+  };
+
+  // Touch gesture handlers
+  const handleTouchStart = (e) => {
+    const touch = e.touches[0];
+    setDragData({
+      startY: touch.clientY,
+      currentY: touch.clientY,
+      isDragging: true,
+      deltaY: 0
+    });
+  };
+
+  // Mouse gesture handlers for desktop testing
+  const handleMouseDown = (e) => {
+    setDragData({
+      startY: e.clientY,
+      currentY: e.clientY,
+      isDragging: true,
+      deltaY: 0
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!dragData.isDragging) return;
+    
+    const deltaY = e.clientY - dragData.startY;
+    
+    // Only allow downward swipe (positive deltaY) to close
+    if (deltaY > 0) {
+      setDragData({
+        ...dragData,
+        currentY: e.clientY,
+        deltaY: deltaY
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (!dragData.isDragging) return;
+    
+    const deltaY = dragData.deltaY || 0;
+    
+    // If swiped down more than 100px, close the modal
+    if (deltaY > 100) {
+      handleClose();
+    } else {
+      // Snap back to original position
+      setDragData({
+        ...dragData,
+        isDragging: false,
+        deltaY: 0
+      });
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (!dragData.isDragging) return;
+    
+    const touch = e.touches[0];
+    const deltaY = touch.clientY - dragData.startY;
+    
+    // Only allow downward swipe (positive deltaY)
+    if (deltaY > 0) {
+      setDragData({
+        ...dragData,
+        currentY: touch.clientY,
+        deltaY: deltaY
+      });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!dragData.isDragging) return;
+    
+    const deltaY = dragData.deltaY || 0;
+    
+    // If swiped down more than 100px, close the modal
+    if (deltaY > 100) {
+      handleClose();
+    } else {
+      // Snap back to original position
+      setDragData({
+        ...dragData,
+        isDragging: false,
+        deltaY: 0
+      });
+    }
+  };
+
+  const getTransform = () => {
+    if (!dragData.isDragging) return 'translateY(0)';
+    return `translateY(${Math.max(0, dragData.deltaY)}px)`;
   };
 
   // Calculate total value and items
@@ -255,12 +356,25 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end modal-overlay z-50">
       <div 
-        className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[90vh] flex flex-col animate-slide-up"
-        style={{ animation: 'slideUp 0.3s ease-out' }}
+        ref={modalRef}
+        className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[90vh] flex flex-col"
+        style={{ 
+          animation: isClosing ? 'slideDown 0.3s ease-out' : 'slideUp 0.3s ease-out',
+          transform: getTransform(),
+          transition: dragData.isDragging ? 'none' : 'transform 0.3s ease-out'
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
       >
         {/* iPhone-style drag handle */}
         <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
-          <div className="w-10 h-1 bg-gray-600 hover:bg-indigo-600 rounded-full transition-colors cursor-pointer"></div>
+          <div className={`w-10 h-1 rounded-full transition-colors cursor-pointer ${
+            dragData.isDragging ? 'bg-gray-500' : 'bg-gray-600 hover:bg-indigo-600'
+          }`}></div>
         </div>
 
         {/* Header */}

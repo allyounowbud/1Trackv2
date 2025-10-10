@@ -60,8 +60,8 @@ const ResponsiveLayout = ({ children }) => {
         {children}
       </div>
       
-      {/* Bottom Navigation - Hide when modal is open or cart menu is open */}
-      {!isModalOpen && !isCartMenuOpen && (
+      {/* Bottom Navigation - Show normal nav when cart menu is closed */}
+      {!isCartMenuOpen && (
         <BottomNavigation 
           currentPath={location.pathname} 
           customButtons={null}

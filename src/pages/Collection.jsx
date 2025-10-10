@@ -43,8 +43,12 @@ const Collection = () => {
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [showBulkActionsMenu, setShowBulkActionsMenu] = useState(false);
+  const [isBulkMenuClosing, setIsBulkMenuClosing] = useState(false);
+  const [bulkMenuDragData, setBulkMenuDragData] = useState({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
   const [showItemMenu, setShowItemMenu] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState(null);
+  const [isItemMenuClosing, setIsItemMenuClosing] = useState(false);
+  const [itemMenuDragData, setItemMenuDragData] = useState({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
   const [successData, setSuccessData] = useState(null);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -112,6 +116,125 @@ const Collection = () => {
 
   // Create a stable reference for overrides to prevent infinite re-renders
   const overridesString = JSON.stringify(marketValueOverrides);
+
+  // Touch gesture handlers for item menu
+  const handleItemMenuClose = () => {
+    setIsItemMenuClosing(true);
+    setTimeout(() => {
+      setShowItemMenu(false);
+      setIsItemMenuClosing(false);
+      setItemMenuDragData({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
+    }, 300);
+  };
+
+  const handleItemMenuTouchStart = (e) => {
+    const touch = e.touches[0];
+    setItemMenuDragData({
+      startY: touch.clientY,
+      currentY: touch.clientY,
+      isDragging: true,
+      deltaY: 0
+    });
+  };
+
+  const handleItemMenuTouchMove = (e) => {
+    if (!itemMenuDragData.isDragging) return;
+    
+    const touch = e.touches[0];
+    const deltaY = touch.clientY - itemMenuDragData.startY;
+    
+    // Only allow downward swipe (positive deltaY)
+    if (deltaY > 0) {
+      setItemMenuDragData({
+        ...itemMenuDragData,
+        currentY: touch.clientY,
+        deltaY: deltaY
+      });
+    }
+  };
+
+  const handleItemMenuTouchEnd = () => {
+    if (!itemMenuDragData.isDragging) return;
+    
+    const deltaY = itemMenuDragData.deltaY || 0;
+    
+    // If swiped down more than 100px, close the menu
+    if (deltaY > 100) {
+      handleItemMenuClose();
+    } else {
+      // Snap back to original position
+      setItemMenuDragData({
+        ...itemMenuDragData,
+        isDragging: false,
+        deltaY: 0
+      });
+    }
+  };
+
+  const getItemMenuTransform = () => {
+    if (!itemMenuDragData.isDragging) return 'translateY(0)';
+    return `translateY(${Math.max(0, itemMenuDragData.deltaY)}px)`;
+  };
+
+  // Touch gesture handlers for bulk actions menu
+  const handleBulkMenuClose = () => {
+    setIsBulkMenuClosing(true);
+    setTimeout(() => {
+      handleBulkMenuClose();
+      setIsBulkMenuClosing(false);
+      setBulkMenuDragData({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
+      closeModal();
+    }, 300);
+  };
+
+  const handleBulkMenuTouchStart = (e) => {
+    const touch = e.touches[0];
+    setBulkMenuDragData({
+      startY: touch.clientY,
+      currentY: touch.clientY,
+      isDragging: true,
+      deltaY: 0
+    });
+  };
+
+  const handleBulkMenuTouchMove = (e) => {
+    if (!bulkMenuDragData.isDragging) return;
+    
+    const touch = e.touches[0];
+    const deltaY = touch.clientY - bulkMenuDragData.startY;
+    
+    // Only allow downward swipe (positive deltaY)
+    if (deltaY > 0) {
+      setBulkMenuDragData({
+        ...bulkMenuDragData,
+        currentY: touch.clientY,
+        deltaY: deltaY
+      });
+    }
+  };
+
+  const handleBulkMenuTouchEnd = () => {
+    if (!bulkMenuDragData.isDragging) return;
+    
+    const deltaY = bulkMenuDragData.deltaY || 0;
+    
+    // If swiped down more than 100px, close the menu
+    if (deltaY > 100) {
+      handleBulkMenuClose();
+    } else {
+      // Snap back to original position
+      setBulkMenuDragData({
+        ...bulkMenuDragData,
+        isDragging: false,
+        deltaY: 0
+      });
+    }
+  };
+
+  const getBulkMenuTransform = () => {
+    if (!bulkMenuDragData.isDragging) return 'translateY(0)';
+    return `translateY(${Math.max(0, bulkMenuDragData.deltaY)}px)`;
+  };
 
   // Selection functions
   const handleItemSelect = (itemId) => {
@@ -1518,14 +1641,19 @@ const Collection = () => {
       {showBulkActionsMenu && (
         <div 
           className="fixed inset-0 bg-black/50 flex items-end modal-overlay"
-          onClick={() => {
-            setShowBulkActionsMenu(false);
-            closeModal();
-          }}
+          onClick={handleBulkMenuClose}
         >
           <div 
             className="w-full bg-gray-900 border border-blue-400/50 rounded-t-2xl max-h-[80vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
+            style={{
+              animation: isBulkMenuClosing ? 'slideDown 0.3s ease-out' : 'slideUp 0.3s ease-out',
+              transform: getBulkMenuTransform(),
+              transition: bulkMenuDragData.isDragging ? 'none' : 'transform 0.3s ease-out'
+            }}
+            onTouchStart={handleBulkMenuTouchStart}
+            onTouchMove={handleBulkMenuTouchMove}
+            onTouchEnd={handleBulkMenuTouchEnd}
           >
             {/* Header */}
             <div className="px-4 py-4 border-b border-gray-700">
@@ -1577,28 +1705,31 @@ const Collection = () => {
       {showItemMenu && !isSelectionMode && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end modal-overlay transition-opacity duration-200"
-          onClick={() => {
-            setShowItemMenu(false);
-          }}
+          onClick={handleItemMenuClose}
         >
           <div 
-            className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up"
+            className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
             style={{
-              animation: 'slideUp 0.3s ease-out'
+              animation: isItemMenuClosing ? 'slideDown 0.3s ease-out' : 'slideUp 0.3s ease-out',
+              transform: getItemMenuTransform(),
+              transition: itemMenuDragData.isDragging ? 'none' : 'transform 0.3s ease-out'
             }}
+            onTouchStart={handleItemMenuTouchStart}
+            onTouchMove={handleItemMenuTouchMove}
+            onTouchEnd={handleItemMenuTouchEnd}
           >
             {/* iPhone-style drag handle */}
             <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
+              <div className={`w-10 h-1 rounded-full transition-colors ${
+                itemMenuDragData.isDragging ? 'bg-gray-500' : 'bg-gray-600'
+              }`}></div>
             </div>
 
             {/* Header with close button */}
             <div className="px-6 py-4 border-b border-gray-700/50 relative">
               <button
-                onClick={() => {
-                  setShowItemMenu(false);
-                }}
+                onClick={handleItemMenuClose}
                 className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition-colors"
               >
                 <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1641,7 +1772,7 @@ const Collection = () => {
                     orders: itemOrders
                   });
                   setShowOrderBookModal(true);
-                  setShowItemMenu(false);
+                  handleItemMenuClose();
                 }}
               >
                 <div className="flex items-center gap-4">
@@ -1693,7 +1824,7 @@ const Collection = () => {
                     // Delay closing the item menu to avoid conflicts
                     setTimeout(() => {
                       console.log('🎯 Setting showItemMenu to false (delayed)');
-                      setShowItemMenu(false);
+                      handleItemMenuClose();
                     }, 50);
                     
                     // Debug check after state updates

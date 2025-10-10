@@ -64,10 +64,6 @@ export const setupInstallPrompt = () => {
   
   // Listen for route changes (for single-page app navigation)
   window.addEventListener('popstate', handleRouteChange);
-  
-  // Also observe for URL changes in SPA
-  const observer = new MutationObserver(handleRouteChange);
-  observer.observe(document.body, { childList: true, subtree: true });
 };
 
 // Show install button

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const AuthContext = createContext();
@@ -16,91 +16,143 @@ export { useAuth };
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    // If no supabase client, just set loading to false
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
+    let isMounted = true;
 
-    // Handle authentication callback from URL hash
-    const handleAuthCallback = async () => {
+    const initializeAuth = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          console.error('Auth callback error:', error);
-        } else if (data.session) {
-          setUser(data.session.user);
-          // Clear the URL hash after successful authentication
-          window.history.replaceState({}, document.title, window.location.pathname);
+        // If no supabase client, just set loading to false
+        if (!supabase) {
+          if (isMounted) {
+            setLoading(false);
+          }
+          return;
         }
+
+        // Get initial session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+        } else if (session) {
+          if (isMounted) {
+            setUser(session.user);
+          }
+        }
+
+        if (isMounted) {
+          setLoading(false);
+        }
+
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          (event, session) => {
+            if (!isMounted) return;
+
+            console.log('Auth state change:', event, session?.user?.email || 'No user');
+            
+            setUser(session?.user ?? null);
+            
+            // Only set loading to false after initial load
+            if (event !== 'INITIAL_SESSION') {
+              setLoading(false);
+            }
+          }
+        );
+
+        // Cleanup function
+        return () => {
+          isMounted = false;
+          mountedRef.current = false;
+          subscription?.unsubscribe();
+        };
+
       } catch (error) {
-        console.error('Error handling auth callback:', error);
+        console.error('Error initializing auth:', error);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
-    // Handle initial session and auth callback
-    handleAuthCallback();
+    const cleanup = initializeAuth();
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-      
-      // Handle successful sign in
-      if (event === 'SIGNED_IN' && session) {
-        // Clear URL hash after successful authentication
-        window.history.replaceState({}, document.title, window.location.pathname);
+    return () => {
+      isMounted = false;
+      mountedRef.current = false;
+      if (cleanup && typeof cleanup.then === 'function') {
+        cleanup.then(cleanupFn => cleanupFn && cleanupFn());
       }
-    });
-
-    return () => subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email, password) => {
     if (!supabase) {
       return { data: null, error: new Error('Supabase not configured') };
     }
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { data, error };
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      return { data, error };
+    } catch (error) {
+      console.error('Sign in error:', error);
+      return { data: null, error };
+    }
   };
 
   const signUp = async (email, password) => {
     if (!supabase) {
       return { data: null, error: new Error('Supabase not configured') };
     }
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-    return { data, error };
+    
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      return { data, error };
+    } catch (error) {
+      console.error('Sign up error:', error);
+      return { data: null, error };
+    }
   };
 
   const signInWithDiscord = async () => {
     if (!supabase) {
       return { data: null, error: new Error('Supabase not configured') };
     }
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'discord',
-      options: {
-        redirectTo: window.location.origin
-      }
-    });
-    return { data, error };
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'discord',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`
+        }
+      });
+      return { data, error };
+    } catch (error) {
+      console.error('Discord sign in error:', error);
+      return { data: null, error };
+    }
   };
 
   const signOut = async () => {
     if (!supabase) {
       return { error: new Error('Supabase not configured') };
     }
-    const { error } = await supabase.auth.signOut();
-    return { error };
+    
+    try {
+      const { error } = await supabase.auth.signOut();
+      return { error };
+    } catch (error) {
+      console.error('Sign out error:', error);
+      return { error };
+    }
   };
 
   const value = {

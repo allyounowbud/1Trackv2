@@ -1111,6 +1111,12 @@ const SearchApi = () => {
 
   const removeFromCart = (cardId) => {
     setCartItems(prev => prev.filter(item => item.id !== cardId));
+    // Also deselect the item from multi-select state
+    setSelectedItems(prev => {
+      const newSelected = new Set(prev);
+      newSelected.delete(cardId);
+      return newSelected;
+    });
   };
 
   const updateCartQuantity = (cardId, quantity) => {
@@ -2154,7 +2160,7 @@ const SearchApi = () => {
                   className={`rounded-lg p-2 transition-colors border aspect-square ${
                     game.enabled === false 
                       ? 'opacity-50 cursor-not-allowed border-gray-500' 
-                      : 'hover:bg-indigo-900/30 cursor-pointer border-gray-600 hover:border-indigo-400'
+                      : 'hover:bg-gray-800/50 cursor-pointer border-gray-600 hover:border-gray-500'
                   }`}
                   onClick={() => game.enabled !== false && handleGameSelect(game)}
                 >
@@ -2416,7 +2422,7 @@ const SearchApi = () => {
                       .map((expansion, index) => (
                       <div
                         key={`${expansion.id}-${index}`}
-                        className="rounded-lg pt-1 pb-6 px-1 hover:bg-indigo-900/30 transition-colors cursor-pointer border border-gray-600 hover:border-indigo-400"
+                        className="rounded-lg pt-1 pb-6 px-1 hover:bg-gray-800/50 transition-colors cursor-pointer border border-gray-600 hover:border-gray-500"
                         onClick={() => handleExpansionSelect(expansion)}
                       >
                         <div className="aspect-[4/3] bg-transparent rounded-lg mb-0.5 overflow-hidden">
@@ -2457,7 +2463,7 @@ const SearchApi = () => {
                       .map((expansion, index) => (
                       <div
                         key={`${expansion.id}-${index}`}
-                        className="rounded-lg pt-1 pb-6 px-1 hover:bg-indigo-900/30 transition-colors cursor-pointer border border-gray-600 hover:border-indigo-400"
+                        className="rounded-lg pt-1 pb-6 px-1 hover:bg-gray-800/50 transition-colors cursor-pointer border border-gray-600 hover:border-gray-500"
                         onClick={() => handleExpansionSelect(expansion)}
                       >
                         <div className="aspect-[4/3] bg-transparent rounded-lg mb-0.5 overflow-hidden">
@@ -2756,14 +2762,22 @@ const SearchApi = () => {
         {/* Multi-Select Mode Indicator */}
         {contextMultiSelectMode && (
           <div className="my-3 bg-indigo-900/20 border border-indigo-400/50 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-bold">!</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm font-bold">!</span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-white">Multi-Select Mode</h3>
+                  <p className="text-xs text-gray-300">Tap cards to select</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-medium text-white">Multi-Select Mode</h3>
-                <p className="text-xs text-gray-300">Tap cards to select</p>
-              </div>
+              <button
+                onClick={cancelMultiSelect}
+                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}
@@ -2991,7 +3005,7 @@ const SearchApi = () => {
               {expansions.slice(0, 12).map((expansion, index) => (
                 <div
                   key={`${expansion.id}-${index}`}
-                  className="bg-gray-800 rounded-lg p-4 hover:bg-indigo-900/30 transition-colors cursor-pointer hover:border-indigo-400 border border-transparent"
+                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors cursor-pointer hover:border-gray-600 border border-transparent"
                   onClick={() => handleExpansionClick(expansion)}
                 >
                   <div className="aspect-square bg-transparent rounded-lg mb-3 overflow-hidden">
@@ -3079,7 +3093,7 @@ const SearchApi = () => {
                       className={`bg-gray-800 rounded-lg border border-gray-700 transition-colors ${
                         isSelected 
                           ? 'border-indigo-400 bg-indigo-900/20 shadow-indigo-400/25' 
-                          : 'hover:bg-indigo-900/30 hover:border-indigo-400'
+                          : 'hover:bg-gray-700 hover:border-gray-600'
                       }`}
                       onTouchStart={(e) => {
                         if (isCustomSelectionMode) {
