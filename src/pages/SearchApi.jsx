@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Search, Filter, Loader2, Star, X, ChevronDown, Plus, MoreVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import expansionDataService from '../services/expansionDataService';
-import cardSearchService from '../services/cardSearchService';
+import simpleSearchService from '../services/simpleSearchService';
 import SafeImage from '../components/SafeImage';
 import CardPreviewModal from '../components/CardPreviewModal';
 import CustomItemModal from '../components/CustomItemModal';
@@ -243,13 +243,13 @@ const SearchApi = () => {
   const getSearchPlaceholder = () => {
     switch (selectedGame?.id) {
       case 'all':
-        return 'Search for anything...';
+        return 'Search cards, sealed products, and custom items...';
       case 'pokemon':
-        return 'Search for Pokémon...';
+        return 'Search Pokémon cards, sealed products, and custom items...';
       case 'lorcana':
-        return 'Search for Lorcana...';
+        return 'Search Lorcana cards, sealed products, and custom items...';
       case 'magic':
-        return 'Search for Magic: The Gathering...';
+        return 'Search Magic cards, sealed products, and custom items...';
       case 'gundam':
         return 'Search for Gundam...';
       case 'other':
@@ -451,9 +451,9 @@ const SearchApi = () => {
   useEffect(() => {
     const initializeAndLoad = async () => {
       try {
-        // Initialize simplified services
+        // Initialize services
         await expansionDataService.initialize();
-        await cardSearchService.initialize();
+        await simpleSearchService.initialize();
         
         await loadExpansions();
         
@@ -605,7 +605,8 @@ const SearchApi = () => {
     }
     
     // Define current view mode at the beginning
-    const currentViewMode = viewMode || expansionViewMode;
+    const currentViewMode = expansionViewMode;
+    console.log('🔍 Current view mode:', currentViewMode);
     
     // Reset state for new search - only update loading states when necessary
     if (page === 1) {
@@ -632,7 +633,7 @@ const SearchApi = () => {
 
       const searchOptions = {
         page,
-        pageSize: 30, // Optimized pagination for fast loading
+        pageSize: 100, // Increased to show more results
         expansionId: selectedExpansion?.id || null,
         sortBy: sortBy, // Use current sort setting
         sortOrder: sortOrder, // Use current sort order
@@ -646,165 +647,26 @@ const SearchApi = () => {
         resistances: filterValues.resistances.length > 0 ? filterValues.resistances : null
       };
 
-      // Use hybrid search service to search both singles and sealed products
-      let results;
-      try {
-        results = await hybridSearchService.smartSearch(query, selectedGame?.id || 'pokemon', {
+      // Use simple search service - direct database queries only
+      console.log('🔍 Starting search for:', query);
+      const results = await simpleSearchService.searchAll(query, {
           page,
           pageSize: 30,
           sortBy: sortBy,
-          sortOrder: sortOrder,
-          supertype: filterValues.supertype.length > 0 ? filterValues.supertype : null,
-          types: filterValues.types.length > 0 ? filterValues.types : null,
-          subtypes: filterValues.subtypes.length > 0 ? filterValues.subtypes : null,
-          rarity: filterValues.rarity.length > 0 ? filterValues.rarity : null,
-          artists: filterValues.artists.length > 0 ? filterValues.artists : null,
-          weaknesses: filterValues.weaknesses.length > 0 ? filterValues.weaknesses : null,
-          resistances: filterValues.resistances.length > 0 ? filterValues.resistances : null
-        });
-      } catch (hybridError) {
-        // Fallback to local search service for both singles and sealed products
-        let singlesResults = [];
-        let sealedResults = [];
-        let totalSingles = 0;
-        let totalSealed = 0;
-        
-        try {
-          // Search Pokémon cards
-          const cardResults = await localSearchService.searchCards(query, {
-            page,
-            pageSize: Math.max(1, Math.floor(30 / 2)), // Split page size between singles and sealed
-            sortBy: sortBy,
-            sortOrder: sortOrder,
-            supertype: filterValues.supertype.length > 0 ? filterValues.supertype : null,
-            types: filterValues.types.length > 0 ? filterValues.types : null,
-            subtypes: filterValues.subtypes.length > 0 ? filterValues.subtypes : null,
-            rarity: filterValues.rarity.length > 0 ? filterValues.rarity : null,
-            artists: filterValues.artists.length > 0 ? filterValues.artists : null,
-            weaknesses: filterValues.weaknesses.length > 0 ? filterValues.weaknesses : null,
-            resistances: filterValues.resistances.length > 0 ? filterValues.resistances : null
-          });
-          
-          if (cardResults && cardResults.data) {
-            singlesResults = cardResults.data;
-            totalSingles = cardResults.total || 0;
-          }
-        } catch (cardError) {
-          // Silent fail
-        }
-        
-        try {
-          // Search sealed products
-          const sealedSearchResults = await localSearchService.searchSealedProducts(query, {
-            page,
-            pageSize: Math.max(1, Math.floor(30 / 2)), // Split page size between singles and sealed
-            sortBy: 'name',
-            sortOrder: 'asc'
-          });
-          
-          if (sealedSearchResults && sealedSearchResults.data) {
-            sealedResults = sealedSearchResults.data;
-            totalSealed = sealedSearchResults.total || 0;
-          }
-        } catch (sealedError) {
-          // Silent fail
-        }
-        
-        // Create fallback results
-        results = {
-          singles: singlesResults,
-          sealed: sealedResults,
-          total: totalSingles + totalSealed,
-          page: page,
-          pageSize: 30,
-          source: 'local-fallback',
-          cached: false
-        };
-      }
+        sortOrder: sortOrder
+      });
+      console.log('🔍 Search results:', results);
       
-      // Combine singles and sealed products
-      const allResults = [];
-      
-      // Add singles from Scrydex
-      if (results.singles && results.singles.length > 0) {
-        const formattedSingles = formatCardsWithVariants(results.singles);
-        
-        // Filter out TCG Pocket cards
-        const filteredSingles = formattedSingles.filter(card => {
-          const expansionName = card.expansion_name?.toLowerCase() || '';
-          const cardName = card.name?.toLowerCase() || '';
-          const isTCGPocket = expansionName.includes('pocket') || 
-                             expansionName.includes('tcg pocket') ||
-                             cardName.includes('pocket promo') ||
-                             cardName.includes('pocket');
-          if (isTCGPocket) {
-          }
-          return !isTCGPocket;
-        });
-        
-        // Use database-sorted results directly - no frontend sorting needed
-        allResults.push(...filteredSingles.map(card => ({
-          ...card,
-          source: 'scrydex'
-        })));
-      }
-      
-      // Add sealed products from database
-      if (results.sealed && results.sealed.length > 0) {
-        // Format sealed products to match expected structure for UI display
-        const formattedSealedProducts = results.sealed.map(product => ({
-          id: product.tcggo_id || product.id,
-          name: product.name,
-          type: 'sealed',
-          itemType: 'sealed',
-          rarity: 'Sealed', // Always "Sealed" for sealed products
-          image: product.image,
-          image_url: product.image,
-          expansion_name: product.episode_name || 'Unknown Set',
-          set_name: product.episode_name || 'Unknown Set',
-          product_name: product.name,
-          
-          // Pricing data - convert EUR to USD for display
-          raw_price: product.pricing_market ? (product.pricing_market * 1.08).toFixed(2) : null, // Approximate EUR to USD conversion
-          market_value_cents: product.pricing_market ? Math.round(product.pricing_market * 1.08 * 100) : null,
-          
-          // Original pricing data
-          pricing: {
-            low: product.pricing_low,
-            mid: product.pricing_mid,
-            high: product.pricing_high,
-            market: product.pricing_market,
-            currency: product.pricing_currency || 'EUR',
-            sources: product.pricing_sources || ['cardmarket']
-          },
-          pricingSource: product.pricing_source || 'cardmarket',
-          source: 'database',
-          episode: {
-            id: product.episode_id,
-            name: product.episode_name
-          },
-          tcggoUrl: product.tcggo_url,
-          cardmarketUrl: product.cardmarket_url,
-          rawData: product.raw_data
-        }));
-        
-        allResults.push(...formattedSealedProducts);
-      }
-      
+      // Results are already formatted by simpleSearchService
+      const allResults = results.data || [];
 
       // Skip image enhancement for performance - use results directly
       const enhancedResults = allResults;
+      console.log('🔍 Enhanced results:', enhancedResults.length, 'items');
 
-      // Final safety filter to ensure strict separation
-      const finalResults = enhancedResults.filter(item => {
-        if (currentViewMode === 'sealed') {
-          // In sealed mode, only show items marked as sealed or from pricecharting source
-          return item.itemType === 'sealed' || item.source === 'pricecharting';
-        } else {
-          // In singles mode, only show items marked as singles or from scrydex source
-          return item.itemType === 'singles' || item.source === 'scrydex';
-        }
-      });
+      // No filtering needed - simpleSearchService returns all results
+      const finalResults = enhancedResults;
+      console.log('🔍 Final results after filtering:', finalResults.length, 'items');
 
       if (append) {
         setSearchResults(prev => [...prev, ...finalResults]);
@@ -812,13 +674,21 @@ const SearchApi = () => {
         setSearchResults(finalResults);
       }
 
-      // Set pagination info - for expansion views, no pagination needed
-      const totalFromResults = results.total || (results.singles?.total || 0) + (results.sealed?.total || 0);
+      // Set pagination info
+      const totalFromResults = results.total || 0;
+      const currentResultsCount = append ? searchResults.length + finalResults.length : finalResults.length;
       
       setTotalResults(totalFromResults);
-      // For expansion views, no pagination - show all results at once
-      setHasMore(false);
+      setHasMore(currentResultsCount < totalFromResults);
       setCurrentPage(page);
+      
+      console.log('🔍 Pagination debug:', {
+        currentResultsCount,
+        totalFromResults,
+        hasMore: currentResultsCount < totalFromResults,
+        page,
+        append
+      });
 
     } catch (error) {
       console.error('Search error:', error);
@@ -1165,7 +1035,7 @@ const SearchApi = () => {
   // Optimized load more results
   const loadMoreResults = async () => {
     // Prevent multiple simultaneous calls
-    if (isLoadingMoreRef.current || !hasMore || isLoadingMore || currentPage >= 50) {
+    if (isLoadingMoreRef.current || !hasMore || isLoadingMore || currentPage >= 20) {
       return;
     }
     
@@ -1481,8 +1351,8 @@ const SearchApi = () => {
       setSelectedItems(newSelected);
     } else {
       // Normal card click - open preview
-      setSelectedCard(card);
-      setIsCardModalOpen(true);
+    setSelectedCard(card);
+    setIsCardModalOpen(true);
     }
   };
 
@@ -1535,19 +1405,19 @@ const SearchApi = () => {
         calculated_market_value: marketValue
       });
       
-      const cardData = {
-        name: card.name,
-        set_name: card.expansion_name || card.set_name,
-        item_type: 'Card',
+    const cardData = {
+      name: card.name,
+      set_name: card.expansion_name || card.set_name,
+      item_type: 'Card',
         market_value: marketValue,
-        image_url: card.image_url,
-        description: `${card.rarity} card from ${card.expansion_name || card.set_name}`,
-        number: card.number,
-        rarity: card.rarity,
-        source: 'api',
-        api_id: card.id
-      };
-      
+      image_url: card.image_url,
+      description: `${card.rarity} card from ${card.expansion_name || card.set_name}`,
+      number: card.number,
+      rarity: card.rarity,
+      source: 'api',
+      api_id: card.id
+    };
+    
       // Set the selected card and open the modal
       setSelectedCardForCollection(cardData);
       setIsAddToCollectionModalOpen(true);
@@ -1681,10 +1551,17 @@ const SearchApi = () => {
 
   // Load more results removed - we now load all cards at once
 
-  // Format price for display
+  // Format price for display - ALWAYS show exactly 2 decimal places
   const formatPrice = (price) => {
     if (!price) return null;
-    return `$${parseFloat(price).toFixed(2)}`;
+    
+    // Force exactly 2 decimal places for ALL prices
+    const numPrice = parseFloat(price);
+    if (isNaN(numPrice)) return null;
+    
+    
+    // Always format with exactly 2 decimal places
+    return `$${numPrice.toFixed(2)}`;
   };
 
   // Sort cards based on criteria
@@ -2901,8 +2778,8 @@ const SearchApi = () => {
               const cartItem = cartItems.find(item => item.id === card.id);
               
               return (
-                <div
-                  key={`${card.id}-${index}`}
+               <div
+                 key={`${card.id}-${index}`}
                   className={`rounded-lg overflow-hidden border transition-colors cursor-pointer bg-transparent relative ${
                     contextMultiSelectMode
                       ? isSelected
@@ -2930,21 +2807,21 @@ const SearchApi = () => {
                   <div 
                     className="w-full h-full pointer-events-none"
                     style={{ pointerEvents: 'none' }}
-                  >
-                    {/* Card Image - Top Section */}
+               >
+                 {/* Card Image - Top Section */}
                     <div className="aspect-[488/680] bg-transparent rounded-t-lg overflow-hidden p-2 pointer-events-none">
-                      <SafeImage
-                        src={card.image_url}
-                        alt={card.name}
+                  <SafeImage
+                    src={card.image_url}
+                    alt={card.name}
                         className="w-full h-full object-contain pointer-events-none"
-                        onLoad={() => {}}
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                    </div>
+                    onLoad={() => {}}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
 
-                    {/* Card Info - Bottom Section */}
+                {/* Card Info - Bottom Section */}
                     <div className="px-4 pb-3 pt-2 pointer-events-none">
                   {/* Card Info Group - Name, Set, Type */}
                   <div className="space-y-0.5 mb-2 pointer-events-none">
@@ -2983,7 +2860,7 @@ const SearchApi = () => {
                       )}
                       {!card.raw_price && !card.graded_price && card.market_value_cents && (
                         <span className="text-white">
-                          ${(card.market_value_cents / 100).toFixed(2)}
+                          {formatPrice(card.market_value_cents / 100)}
                         </span>
                       )}
                       {!card.raw_price && !card.graded_price && !card.market_value_cents && (
@@ -3003,20 +2880,20 @@ const SearchApi = () => {
                         )}
                       </div>
                     ) : (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAddToCollection(card);
-                        }}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddToCollection(card);
+                      }}
                         className="w-6 h-6 border-2 border-gray-400 rounded-full flex items-center justify-center transition-colors pointer-events-auto hover:border-gray-300 hover:bg-gray-700"
-                        title="Add to Collection"
-                      >
+                      title="Add to Collection"
+                    >
                         <span className="text-gray-400 text-xs hover:text-gray-300">+</span>
-                      </button>
+                    </button>
                     )}
-                    </div>
                   </div>
                 </div>
+              </div>
               </div>
               );
             })}
@@ -3279,7 +3156,7 @@ const SearchApi = () => {
                         {/* Market Value and Menu Button */}
                         <div className="flex items-center justify-between">
                           <div className="font-semibold text-white text-xs">
-                            {item.market_value_cents && `$${(item.market_value_cents / 100).toFixed(2)}`}
+                            {item.market_value_cents && formatPrice(item.market_value_cents / 100)}
                           </div>
                           <div className="relative">
                             {isSelected ? (

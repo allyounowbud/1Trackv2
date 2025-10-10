@@ -39,6 +39,7 @@ class LocalSearchService {
     } = options;
 
     try {
+      console.log('🔍 LocalSearchService searching for:', query);
       // Build the query
       let supabaseQuery = supabase
         .from('pokemon_cards')
@@ -47,9 +48,11 @@ class LocalSearchService {
       // Apply search filters
       if (query && query.trim()) {
         const searchTerm = query.trim();
+        const searchQuery = `name.ilike.%${searchTerm}%,number.ilike.%${searchTerm}%,artist.ilike.%${searchTerm}%`;
+        console.log('🔍 LocalSearchService search query:', searchQuery);
         
         // Search in name, number, and artist fields
-        supabaseQuery = supabaseQuery.or(`name.ilike.%${searchTerm}%,number.ilike.%${searchTerm}%,artist.ilike.%${searchTerm}%`);
+        supabaseQuery = supabaseQuery.or(searchQuery);
       }
 
       // Apply expansion filter
@@ -113,8 +116,12 @@ class LocalSearchService {
       const to = from + pageSize - 1;
       supabaseQuery = supabaseQuery.range(from, to);
 
+      console.log('🔍 LocalSearchService executing query with pagination:', { from, to, pageSize });
+
       // Execute query
       const { data: cards, error, count } = await supabaseQuery;
+
+      console.log('🔍 LocalSearchService query result:', { cards: cards?.length, count, error });
 
       if (error) {
         console.error('Local search error:', error);
@@ -367,6 +374,72 @@ class LocalSearchService {
       }
     } catch (error) {
       console.error('❌ Error getting sealed products by expansion:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Search custom items from the items table
+   * @param {string} query - Search query
+   * @param {Object} options - Query options
+   * @returns {Promise<Object>} Search results
+   */
+  async searchCustomItems(query, options = {}) {
+    const {
+      page = 1,
+      pageSize = 30,
+      sortBy = 'name',
+      sortOrder = 'asc'
+    } = options;
+
+    try {
+      let supabaseQuery = supabase
+        .from('items')
+        .select('*', { count: 'exact' })
+        .eq('source', 'manual'); // Only get manually created items
+
+      // Apply search filters
+      if (query && query.trim()) {
+        const searchTerm = query.trim();
+        const searchQuery = `name.ilike.%${searchTerm}%,set_name.ilike.%${searchTerm}%,item_type.ilike.%${searchTerm}%`;
+        console.log('🔍 LocalSearchService custom items search query:', searchQuery);
+        
+        // Search in name, set_name, and item_type fields
+        supabaseQuery = supabaseQuery.or(searchQuery);
+      }
+
+      // Apply sorting
+      if (sortBy && sortOrder) {
+        supabaseQuery = supabaseQuery.order(sortBy, { 
+          ascending: sortOrder === 'asc',
+          nullsFirst: false 
+        });
+      } else {
+        supabaseQuery = supabaseQuery.order('created_at', { ascending: false });
+      }
+
+      // Apply pagination
+      const from = (page - 1) * pageSize
+      const to = from + pageSize - 1
+      supabaseQuery = supabaseQuery.range(from, to)
+
+      const { data: customItems, error, count } = await supabaseQuery
+
+      if (error) {
+        console.error('❌ Error searching custom items:', error)
+        throw error
+      }
+
+      return {
+        data: customItems || [],
+        total: count || 0,
+        page,
+        pageSize,
+        totalPages: Math.ceil((count || 0) / pageSize),
+        hasMore: (page * pageSize) < (count || 0)
+      }
+    } catch (error) {
+      console.error('❌ Error searching custom items:', error)
       throw error
     }
   }

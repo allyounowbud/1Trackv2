@@ -78,11 +78,13 @@ class HybridSearchService {
         resistances = null
       } = options // Optimized pagination for fast loading
       
-      // Use local search service for both Pokémon cards and sealed products
+      // Use local search service for Pokémon cards, sealed products, and custom items
       let singlesResults = []
       let sealedResults = []
+      let customResults = []
       let totalSingles = 0
       let totalSealed = 0
+      let totalCustom = 0
       
       try {
         // Search Pokémon cards
@@ -118,6 +120,9 @@ class HybridSearchService {
         if (localResults && localResults.data) {
           singlesResults = localResults.data
           totalSingles = localResults.total || 0
+          console.log('🔍 HybridSearchService singles results:', singlesResults.length, 'total:', totalSingles);
+        } else {
+          console.log('🔍 HybridSearchService no singles results');
         }
       } catch (localError) {
         // Silent fail
@@ -142,13 +147,33 @@ class HybridSearchService {
         // Silent fail
       }
       
+      try {
+        // Search custom items if we have a query
+        if (query && query.trim()) {
+          const customSearchResults = await localSearchService.searchCustomItems(query, {
+            page,
+            pageSize: Math.max(1, Math.floor(pageSize / 3)), // Split page size between singles, sealed, and custom
+            sortBy: 'name',
+            sortOrder: 'asc'
+          })
+          
+          if (customSearchResults && customSearchResults.data) {
+            customResults = customSearchResults.data
+            totalCustom = customSearchResults.total || 0
+          }
+        }
+      } catch (customError) {
+        // Silent fail
+      }
+      
       // Return combined results if we found anything
-      if (singlesResults.length > 0 || sealedResults.length > 0) {
-        const totalResults = totalSingles + totalSealed
+      if (singlesResults.length > 0 || sealedResults.length > 0 || customResults.length > 0) {
+        const totalResults = totalSingles + totalSealed + totalCustom
         
         return {
           singles: singlesResults,
           sealed: sealedResults,
+          custom: customResults,
           total: totalResults,
           page: page,
           pageSize: pageSize,
