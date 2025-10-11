@@ -26,12 +26,74 @@ const CartBottomMenu = ({
   const [activePriceField, setActivePriceField] = useState({});
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [expandedCardId, setExpandedCardId] = useState(null);
+  const [itemCardTypes, setItemCardTypes] = useState({});
+  const [selectedGrade, setSelectedGrade] = useState(10);
+
+  // Prevent background scrolling only when menu is expanded
+  useEffect(() => {
+    if (isOpen && isExpanded) {
+      // Lock body scroll only when expanded
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.top = '0';
+      document.body.classList.add('modal-open');
+    } else {
+      // Restore body scroll when collapsed or closed
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
+      document.body.classList.remove('modal-open');
+    }
+
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
+      document.body.classList.remove('modal-open');
+    };
+  }, [isOpen, isExpanded]);
 
   // Retailer data (same as AddToCollectionModal)
   const retailers = [
     'Amazon', 'eBay', 'Target', 'Walmart', 'Best Buy', 'GameStop',
     'TCGPlayer', 'Card Kingdom', 'CoolStuffInc', 'Miniature Market',
     'Local Game Store', 'Facebook Marketplace', 'Craigslist', 'Other'
+  ];
+
+  // Card type options - matching the grading companies we track
+  const cardTypes = [
+    { 
+      value: 'raw', 
+      label: 'Ungraded', 
+      priceKey: 'raw_price',
+      logo: '📄'
+    },
+    { 
+      value: 'psa', 
+      label: 'PSA', 
+      priceKey: 'graded_price',
+      logo: 'PSA',
+      color: 'bg-blue-600'
+    },
+    { 
+      value: 'bgs', 
+      label: 'Beckett', 
+      priceKey: 'graded_price',
+      logo: 'BGS',
+      color: 'bg-emerald-600'
+    },
+    { 
+      value: 'cgc', 
+      label: 'CGC', 
+      priceKey: 'graded_price',
+      logo: 'CGC',
+      color: 'bg-red-600'
+    }
   ];
 
   const filteredRetailers = retailers.filter(retailer =>
@@ -69,6 +131,36 @@ const CartBottomMenu = ({
       setIsReady(false);
     }
   }, [isOpen]);
+
+  // Initialize itemPrices with market values when cart items change
+  useEffect(() => {
+    const newItemPrices = {};
+    cartItems.forEach(item => {
+      // Only set if not already in itemPrices (preserve user edits)
+      if (itemPrices[item.id] === undefined) {
+        newItemPrices[item.id] = item.marketValue;
+      }
+    });
+    
+    // Update itemPrices if there are new items to initialize
+    if (Object.keys(newItemPrices).length > 0) {
+      setItemPrices(prev => ({
+        ...prev,
+        ...newItemPrices
+      }));
+    }
+  }, [cartItems]);
+
+  // Initialize selected grade when expanding card
+  useEffect(() => {
+    if (expandedCardId) {
+      const expandedItem = cartItems.find(item => item.id === expandedCardId);
+      if (expandedItem) {
+        const currentGrade = getCurrentGrade(expandedItem);
+        setSelectedGrade(currentGrade || 10);
+      }
+    }
+  }, [expandedCardId]);
 
   // Handle escape key
   useEffect(() => {
@@ -129,10 +221,14 @@ const CartBottomMenu = ({
 
   // Handle price updates
   const handlePriceChange = (itemId, price) => {
+    const numericPrice = parseFloat(price);
+    // Only update if it's a valid number or empty string
+    if (!isNaN(numericPrice) || price === '') {
     setItemPrices(prev => ({
       ...prev,
-      [itemId]: parseFloat(price) || 0
+        [itemId]: numericPrice || 0
     }));
+    }
   };
 
   // Handle price field focus
@@ -143,10 +239,66 @@ const CartBottomMenu = ({
     }));
   };
 
+  // Handle card type selection
+  const handleCardTypeSelect = (itemId, cardType) => {
+    // If selecting a graded company, keep the current grade
+    // If selecting raw, reset grade to null
+    const newCardType = cardType === 'raw' ? 'raw' : `${cardType}_${selectedGrade}`;
+    
+    setItemCardTypes(prev => ({
+      ...prev,
+      [itemId]: newCardType
+    }));
+    
+    // Don't collapse card immediately - let user adjust grade if needed
+    if (cardType === 'raw') {
+      setExpandedCardId(null);
+    }
+  };
+
+  // Get current card type for an item
+  const getCurrentCardType = (item) => {
+    return itemCardTypes[item.id] || 'raw';
+  };
+
+  // Get current company from card type
+  const getCurrentCompany = (item) => {
+    const cardType = getCurrentCardType(item);
+    if (cardType === 'raw') return 'raw';
+    return cardType.split('_')[0];
+  };
+
+  // Get current grade from card type
+  const getCurrentGrade = (item) => {
+    const cardType = getCurrentCardType(item);
+    if (cardType === 'raw') return null;
+    const parts = cardType.split('_');
+    return parts.length > 1 ? parseInt(parts[1]) : 10;
+  };
+
+  // Get market value based on card type and grade
+  const getMarketValueForType = (item, cardType, grade = null) => {
+    if (cardType === 'raw') {
+      return item.raw_price ? parseFloat(item.raw_price) : item.marketValue;
+    } else {
+      // For graded cards, check if graded_price exists
+      return item.graded_price ? parseFloat(item.graded_price) : (item.raw_price ? parseFloat(item.raw_price) : item.marketValue);
+    }
+  };
+
+  // Check if using raw price for display
+  const isUsingRawPrice = (item, cardType) => {
+    if (cardType === 'raw') return false; // Raw is expected
+    // If it's a graded type but no graded_price exists, we're using raw
+    return !item.graded_price && item.raw_price;
+  };
+
   // Calculate total price for an item
   const calculateItemTotal = (item) => {
     const customPrice = itemPrices[item.id];
-    const price = customPrice !== undefined ? customPrice : item.marketValue;
+    const cardType = getCurrentCardType(item);
+    const marketValue = getMarketValueForType(item, cardType);
+    const price = customPrice !== undefined ? customPrice : marketValue;
     return price * item.quantity;
   };
 
@@ -156,7 +308,11 @@ const CartBottomMenu = ({
     const [currentDate, setCurrentDate] = useState(selectedDate);
     
     const formatDate = (date) => {
-      return date.toISOString().split('T')[0];
+      // Use local date formatting to avoid timezone issues
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     };
     
     const getDaysInMonth = (date) => {
@@ -253,7 +409,7 @@ const CartBottomMenu = ({
               className={`
                 aspect-square flex items-center justify-center text-xs rounded-lg transition-colors
                 ${date ? 'hover:bg-gray-800 cursor-pointer' : 'cursor-default'}
-                ${isToday(date) ? 'bg-indigo-600 text-white' : ''}
+                ${isToday(date) ? 'text-indigo-400' : ''}
                 ${isSelected(date) ? 'bg-indigo-500 text-white' : ''}
                 ${date && !isToday(date) && !isSelected(date) ? 'text-gray-300' : ''}
               `}
@@ -387,6 +543,28 @@ const CartBottomMenu = ({
           opacity: 1;
           z-index: 1;
         }
+        
+        /* Custom slider styling */
+        .slider::-webkit-slider-thumb {
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #10b981;
+          cursor: pointer;
+          border: 2px solid #ffffff;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .slider::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #10b981;
+          cursor: pointer;
+          border: 2px solid #ffffff;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
       `}</style>
       
       {/* Backdrop - Only when expanded */}
@@ -397,13 +575,15 @@ const CartBottomMenu = ({
         />
       )}
       
+
       {/* Main Container - Always full height, moves up/down */}
       <div 
         ref={menuRef}
-        className="fixed left-0 right-0 z-50 bg-gray-950 border-t border-gray-800"
+        className="fixed left-0 right-0 z-50 bg-gray-950 cart-menu rounded-t-xl"
+        data-menu="true"
         style={{ 
           height: '85vh',
-          bottom: isExpanded ? '0px' : 'calc(-85vh + 120px)',
+          bottom: isExpanded ? '0px' : 'calc(-85vh + 105px)',
           transition: 'bottom 0.3s ease-out',
           overflow: 'visible',
           minHeight: '85vh'
@@ -413,14 +593,14 @@ const CartBottomMenu = ({
         <div className="flex flex-col h-full overflow-visible">
           {/* Header Section - Changes based on expanded state */}
           <div 
-            className="flex flex-col px-6 py-3 border-b border-gray-700/50 flex-shrink-0 cursor-pointer hover:bg-gray-800/30 transition-colors active:bg-gray-800/30 bg-gray-950"
+            className={`flex flex-col px-6 py-3 flex-shrink-0 cursor-pointer hover:bg-gray-800/30 transition-colors active:bg-gray-800/30 bg-gray-950 rounded-t-xl border-t border-gray-700/30 ${isExpanded ? 'border-b border-gray-700/50' : ''}`}
             onClick={handleToggleExpanded}
           >
             {/* Drag Handle - Always visible and centered */}
             <div className="flex justify-center mb-2">
               <div className="w-8 h-1 rounded-full bg-gray-600 transition-colors group-hover:bg-gray-500"></div>
-            </div>
-            
+        </div>
+
             {isExpanded ? (
               /* Expanded Header */
               <>
@@ -437,12 +617,12 @@ const CartBottomMenu = ({
                     <span className="text-xs font-medium text-gray-300">Value:</span>
                     <span className="text-xs font-medium text-white">${totalValue.toFixed(2)}</span>
                     <span className="text-xs text-gray-400">({cartItems.length} items)</span>
-                  </div>
+              </div>
                   <div className="flex items-center gap-1">
                     <span className="text-xs text-gray-400">Tap to expand</span>
                     <ChevronUp className="w-4 h-4 text-gray-400" />
-                  </div>
-                </div>
+            </div>
+          </div>
                 
                 {/* Image previews - Main content area */}
                 <div className="flex items-center gap-3 overflow-x-auto">
@@ -455,9 +635,9 @@ const CartBottomMenu = ({
                         onRemoveItem(item.id);
                       }}
                     >
-                      <img 
-                        src={item.imageUrl} 
-                        alt={item.name}
+                    <img 
+                      src={item.imageUrl} 
+                      alt={item.name}
                         className="w-10 h-12 object-contain rounded transition-opacity group-hover:opacity-50"
                         style={{ imageRendering: 'crisp-edges' }}
                       />
@@ -467,14 +647,14 @@ const CartBottomMenu = ({
                           <X className="w-4 h-4 text-white" />
                         </div>
                       </div>
-                    </div>
-                  ))}
-                  {cartItems.length > 8 && (
+                  </div>
+                ))}
+              {cartItems.length > 8 && (
                     <div className="w-10 h-12 bg-gray-700/50 rounded flex items-center justify-center text-xs text-gray-300 flex-shrink-0">
-                      +{cartItems.length - 8}
-                    </div>
-                  )}
+                  +{cartItems.length - 8}
                 </div>
+              )}
+            </div>
               </>
             )}
           </div>
@@ -489,14 +669,19 @@ const CartBottomMenu = ({
               <div className="flex gap-4 relative">
                 {/* Order Date - 40% */}
                 <div className="w-[40%]">
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Order Date</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Order Date</label>
                   <div className="relative">
-                    <input
+                <input
                       type="text"
-                      value={new Date(orderDate).toLocaleDateString()}
+                      value={(() => {
+                        // Parse the date string safely to avoid timezone issues
+                        const [year, month, day] = orderDate.split('-').map(Number);
+                        const date = new Date(year, month - 1, day);
+                        return date.toLocaleDateString();
+                      })()}
                       readOnly
                       onClick={() => setShowCustomCalendar(!showCustomCalendar)}
-                      className={`w-full px-4 py-3 border rounded-lg text-white text-sm focus:outline-none transition-colors cursor-pointer ${
+                      className={`w-full px-4 py-3 border rounded-lg text-gray-400 text-sm focus:outline-none transition-colors cursor-pointer ${
                         showCustomCalendar 
                           ? 'border-indigo-400/50' 
                           : 'border-gray-700 focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50'
@@ -505,19 +690,19 @@ const CartBottomMenu = ({
                     />
                     <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                   </div>
-                </div>
-                
+              </div>
+              
                 {/* Location - 60% */}
                 <div className="w-[60%]">
-                  <label className="block text-sm font-medium text-white mb-2">Location</label>
-                  <div className="relative">
-                    <input
-                      type="text"
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Location</label>
+                <div className="relative">
+                  <input
+                    type="text"
                       placeholder={purchaseLocation || "Purchase location..."}
-                      value={retailerSearch}
-                      onChange={(e) => setRetailerSearch(e.target.value)}
-                      onFocus={() => setIsRetailerFocused(true)}
-                      onBlur={() => setTimeout(() => setIsRetailerFocused(false), 150)}
+                    value={retailerSearch}
+                    onChange={(e) => setRetailerSearch(e.target.value)}
+                    onFocus={() => setIsRetailerFocused(true)}
+                    onBlur={() => setTimeout(() => setIsRetailerFocused(false), 150)}
                       className="w-full px-4 py-3 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
                       style={{ backgroundColor: '#111827' }}
                     />
@@ -528,22 +713,22 @@ const CartBottomMenu = ({
                     >
                       <ChevronDownIcon className={`w-4 h-4 transition-transform ${isRetailerFocused ? 'rotate-180' : ''}`} />
                     </button>
-                    
-                    {/* Retailer Dropdown */}
+                  
+                  {/* Retailer Dropdown */}
                     {isRetailerFocused && (
-                      <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-gray-950/95 backdrop-blur-sm border border-indigo-400/50 rounded-lg shadow-lg max-h-40 overflow-y-auto ring-0.5 ring-indigo-400/50">
-                        {filteredRetailers.map((retailer, index) => (
-                          <button
-                            key={index}
-                            onClick={() => handleRetailerSelect(retailer)}
-                            className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors first:rounded-t-lg last:rounded-b-lg"
-                          >
-                            {retailer}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                      <div className="absolute top-full left-0 right-0 z-20 mt-1 border border-indigo-400/50 rounded-lg shadow-lg max-h-40 overflow-y-auto ring-0.5 ring-indigo-400/50" style={{ backgroundColor: '#111827' }}>
+                      {filteredRetailers.map((retailer, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleRetailerSelect(retailer)}
+                          className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors first:rounded-t-lg last:rounded-b-lg"
+                        >
+                          {retailer}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 </div>
                 
                 {/* Calendar positioned relative to the entire row */}
@@ -555,6 +740,7 @@ const CartBottomMenu = ({
               {cartItems.map((item) => {
                 return (
                   <div key={item.id} className="relative rounded-lg border border-gray-700" style={{ backgroundColor: '#111827' }}>
+                    
                     {/* Main item container */}
                     <div className="rounded-lg p-3">
                       {/* Item Info Row */}
@@ -567,26 +753,61 @@ const CartBottomMenu = ({
                             {item.set}
                           </div>
                           <div className="text-xs text-indigo-400">
-                            ${item.marketValue.toFixed(2)} each
+                            {(() => {
+                              const company = getCurrentCompany(item);
+                              const grade = getCurrentGrade(item);
+                              const marketValue = getMarketValueForType(item, company, grade);
+                              const usingRaw = isUsingRawPrice(item, company);
+                              
+                              // Create card type display
+                              let cardTypeDisplay = '';
+                              if (company === 'raw') {
+                                cardTypeDisplay = 'Raw';
+                              } else {
+                                const companyLabel = cardTypes.find(ct => ct.value === company)?.label || company;
+                                cardTypeDisplay = `${companyLabel} ${grade}`;
+                              }
+                              
+                              const priceText = `$${marketValue.toFixed(2)}`;
+                              const rawIndicator = usingRaw ? ' (raw)' : '';
+                              
+                              return `${cardTypeDisplay} • ${priceText}${rawIndicator}`;
+                            })()}
                           </div>
                         </div>
                         <div 
                           className="relative group cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onRemoveItem(item.id);
+                            if (expandedCardId === item.id) {
+                              setExpandedCardId(null);
+                            } else {
+                              setExpandedCardId(item.id);
+                            }
                           }}
                         >
+                          {/* Delete button above image */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRemoveItem(item.id);
+                            }}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors z-10"
+                          >
+                            <X className="w-3 h-3 text-white" />
+                          </button>
                           <img 
                             src={item.imageUrl} 
                             alt={item.name}
                             className="w-12 h-16 object-contain rounded-lg flex-shrink-0 p-1 transition-opacity group-hover:opacity-50"
                             style={{ backgroundColor: '#111827' }}
                           />
-                          {/* Hover overlay with delete button */}
+                          {/* Hover overlay with expand/collapse indicator */}
                           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
-                              <X className="w-4 h-4 text-white" />
+                            <div className="w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center">
+                              <span className="text-white text-xs font-medium">
+                                {expandedCardId === item.id ? '▼' : '▶'}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -600,10 +821,25 @@ const CartBottomMenu = ({
                           <input
                             type="number"
                             min="1"
-                            value={item.quantity}
-                            onChange={(e) => onUpdateQuantity(item.id, parseInt(e.target.value) || 1)}
+                            value={item.quantity === '' ? '' : item.quantity}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Allow empty value for clearing with backspace
+                              if (value === '') {
+                                onUpdateQuantity(item.id, '');
+                              } else {
+                                const numValue = parseInt(value);
+                                onUpdateQuantity(item.id, numValue || 1);
+                              }
+                            }}
+                            onBlur={(e) => {
+                              // Default to 1 if empty when user leaves the field
+                              if (e.target.value === '') {
+                                onUpdateQuantity(item.id, 1);
+                              }
+                            }}
                             className="w-full px-2 py-1 border border-gray-700 rounded text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
-                          style={{ backgroundColor: '#111827' }}
+                            style={{ backgroundColor: '#111827' }}
                           />
                         </div>
                         
@@ -615,7 +851,7 @@ const CartBottomMenu = ({
                           <input
                             type="number"
                             step="0.01"
-                            value={itemPrices[item.id] !== undefined ? itemPrices[item.id] : ''}
+                            value={itemPrices[item.id] !== undefined ? itemPrices[item.id] : item.marketValue}
                             onChange={(e) => handlePriceChange(item.id, e.target.value)}
                             onFocus={() => handlePriceFocus(item.id, 'perItem')}
                             className={`w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors border-gray-700 ${
@@ -635,10 +871,10 @@ const CartBottomMenu = ({
                           <input
                             type="number"
                             step="0.01"
-                            value={activePriceField[item.id] === 'total' ? calculateItemTotal(item) : calculateItemTotal(item)}
+                            value={calculateItemTotal(item)}
                             onChange={(e) => {
                               const totalPrice = parseFloat(e.target.value) || 0;
-                              const newPricePerItem = totalPrice / item.quantity;
+                              const newPricePerItem = totalPrice / (item.quantity || 1);
                               handlePriceChange(item.id, newPricePerItem);
                             }}
                             onFocus={() => handlePriceFocus(item.id, 'total')}
@@ -651,53 +887,140 @@ const CartBottomMenu = ({
                           />
                         </div>
                       </div>
+                      
+                      {/* Expandable Card Type Options */}
+                      {expandedCardId === item.id && (
+                        <>
+                          {/* Grading Company Buttons */}
+                          <div className="grid grid-cols-4 gap-2 mt-3">
+                            {cardTypes.map((cardType) => {
+                              const currentCompany = getCurrentCompany(item);
+                              const isSelected = currentCompany === cardType.value;
+                              
+                              return (
+                                <button
+                                  key={cardType.value}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleCardTypeSelect(item.id, cardType.value);
+                                    if (cardType.value !== 'raw') {
+                                      setSelectedGrade(10); // Reset to 10 for new graded selection
+                                    }
+                                  }}
+                                  className={`aspect-[4/3] flex items-center justify-center rounded-lg border transition-all p-2 ${
+                                    isSelected
+                                      ? 'border-emerald-400'
+                                      : 'border-gray-700 hover:border-gray-600'
+                                  }`}
+                                  style={{ backgroundColor: '#111827' }}
+                                >
+                                  {cardType.value === 'raw' ? (
+                                    <span className="text-lg">{cardType.logo}</span>
+                                  ) : cardType.value === 'psa' ? (
+                                    <img 
+                                      src="https://www.pngkey.com/png/full/231-2310791_psa-grading-standards-professional-sports-authenticator.png"
+                                      alt="PSA Logo"
+                                      className="w-full h-full object-contain rounded-lg"
+                                    />
+                                  ) : cardType.value === 'bgs' ? (
+                                    <img 
+                                      src="https://www.cherrycollectables.com.au/cdn/shop/products/HH02578_Cherry_BGS_Logo.png?v=1654747644&width=500"
+                                      alt="Beckett Logo"
+                                      className="w-full h-full object-contain rounded-lg"
+                                    />
+                                  ) : cardType.value === 'cgc' ? (
+                                    <img 
+                                      src="https://www.cgccomics.com/Resources/images/grading/about-cgc/cgc-cards.png"
+                                      alt="CGC Logo"
+                                      className="w-full h-full object-contain rounded-lg"
+                                    />
+                                  ) : (
+                                    <div className={`w-8 h-8 rounded-full ${cardType.color} flex items-center justify-center`}>
+                                      <span className="text-white text-xs font-bold">{cardType.logo}</span>
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Grade Buttons - Only show for graded companies */}
+                          {getCurrentCompany(item) !== 'raw' && (
+                            <div className="mt-3">
+                              <div className="grid grid-cols-10 gap-1">
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((grade) => (
+                                  <button
+                                    key={grade}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setSelectedGrade(grade);
+                                      const company = getCurrentCompany(item);
+                                      handleCardTypeSelect(item.id, company);
+                                    }}
+                                    className={`aspect-square flex items-center justify-center rounded border transition-all text-xs font-medium ${
+                                      selectedGrade === grade
+                                        ? 'border-emerald-400 text-emerald-400'
+                                        : 'border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                                    }`}
+                                    style={{ backgroundColor: '#111827' }}
+                                  >
+                                    {grade}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
-            </div>
+          </div>
 
             {/* Footer - Bottom bar color */}
             <div className="flex-shrink-0 border-t border-gray-800/50 bg-gray-950/95 backdrop-blur-xl">
-              {/* Action Buttons */}
-              <div className="p-4 pt-2">
-                {/* Total Summary */}
-                <div className="px-2 pb-3">
-                  <div className="text-left">
-                    <span className="text-xs text-gray-400">
-                      Total: <span className="font-semibold text-white">${totalValue.toFixed(2)}</span> 
-                      <span className="text-gray-400"> ({totalItems} items)</span>
-                    </span>
-                  </div>
-                </div>
-                {isMultiSelectMode ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={onCancel}
-                      className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={onDone}
-                      className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Create Order
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleCreateOrder}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-6 rounded-lg transition-colors text-base"
-                  >
-                    Create Order ({cartItems.length} items)
-                  </button>
-                )}
+          {/* Action Buttons */}
+          <div className="p-4 pt-2">
+            {/* Total Summary */}
+            <div className="px-2 pb-3">
+              <div className="text-left">
+                <span className="text-xs text-gray-400">
+                  Total: <span className="font-semibold text-white">${totalValue.toFixed(2)}</span> 
+                  <span className="text-gray-400"> ({totalItems} items)</span>
+                </span>
               </div>
             </div>
+            {isMultiSelectMode ? (
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={onCancel}
+                  className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={onDone}
+                  className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create Order
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleCreateOrder}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-6 rounded-lg transition-colors text-base"
+              >
+                Create Order ({cartItems.length} items)
+              </button>
+            )}
+              </div>
           </div>
         </div>
+      </div>
       </div>
     </>
   );

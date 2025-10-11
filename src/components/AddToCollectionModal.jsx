@@ -34,21 +34,31 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const [isRetailerFocused, setIsRetailerFocused] = useState(false);
   const [activePriceField, setActivePriceField] = useState('perItem'); // 'perItem' or 'total'
   const [isClosing, setIsClosing] = useState(false);
-  const [dragData, setDragData] = useState({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
   const modalRef = useRef(null);
 
   // Prevent body scroll when modal is open and update modal context
   useEffect(() => {
     if (isOpen) {
+      // Strong scroll locking like CartBottomMenu
+      document.body.classList.add('modal-open');
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
       document.body.style.overflow = 'hidden';
       openModal();
     } else {
+      // Remove scroll locking
+      document.body.classList.remove('modal-open');
+      document.body.style.position = '';
+      document.body.style.width = '';
       document.body.style.overflow = 'unset';
       closeModal();
     }
 
     // Cleanup on unmount
     return () => {
+      document.body.classList.remove('modal-open');
+      document.body.style.position = '';
+      document.body.style.width = '';
       document.body.style.overflow = 'unset';
       closeModal();
     };
@@ -134,60 +144,10 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       setTimeout(() => {
         onClose();
         setIsClosing(false);
-        setDragData({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
       }, 300);
     }
   };
 
-  // Touch gesture handlers
-  const handleTouchStart = (e) => {
-    const touch = e.touches[0];
-    setDragData({
-      startY: touch.clientY,
-      currentY: touch.clientY,
-      isDragging: true,
-      deltaY: 0
-    });
-  };
-
-  const handleTouchMove = (e) => {
-    if (!dragData.isDragging) return;
-    
-    const touch = e.touches[0];
-    const deltaY = touch.clientY - dragData.startY;
-    
-    // Only allow downward swipe (positive deltaY)
-    if (deltaY > 0) {
-      setDragData({
-        ...dragData,
-        currentY: touch.clientY,
-        deltaY: deltaY
-      });
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (!dragData.isDragging) return;
-    
-    const deltaY = dragData.deltaY || 0;
-    
-    // If swiped down more than 100px, close the modal
-    if (deltaY > 100) {
-      handleClose();
-    } else {
-      // Snap back to original position
-      setDragData({
-        ...dragData,
-        isDragging: false,
-        deltaY: 0
-      });
-    }
-  };
-
-  const getTransform = () => {
-    if (!dragData.isDragging) return 'translateY(0)';
-    return `translateY(${Math.max(0, dragData.deltaY)}px)`;
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -611,7 +571,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   return (
     <>
       {/* Dark theme date picker styles */}
-      <style jsx>{`
+      <style>{`
         input[type="date"]::-webkit-calendar-picker-indicator {
           cursor: pointer;
           filter: invert(0.5) sepia(1) saturate(5) hue-rotate(200deg);
@@ -635,24 +595,23 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
           color: white;
         }
       `}</style>
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]">
+      <div 
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]"
+        onClick={handleClose}
+      >
       <div 
         ref={modalRef}
         className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[95vh] overflow-y-auto"
         style={{
           animation: isClosing ? 'slideDown 0.3s ease-out' : 'slideUp 0.3s ease-out',
-          transform: getTransform(),
-          transition: dragData.isDragging ? 'none' : 'transform 0.3s ease-out'
+          pointerEvents: 'auto',
+          touchAction: 'auto'
         }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-2">
-          <div className={`w-10 h-1 rounded-full transition-colors ${
-            dragData.isDragging ? 'bg-gray-500' : 'bg-gray-600'
-          }`}></div>
+          <div className="w-10 h-1 rounded-full bg-gray-600"></div>
         </div>
 
         {/* Header */}
@@ -894,6 +853,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
           <div className="p-6 border-t border-gray-700 bg-gray-900">
             <div className="grid grid-cols-2 gap-3">
               <button
+                type="button"
                 onClick={handleClose}
                 disabled={isSubmitting}
                 className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

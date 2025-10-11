@@ -1120,7 +1120,16 @@ const SearchApi = () => {
   };
 
   const updateCartQuantity = (cardId, quantity) => {
-    if (quantity <= 0) {
+    // Handle empty string (when user clears the field)
+    if (quantity === '') {
+      setCartItems(prev => 
+        prev.map(item => 
+          item.id === cardId 
+            ? { ...item, quantity: '' }
+            : item
+        )
+      );
+    } else if (quantity <= 0) {
       removeFromCart(cardId);
     } else {
       setCartItems(prev => 
