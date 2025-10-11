@@ -1598,30 +1598,747 @@ const Collection = () => {
       )}
 
       {/* Backdrop blur overlay when expanded actions menu is active */}
-      {isBulkSelectionMode && showBulkActionsMenu && (
+      {isBulkSelectionMode && (showBulkActionsMenu || showBulkOrderBook) && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" />
       )}
 
       {/* Bulk Selection Preview Bar - Fixed at bottom with expandable actions */}
-      {isBulkSelectionMode && !showBulkOrderBook && !showOverridePriceModal && selectedItems.size > 0 && (
+      {isBulkSelectionMode && !showOverridePriceModal && selectedItems.size > 0 && (
         <div className={`fixed bottom-0 left-0 right-0 z-50 bg-gray-950 border-t border-gray-700/30 transition-all duration-300 ease-out ${
-          showBulkActionsMenu ? 'rounded-t-3xl' : ''
+          (showBulkActionsMenu || showBulkOrderBook) ? 'rounded-t-3xl' : ''
         }`}>
           <div className="flex flex-col">
             {/* Expanded Actions - Slides down from above */}
             <div className={`overflow-hidden transition-all duration-300 ease-out ${
-              showBulkActionsMenu ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+              (showBulkActionsMenu || showBulkOrderBook) ? (showBulkOrderBook ? 'max-h-[75vh]' : 'max-h-96') + ' opacity-100' : 'max-h-0 opacity-0'
             }`}>
-              <div className="border-t border-gray-600/30 border-b border-gray-700/50 bg-gray-900/50 backdrop-blur-sm rounded-t-2xl">
-                <div className="px-6 py-4 space-y-3">
-                  {/* View Order Book */}
-                  <button 
-                    className="w-full flex items-center justify-between p-4 bg-gray-800/30 border border-gray-600/50 rounded-xl hover:bg-gray-700/50 transition-colors"
-                    onClick={() => {
-                      setShowBulkOrderBook(true);
-                      setShowBulkActionsMenu(false);
-                    }}
-                  >
+              <div className={`border-t border-gray-600/30 border-b border-gray-700/50 bg-gray-900/50 backdrop-blur-sm rounded-t-2xl ${showBulkOrderBook ? 'border-t-2 border-t-gray-600' : ''}`}>
+                {showBulkOrderBook ? (
+                  /* Order Book Content */
+                  <div className="px-6 py-4">
+                    {/* Order Book Header */}
+                    <div className="mb-4">
+                      <h2 className="text-lg font-semibold text-white">
+                        {editingOrderGroupId ? 
+                          (inlineEditData[editingOrderGroupId]?.isMarkingAsSold ? 'Marking Order as Sold' : 'Editing Order') : 
+                          'Viewing On Hand Orders'
+                        }
+                      </h2>
+                      <p className="text-sm text-gray-400 m-0">
+                        {editingOrderGroupId ? 
+                          (inlineEditData[editingOrderGroupId]?.isMarkingAsSold ? 'You are marking the following items as sold.' : 'You are about to change details in the order book.') : 
+                          'Edit, mark as sold or delete orders all together.'
+                        }
+                      </p>
+                    </div>
+
+                    {/* Order Book Content */}
+                    <div className="max-h-[70vh] overflow-y-auto pb-12">
+                      {(() => {
+                        // Get all orders for selected items
+                        const selectedItemsOrders = orders.filter(order => 
+                          selectedItems.has(order.item_id)
+                        );
+                        
+                        // Group orders by item
+                        const groupedOrders = {};
+                        selectedItemsOrders.forEach(order => {
+                          if (!groupedOrders[order.item_id]) {
+                            const item = collectionData.items?.find(i => i.id === order.item_id);
+                            groupedOrders[order.item_id] = {
+                              itemId: order.item_id,
+                              itemName: order.item_name || item?.name || 'Unknown Item',
+                              itemImage: item?.image,
+                              itemType: item?.status || 'Unknown',
+                              orders: []
+                            };
+                          }
+                          groupedOrders[order.item_id].orders.push(order);
+                        });
+
+                        return Object.values(groupedOrders).map((group) => (
+                          <div key={group.itemId} className="mb-4">
+                            {group.orders.map((order, orderIndex) => {
+                              const orderGroupId = `${group.itemId}-${orderIndex}`;
+                              const isEditing = editingOrderGroupId === orderGroupId;
+                              const editData = inlineEditData[orderGroupId] || {};
+
+                              return (
+                                <div
+                                  key={order.id}
+                                  className={`bg-gray-800/20 border border-gray-700/30 rounded-lg p-4 hover:bg-gray-800/30 transition-all duration-300 mb-3 ${editingOrderGroupId && editingOrderGroupId !== orderGroupId ? 'blur-sm opacity-50 pointer-events-none' : ''}`}
+                                >
+                                  {/* Full Width Header */}
+                                  <div className="mb-4">
+                                    {/* Item Name and Actions */}
+                                    <div className="flex items-center justify-between mb-0">
+                                      <h3 className="text-sm font-semibold text-white truncate">
+                                        {group.itemName}
+                                      </h3>
+                                      <div className="flex gap-2">
+                                        {isEditing ? (
+                                          <>
+                                            <button
+                                              onClick={async () => {
+                                                try {
+                                                  if (editData.isMarkingAsSold) {
+                                                    // Mark as sold functionality
+                                                    const sellData = {
+                                                      sellDate: editData.sell_date,
+                                                      sellPrice: (editData.sell_price_cents / 100).toFixed(2),
+                                                      quantity: editData.sell_quantity,
+                                                      location: editData.sell_location || '',
+                                                      shipping: (editData.sell_fees_cents / 100).toFixed(2),
+                                                      notes: ''
+                                                    };
+
+                                                    await markOrderAsSold(order.id, sellData);
+                                                  } else {
+                                                    // Regular edit functionality
+                                                    const updateData = {
+                                                      buy_date: editData.buy_date || order.buy_date,
+                                                      buy_location: editData.buy_location || order.buy_location,
+                                                      buy_quantity: editData.buy_quantity || order.buy_quantity,
+                                                      buy_price_cents: editData.buy_price_cents !== undefined ? editData.buy_price_cents : order.buy_price_cents
+                                                    };
+
+                                                    await updateOrder(supabase, order.id, updateData);
+                                                  }
+
+                                                  await Promise.all([
+                                                    queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
+                                                    queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary })
+                                                  ]);
+
+                                                  setEditingOrderGroupId(null);
+                                                  setInlineEditData(prev => {
+                                                    const newData = { ...prev };
+                                                    delete newData[orderGroupId];
+                                                    return newData;
+                                                  });
+                                                } catch (error) {
+                                                  console.error('Error updating order:', error);
+                                                }
+                                              }}
+                                              className="w-6 h-6 bg-emerald-600 rounded-full flex items-center justify-center hover:bg-emerald-700 transition-colors"
+                                            >
+                                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                              </svg>
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                setEditingOrderGroupId(null);
+                                                setInlineEditData(prev => {
+                                                  const newData = { ...prev };
+                                                  delete newData[orderGroupId];
+                                                  return newData;
+                                                });
+                                              }}
+                                              className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center hover:bg-gray-700 transition-colors"
+                                            >
+                                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                              </svg>
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <button
+                                              onClick={() => {
+                                                setEditingOrderGroupId(orderGroupId);
+                                                setInlineEditData(prev => ({
+                                                  ...prev,
+                                                  [orderGroupId]: {
+                                                    buy_date: order.buy_date,
+                                                    buy_location: order.buy_location,
+                                                    buy_quantity: order.buy_quantity,
+                                                    buy_price_cents: order.buy_price_cents,
+                                                    total_cost: ((order.buy_price_cents / 100) * order.buy_quantity).toFixed(2)
+                                                  }
+                                                }));
+                                              }}
+                                              className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center hover:bg-gray-700 transition-colors"
+                                            >
+                                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                              </svg>
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                setEditingOrderGroupId(orderGroupId);
+                                                setInlineEditData(prev => ({
+                                                  ...prev,
+                                                  [orderGroupId]: {
+                                                    ...prev[orderGroupId],
+                                                    isMarkingAsSold: true,
+                                                    sell_date: new Date().toISOString().split('T')[0],
+                                                    sell_price_cents: order.buy_price_cents,
+                                                    sell_quantity: order.buy_quantity,
+                                                    sell_location: '',
+                                                    sell_fees_cents: 0,
+                                                    sell_fee_percentage: null
+                                                  }
+                                                }));
+                                              }}
+                                              className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center hover:bg-indigo-700 transition-colors"
+                                            >
+                                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                                              </svg>
+                                            </button>
+                                            <button
+                                              onClick={async () => {
+                                                if (!window.confirm('Delete this order?')) return;
+                                                
+                                                try {
+                                                  const { error } = await supabase.rpc('delete_order_clean', {
+                                                    p_order_id: order.id
+                                                  });
+
+                                                  if (error) throw error;
+
+                                                  await Promise.all([
+                                                    queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
+                                                    queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary })
+                                                  ]);
+                                                } catch (error) {
+                                                  console.error('Error deleting order:', error);
+                                                }
+                                              }}
+                                              className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition-colors"
+                                            >
+                                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                              </svg>
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Item Type */}
+                                    <div className="text-xs text-indigo-400 mb-3">
+                                      {group.itemType}
+                                    </div>
+
+                                    {/* Border separator */}
+                                    <div className="border-b border-gray-600/50 mb-3"></div>
+                                  </div>
+
+                                  {/* Content Area with Image and Order Details */}
+                                  <div className="flex items-start gap-4">
+                                    {/* Item Image */}
+                                    <div className="flex flex-col items-center gap-2">
+                                      {group.itemImage && (
+                                        <img 
+                                          src={group.itemImage} 
+                                          alt={group.itemName}
+                                          className="w-16 h-20 object-contain rounded flex-shrink-0"
+                                        />
+                                      )}
+                                      <div className="w-16 px-2 py-1 bg-indigo-600/20 border border-indigo-500/30 rounded text-xs text-indigo-400 text-center" style={{ fontSize: '10px' }}>
+                                        On Hand
+                                      </div>
+                                    </div>
+
+                                    {/* Order Details */}
+                                    <div className="flex-1 min-w-0">
+                                      {/* Order Details Grid */}
+                                      <div className={isEditing ? "space-y-4" : "space-y-8"}>
+                                        {editData.isMarkingAsSold ? (
+                                          /* Mark as Sold Fields */
+                                          <>
+                                            {/* Top Row: Sell Date, Sell Location */}
+                                            <div className="grid grid-cols-12 gap-3">
+                                              <div className="col-span-6">
+                                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Sell Date</div>
+                                                <input
+                                                  type="date"
+                                                  value={editData.sell_date || new Date().toISOString().split('T')[0]}
+                                                  onChange={(e) => {
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { ...prev[orderGroupId], sell_date: e.target.value }
+                                                    }));
+                                                  }}
+                                                  className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                  style={{ fontSize: '12px' }}
+                                                />
+                                              </div>
+                                              <div className="col-span-6">
+                                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Sell Location</div>
+                                                <div className="relative">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setIsLocationDropdownClicked(prev => !prev);
+                                                      setIsLocationFocused(true);
+                                                    }}
+                                                    className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors text-left flex items-center justify-between"
+                                                    style={{ fontSize: '12px' }}
+                                                  >
+                                                    <div className="flex items-center gap-2 truncate">
+                                                      <span className="truncate">{editData.sell_location || 'Select Marketplace'}</span>
+                                                      {editData.sell_fee_percentage !== undefined && editData.sell_fee_percentage !== null && (
+                                                        <span className="text-gray-400 text-xs flex-shrink-0">
+                                                          ({editData.sell_fee_percentage === 0 ? '0%' : editData.sell_fee_percentage.toFixed(2) + '%'})
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                    <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                  </button>
+                                                  
+                                                  {/* Marketplaces Dropdown */}
+                                                  {(isLocationFocused || isLocationDropdownClicked) && (() => {
+                                                    const marketplaces = [
+                                                      { id: 'ebay', name: 'eBay', fee_percentage: 12.9 },
+                                                      { id: 'tcgplayer', name: 'TCGPlayer', fee_percentage: 10.25 },
+                                                      { id: 'cardkingdom', name: 'Card Kingdom', fee_percentage: 0 },
+                                                      { id: 'starcitygames', name: 'StarCityGames', fee_percentage: 0 },
+                                                      { id: 'facebook', name: 'Facebook Marketplace', fee_percentage: 0 },
+                                                      { id: 'mercari', name: 'Mercari', fee_percentage: 10 },
+                                                      { id: 'whatnot', name: 'Whatnot', fee_percentage: 8 },
+                                                      { id: 'local', name: 'Local Sale', fee_percentage: 0 },
+                                                      { id: 'other', name: 'Other', fee_percentage: 0 }
+                                                    ];
+                                                    
+                                                    return (
+                                                      <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-[10000] max-h-48 overflow-y-auto">
+                                                        {marketplaces.map((marketplace) => (
+                                                          <button
+                                                            key={marketplace.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                              const sellPrice = editData.sell_price_cents !== undefined 
+                                                                ? editData.sell_price_cents / 100 
+                                                                : order.buy_price_cents / 100;
+                                                              const autoFee = marketplace.fee_percentage > 0 
+                                                                ? (sellPrice * marketplace.fee_percentage / 100) 
+                                                                : 0;
+                                                              
+                                                              setInlineEditData(prev => ({
+                                                                ...prev,
+                                                                [orderGroupId]: { 
+                                                                  ...prev[orderGroupId], 
+                                                                  sell_location: marketplace.name,
+                                                                  sell_fees_cents: Math.round(autoFee * 100),
+                                                                  // Store the fee percentage for display
+                                                                  sell_fee_percentage: marketplace.fee_percentage
+                                                                }
+                                                              }));
+                                                              setIsLocationFocused(false);
+                                                              setIsLocationDropdownClicked(false);
+                                                            }}
+                                                            className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors"
+                                                            style={{ fontSize: '12px' }}
+                                                          >
+                                                            {marketplace.name} {marketplace.fee_percentage > 0 && `(${marketplace.fee_percentage}%)`}
+                                                          </button>
+                                                        ))}
+                                                      </div>
+                                                    );
+                                                  })()}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {/* Bottom Row: Sell Quantity, Sell Price, Fees */}
+                                            <div className="grid grid-cols-12 gap-3">
+                                              <div className="col-span-3">
+                                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Qty</div>
+                                                <input
+                                                  type="number"
+                                                  min="1"
+                                                  value={editData.sell_quantity !== undefined ? editData.sell_quantity : order.buy_quantity}
+                                                  onChange={(e) => {
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { ...prev[orderGroupId], sell_quantity: parseInt(e.target.value) || 1 }
+                                                    }));
+                                                  }}
+                                                  className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                  style={{ fontSize: '12px' }}
+                                                />
+                                              </div>
+                                              <div className="col-span-4">
+                                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Sell Price</div>
+                                                <input
+                                                  type="number"
+                                                  step="0.01"
+                                                  min="0"
+                                                  value={editData.sell_price_cents !== undefined ? (editData.sell_price_cents / 100) : (order.buy_price_cents / 100)}
+                                                  onChange={(e) => {
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { ...prev[orderGroupId], sell_price_cents: Math.round(parseFloat(e.target.value || 0) * 100) }
+                                                    }));
+                                                  }}
+                                                  className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                  style={{ fontSize: '12px' }}
+                                                />
+                                              </div>
+                                              <div className="col-span-5">
+                                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Shipping</div>
+                                                <input
+                                                  type="number"
+                                                  step="0.01"
+                                                  min="0"
+                                                  value={editData.sell_fees_cents !== undefined ? (editData.sell_fees_cents / 100) : 0}
+                                                  onChange={(e) => {
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { 
+                                                        ...prev[orderGroupId], 
+                                                        sell_fees_cents: Math.round(parseFloat(e.target.value || 0) * 100),
+                                                        // Clear auto percentage when manually edited
+                                                        sell_fee_percentage: null
+                                                      }
+                                                    }));
+                                                  }}
+                                                  placeholder="0.00"
+                                                  className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                  style={{ fontSize: '12px' }}
+                                                />
+                                              </div>
+                                            </div>
+                                          </>
+                                        ) : (
+                                          /* Regular Edit Fields */
+                                          <>
+                                            {/* Top Row: Order # (non-editing only), Date, and Location */}
+                                            <div className={isEditing ? "grid grid-cols-12 gap-3" : "grid grid-cols-12 gap-6"}>
+                                              {/* Order # - Only show when not editing */}
+                                              {!isEditing && (
+                                                <div className="col-span-3">
+                                                  <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Order #</div>
+                                                  <div className="text-white text-left" style={{ fontSize: '12px' }}>
+                                                    {order.order_number || 'N/A'}
+                                                  </div>
+                                                </div>
+                                              )}
+
+                                              {/* Date */}
+                                              <div className={isEditing ? "col-span-6" : "col-span-4"}>
+                                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Date</div>
+                                                {isEditing ? (
+                                                  <input
+                                                    type="date"
+                                                    value={editData.buy_date || order.buy_date}
+                                                    onChange={(e) => {
+                                                      setInlineEditData(prev => ({
+                                                        ...prev,
+                                                        [orderGroupId]: { ...prev[orderGroupId], buy_date: e.target.value }
+                                                      }));
+                                                    }}
+                                                    className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                    style={{ fontSize: '12px' }}
+                                                  />
+                                                ) : (
+                                                  <div className="text-white" style={{ fontSize: '12px' }}>
+                                                    {new Date(order.buy_date).toLocaleDateString()}
+                                                  </div>
+                                                )}
+                                              </div>
+
+                                              {/* Location */}
+                                              <div className={isEditing ? "col-span-6" : "col-span-5"}>
+                                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Location</div>
+                                                {isEditing ? (
+                                                  <div className="relative">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        setIsLocationDropdownClicked(prev => !prev);
+                                                        setIsLocationFocused(true);
+                                                      }}
+                                                      className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors text-left flex items-center justify-between"
+                                                      style={{ fontSize: '12px' }}
+                                                    >
+                                                      <span className="truncate">{editData.buy_location || order.buy_location || 'Select'}</span>
+                                                      <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                      </svg>
+                                                    </button>
+                                                    
+                                                    {/* Retailers Dropdown */}
+                                                    {(isLocationFocused || isLocationDropdownClicked) && (() => {
+                                                      const retailers = [
+                                                        { id: 1, display_name: 'eBay', location: null },
+                                                        { id: 2, display_name: 'TCGPlayer', location: null },
+                                                        { id: 3, display_name: 'Amazon', location: null },
+                                                        { id: 4, display_name: 'Card Kingdom', location: null },
+                                                        { id: 5, display_name: 'StarCityGames', location: null },
+                                                        { id: 6, display_name: 'Local Card Shop', location: null },
+                                                        { id: 7, display_name: 'Facebook Marketplace', location: null },
+                                                        { id: 8, display_name: 'Mercari', location: null },
+                                                        { id: 9, display_name: 'Whatnot', location: null },
+                                                        { id: 10, display_name: 'Other', location: null }
+                                                      ];
+                                                      
+                                                      const filteredRetailers = isLocationDropdownClicked 
+                                                        ? retailers 
+                                                        : retailers.filter(retailer => 
+                                                            retailer.display_name.toLowerCase().includes((editData.buy_location || order.buy_location || '').toLowerCase())
+                                                          );
+                                                      
+                                                      return filteredRetailers.length > 0 ? (
+                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-[10000] max-h-48 overflow-y-auto">
+                                                          {filteredRetailers.map((retailer) => (
+                                                            <button
+                                                              key={retailer.id}
+                                                              type="button"
+                                                              onClick={() => {
+                                                                setInlineEditData(prev => ({
+                                                                  ...prev,
+                                                                  [orderGroupId]: { ...prev[orderGroupId], buy_location: retailer.display_name }
+                                                                }));
+                                                                setIsLocationFocused(false);
+                                                                setIsLocationDropdownClicked(false);
+                                                              }}
+                                                              className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors"
+                                                              style={{ fontSize: '12px' }}
+                                                            >
+                                                              {retailer.display_name}
+                                                            </button>
+                                                          ))}
+                                                        </div>
+                                                      ) : null;
+                                                    })()}
+                                                  </div>
+                                                ) : (
+                                                  <div className="text-white truncate" style={{ fontSize: '12px' }}>
+                                                    {order.buy_location || 'N/A'}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+
+                                            {/* Bottom Row: Quantity, Price (per item), and Total Cost */}
+                                            <div className={isEditing ? "grid grid-cols-12 gap-3" : "grid grid-cols-12 gap-6"}>
+                                              {/* Quantity */}
+                                              <div className="col-span-3">
+                                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Qty</div>
+                                                {isEditing ? (
+                                                  <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity}
+                                                    onChange={(e) => {
+                                                      const inputValue = e.target.value;
+                                                      
+                                                      // Allow empty string during editing
+                                                      if (inputValue === '') {
+                                                        setInlineEditData(prev => ({
+                                                          ...prev,
+                                                          [orderGroupId]: { 
+                                                            ...prev[orderGroupId], 
+                                                            buy_quantity: '',
+                                                            total_cost: '0.00'
+                                                          }
+                                                        }));
+                                                        return;
+                                                      }
+                                                      
+                                                      const newQty = parseInt(inputValue);
+                                                      if (!isNaN(newQty) && newQty >= 1) {
+                                                        const pricePerItem = editData.buy_price_cents !== undefined 
+                                                          ? editData.buy_price_cents / 100
+                                                          : order.buy_price_cents / 100;
+                                                        setInlineEditData(prev => ({
+                                                          ...prev,
+                                                          [orderGroupId]: { 
+                                                            ...prev[orderGroupId], 
+                                                            buy_quantity: newQty,
+                                                            total_cost: (pricePerItem * newQty).toFixed(2)
+                                                          }
+                                                        }));
+                                                      }
+                                                    }}
+                                                    onBlur={(e) => {
+                                                      // Ensure minimum value of 1 when losing focus
+                                                      const inputValue = e.target.value;
+                                                      if (inputValue === '' || parseInt(inputValue) < 1) {
+                                                        const defaultQty = order.buy_quantity;
+                                                        const pricePerItem = editData.buy_price_cents !== undefined 
+                                                          ? editData.buy_price_cents / 100
+                                                          : order.buy_price_cents / 100;
+                                                        setInlineEditData(prev => ({
+                                                          ...prev,
+                                                          [orderGroupId]: { 
+                                                            ...prev[orderGroupId], 
+                                                            buy_quantity: defaultQty,
+                                                            total_cost: (pricePerItem * defaultQty).toFixed(2)
+                                                          }
+                                                        }));
+                                                      }
+                                                    }}
+                                                    className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                    style={{ fontSize: '12px' }}
+                                                  />
+                                                ) : (
+                                                  <div className="text-white font-medium" style={{ fontSize: '12px' }}>
+                                                    {order.buy_quantity}
+                                                  </div>
+                                                )}
+                                              </div>
+
+                                              {/* Price per item */}
+                                              <div className="col-span-4">
+                                                <div className="text-gray-400 mb-1 whitespace-nowrap" style={{ fontSize: '12px' }}>Price/ea</div>
+                                                {isEditing ? (
+                                                  <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    value={editData.buy_price_cents !== undefined ? (editData.buy_price_cents === '' ? '' : editData.buy_price_cents / 100) : (order.buy_price_cents / 100)}
+                                                    onChange={(e) => {
+                                                      const inputValue = e.target.value;
+                                                      
+                                                      // Allow empty string during editing
+                                                      if (inputValue === '') {
+                                                        setInlineEditData(prev => ({
+                                                          ...prev,
+                                                          [orderGroupId]: { 
+                                                            ...prev[orderGroupId], 
+                                                            buy_price_cents: '',
+                                                            total_cost: ''
+                                                          }
+                                                        }));
+                                                        return;
+                                                      }
+                                                      
+                                                      const newPricePerItem = parseFloat(inputValue);
+                                                      if (!isNaN(newPricePerItem) && newPricePerItem >= 0) {
+                                                        const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
+                                                        const totalCost = newPricePerItem * qty;
+                                                        setInlineEditData(prev => ({
+                                                          ...prev,
+                                                          [orderGroupId]: { 
+                                                            ...prev[orderGroupId], 
+                                                            buy_price_cents: Math.round(newPricePerItem * 100),
+                                                            total_cost: totalCost.toFixed(2)
+                                                          }
+                                                        }));
+                                                      }
+                                                    }}
+                                                    onBlur={(e) => {
+                                                      // Ensure minimum value of 0 when losing focus
+                                                      const inputValue = e.target.value;
+                                                      if (inputValue === '' || parseFloat(inputValue) < 0) {
+                                                        const defaultPrice = order.buy_price_cents / 100;
+                                                        const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
+                                                        const totalCost = defaultPrice * qty;
+                                                        setInlineEditData(prev => ({
+                                                          ...prev,
+                                                          [orderGroupId]: { 
+                                                            ...prev[orderGroupId], 
+                                                            buy_price_cents: Math.round(defaultPrice * 100),
+                                                            total_cost: totalCost.toFixed(2)
+                                                          }
+                                                        }));
+                                                      }
+                                                    }}
+                                                    className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                    style={{ fontSize: '12px' }}
+                                                  />
+                                                ) : (
+                                                  <div className="text-white font-medium" style={{ fontSize: '12px' }}>
+                                                    ${(order.buy_price_cents / 100).toFixed(2)}
+                                                  </div>
+                                                )}
+                                              </div>
+
+                                              {/* Total Cost */}
+                                              <div className="col-span-5">
+                                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Total Cost</div>
+                                                {isEditing ? (
+                                                  <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    value={editData.total_cost !== undefined ? editData.total_cost : ((order.buy_price_cents / 100) * order.buy_quantity)}
+                                                    onChange={(e) => {
+                                                      const inputValue = e.target.value;
+                                                      
+                                                      // Allow empty string during editing
+                                                      if (inputValue === '') {
+                                                        setInlineEditData(prev => ({
+                                                          ...prev,
+                                                          [orderGroupId]: { 
+                                                            ...prev[orderGroupId], 
+                                                            total_cost: '',
+                                                            buy_price_cents: ''
+                                                          }
+                                                        }));
+                                                        return;
+                                                      }
+                                                      
+                                                      const newTotal = parseFloat(inputValue);
+                                                      if (!isNaN(newTotal) && newTotal >= 0) {
+                                                        const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
+                                                        const pricePerItem = qty > 0 ? newTotal / qty : 0;
+                                                        setInlineEditData(prev => ({
+                                                          ...prev,
+                                                          [orderGroupId]: { 
+                                                            ...prev[orderGroupId], 
+                                                            total_cost: newTotal,
+                                                            buy_price_cents: Math.round(pricePerItem * 100)
+                                                          }
+                                                        }));
+                                                      }
+                                                    }}
+                                                    onBlur={(e) => {
+                                                      // Ensure minimum value of 0 when losing focus
+                                                      const inputValue = e.target.value;
+                                                      if (inputValue === '' || parseFloat(inputValue) < 0) {
+                                                        const defaultTotal = (order.buy_price_cents / 100) * order.buy_quantity;
+                                                        setInlineEditData(prev => ({
+                                                          ...prev,
+                                                          [orderGroupId]: { 
+                                                            ...prev[orderGroupId], 
+                                                            total_cost: defaultTotal,
+                                                            buy_price_cents: order.buy_price_cents
+                                                          }
+                                                        }));
+                                                      }
+                                                    }}
+                                                    className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                    style={{ fontSize: '12px' }}
+                                                  />
+                                                ) : (
+                                                  <div className="text-white font-medium" style={{ fontSize: '12px' }}>
+                                                    ${((order.buy_price_cents / 100) * order.buy_quantity).toFixed(2)}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                ) : (
+                  /* Actions Menu Content */
+                  <div className="px-6 py-4 space-y-3">
+                    {/* View Order Book */}
+                    <button 
+                      className="w-full flex items-center justify-between p-4 bg-gray-800/30 border border-gray-600/50 rounded-xl hover:bg-gray-700/50 transition-colors"
+                      onClick={() => {
+                        setShowBulkOrderBook(true);
+                        setShowBulkActionsMenu(false);
+                      }}
+                    >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-indigo-600/20 rounded-lg flex items-center justify-center">
                         <svg className="w-5 h-5 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
@@ -1673,82 +2390,85 @@ const Collection = () => {
                       <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                     </svg>
                   </button>
-                </div>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Collapsed Preview - Always visible */}
-            <div className="flex flex-col px-6 py-3">
+            <div className="flex flex-col px-6 pt-1 pb-2">
               {/* Header with stats and actions */}
-              <div className="flex items-center justify-between w-full mb-2 min-w-0">
+              <div className="flex items-center justify-between w-full mb-3 min-w-0 pt-2">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span className="text-xs font-medium text-gray-300 truncate">
                     {selectedItems.size} {selectedItems.size === 1 ? 'Item' : 'Items'} Selected
                   </span>
-                  {selectedItems.size > 0 && (() => {
-                    const selectedItemsArray = (collectionData.items || []).filter(item => selectedItems.has(item.id));
-                    const totalValue = selectedItemsArray.reduce((sum, item) => {
-                      const marketValue = marketValueOverrides[item.id] !== undefined ? marketValueOverrides[item.id] : (item.value || 0);
-                      return sum + (marketValue * item.quantity);
-                    }, 0);
-                    return (
-                      <>
-                        <span className="text-xs text-gray-400 flex-shrink-0">•</span>
-                        <span className="text-xs font-medium text-white flex-shrink-0">${totalValue.toFixed(2)}</span>
-                      </>
-                    );
-                  })()}
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                  <button
-                    onClick={() => {
-                      const allFilteredItems = (collectionData.items || []).filter(item => {
-        if (selectedFilter === 'All') return true;
-        if (selectedFilter === 'Graded') {
-          return item.status.includes('PSA') || item.status.includes('BGS') || 
-                 item.status.includes('CGC') || item.status.includes('SGC');
-        }
-        return item.status === selectedFilter;
-                      });
-                      
-                      if (selectedItems.size === allFilteredItems.length) {
-                        // All selected, so deselect all
-                        clearSelection();
-                      } else {
-                        // Not all selected, so select all
-                        selectAll();
+                  {!showBulkOrderBook && (
+                    <button
+                      onClick={() => {
+                        const allFilteredItems = (collectionData.items || []).filter(item => {
+          if (selectedFilter === 'All') return true;
+          if (selectedFilter === 'Graded') {
+            return item.status.includes('PSA') || item.status.includes('BGS') || 
+                   item.status.includes('CGC') || item.status.includes('SGC');
+          }
+          return item.status === selectedFilter;
+                        });
+                        
+                        if (selectedItems.size === allFilteredItems.length) {
+                          // All selected, so deselect all
+                          clearSelection();
+                        } else {
+                          // Not all selected, so select all
+                          selectAll();
+                        }
+                      }}
+                      className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors whitespace-nowrap"
+                    >
+                      {(() => {
+                        const allFilteredItems = (collectionData.items || []).filter(item => {
+                      if (selectedFilter === 'All') return true;
+                      if (selectedFilter === 'Graded') {
+                        return item.status.includes('PSA') || item.status.includes('BGS') || 
+                               item.status.includes('CGC') || item.status.includes('SGC');
                       }
+                      return item.status === selectedFilter;
+                        });
+                        return selectedItems.size === allFilteredItems.length ? 'Deselect All' : 'Select All';
+                      })()}
+                    </button>
+                  )}
+                {showBulkOrderBook ? (
+                  <button 
+                    onClick={() => {
+                      setShowBulkOrderBook(false);
+                      setEditingOrderGroupId(null);
+                      setInlineEditData({});
                     }}
-                    className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors whitespace-nowrap"
+                    className="px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700"
                   >
-                    {(() => {
-                      const allFilteredItems = (collectionData.items || []).filter(item => {
-                    if (selectedFilter === 'All') return true;
-                    if (selectedFilter === 'Graded') {
-                      return item.status.includes('PSA') || item.status.includes('BGS') || 
-                             item.status.includes('CGC') || item.status.includes('SGC');
-                    }
-                    return item.status === selectedFilter;
-                      });
-                      return selectedItems.size === allFilteredItems.length ? 'Deselect All' : 'Select All';
-                    })()}
-                </button>
-                <button 
-                  onClick={() => {
-                      setShowBulkActionsMenu(!showBulkActionsMenu);
-                  }}
-                    className={`px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap ${
-                      showBulkActionsMenu ? 'bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'
-                    }`}
-                >
-                    Actions
-                    <svg className={`w-3 h-3 flex-shrink-0 transition-transform duration-300 ease-out ${showBulkActionsMenu ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
+                    Go Back
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => {
+                        setShowBulkActionsMenu(!showBulkActionsMenu);
+                    }}
+                      className={`px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap ${
+                        showBulkActionsMenu ? 'bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                      }`}
+                  >
+                      Actions
+                      <svg className={`w-3 h-3 flex-shrink-0 transition-transform duration-300 ease-out ${showBulkActionsMenu ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                )}
                 <button
                   onClick={clearSelection}
-                    className="text-gray-400 hover:text-white transition-colors p-1 flex-shrink-0"
+                    className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors flex items-center justify-center flex-shrink-0"
                 >
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -1758,10 +2478,10 @@ const Collection = () => {
             </div>
               
               {/* Image previews */}
-              <div className="flex items-center gap-3 overflow-x-auto">
+              <div className="flex items-center gap-3 overflow-x-auto pb-3 pr-4 pt-4">
                 {(collectionData.items || [])
                   .filter(item => selectedItems.has(item.id))
-                  .slice(0, 8)
+                  .slice(0, 6)
                   .map((item) => (
                     <div 
                       key={item.id}
@@ -1801,9 +2521,9 @@ const Collection = () => {
                       )}
                 </div>
                   ))}
-                {selectedItems.size > 8 && (
+                {selectedItems.size > 6 && (
                   <div className="flex-shrink-0 w-10 h-14 bg-gray-800 rounded flex items-center justify-center">
-                    <span className="text-xs font-medium text-gray-400">+{selectedItems.size - 8}</span>
+                    <span className="text-xs font-medium text-gray-400">+{selectedItems.size - 6}</span>
                   </div>
                 )}
               </div>
@@ -1954,785 +2674,6 @@ const Collection = () => {
         </div>
       )}
 
-      {/* Bulk Order Book View - Grouped by Item */}
-      {showBulkOrderBook && selectedItems.size > 0 && (() => {
-        // Get all orders for selected items
-        const selectedItemsOrders = orders.filter(order => 
-          selectedItems.has(order.item_id)
-        );
-        
-        // Group orders by item
-        const groupedOrders = {};
-        selectedItemsOrders.forEach(order => {
-          if (!groupedOrders[order.item_id]) {
-            const item = collectionData.items?.find(i => i.id === order.item_id);
-            groupedOrders[order.item_id] = {
-              itemId: order.item_id,
-              itemName: order.item_name || item?.name || 'Unknown Item',
-              itemImage: item?.image,
-              itemType: item?.status || 'Unknown',
-              orders: []
-            };
-          }
-          groupedOrders[order.item_id].orders.push(order);
-        });
-
-        return (
-          <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]"
-            onClick={() => {
-              setShowBulkOrderBook(false);
-              setEditingOrderGroupId(null);
-              setInlineEditData({});
-            }}
-          >
-            <div 
-              className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[90vh] flex flex-col animate-slide-up"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Drag handle */}
-              <div className="flex justify-center pt-3 pb-2">
-                <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
-              </div>
-
-              {/* Header - Fixed at top */}
-              <div className="flex-shrink-0 px-6 py-4 border-b border-gray-700/50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-white">
-                      {editingOrderGroupId ? 
-                        (inlineEditData[editingOrderGroupId]?.isMarkingAsSold ? 'Marking Order as Sold' : 'Editing Order') : 
-                        'Viewing On Hand Orders'
-                      }
-                    </h2>
-                    <p className="text-sm text-gray-400 m-0">
-                      {editingOrderGroupId ? 
-                        (inlineEditData[editingOrderGroupId]?.isMarkingAsSold ? 'You are marking the following items as sold.' : 'You are about to change details in the order book.') : 
-                        'Edit, mark as sold or delete orders all together.'
-                      }
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowBulkOrderBook(false);
-                      setEditingOrderGroupId(null);
-                      setInlineEditData({});
-                    }}
-                    className="text-gray-400 hover:text-white transition-colors"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Orders List */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="px-6 py-2">
-                  {Object.values(groupedOrders).map((group) => (
-                    <div key={group.itemId} className="mb-4">
-                      {group.orders.map((order, orderIndex) => {
-                        const orderGroupId = `${group.itemId}-${orderIndex}`;
-                        const isEditing = editingOrderGroupId === orderGroupId;
-                        const editData = inlineEditData[orderGroupId] || {};
-
-                        return (
-                          <div
-                            key={order.id}
-                            className={`bg-gray-800/20 border border-gray-700/30 rounded-lg p-4 hover:bg-gray-800/30 transition-all duration-300 mb-3 ${editingOrderGroupId && editingOrderGroupId !== orderGroupId ? 'blur-sm opacity-50 pointer-events-none' : ''}`}
-                          >
-                            {/* Full Width Header */}
-                            <div className="mb-4">
-                              {/* Item Name and Actions */}
-                              <div className="flex items-center justify-between mb-0">
-                                <h3 className="text-sm font-semibold text-white truncate">
-                                  {group.itemName}
-                                </h3>
-                                <div className="flex gap-2">
-                                  {isEditing ? (
-                                    <>
-                                      <button
-                                        onClick={async () => {
-                                          try {
-                                            if (editData.isMarkingAsSold) {
-                                              // Mark as sold functionality
-                                              const sellData = {
-                                                sellDate: editData.sell_date,
-                                                sellPrice: (editData.sell_price_cents / 100).toFixed(2),
-                                                quantity: editData.sell_quantity,
-                                                location: editData.sell_location || '',
-                                                shipping: (editData.sell_fees_cents / 100).toFixed(2),
-                                                notes: ''
-                                              };
-
-                                              await markOrderAsSold(order.id, sellData);
-                                            } else {
-                                              // Regular edit functionality
-                                              const updateData = {
-                                                buy_date: editData.buy_date || order.buy_date,
-                                                buy_location: editData.buy_location || order.buy_location,
-                                                buy_quantity: editData.buy_quantity || order.buy_quantity,
-                                                buy_price_cents: editData.buy_price_cents !== undefined ? editData.buy_price_cents : order.buy_price_cents
-                                              };
-
-                                              await updateOrder(supabase, order.id, updateData);
-                                            }
-
-                                            await Promise.all([
-                                              queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
-                                              queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary })
-                                            ]);
-
-                                            setEditingOrderGroupId(null);
-                                            setInlineEditData(prev => {
-                                              const newData = { ...prev };
-                                              delete newData[orderGroupId];
-                                              return newData;
-                                            });
-                                          } catch (error) {
-                                            console.error('Error updating order:', error);
-                                          }
-                                        }}
-                                        className="w-6 h-6 bg-emerald-600 rounded-full flex items-center justify-center hover:bg-emerald-700 transition-colors"
-                                      >
-                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setEditingOrderGroupId(null);
-                                          setInlineEditData(prev => {
-                                            const newData = { ...prev };
-                                            delete newData[orderGroupId];
-                                            return newData;
-                                          });
-                                        }}
-                                        className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center hover:bg-gray-700 transition-colors"
-                                      >
-                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <button
-                                        onClick={() => {
-                                          setEditingOrderGroupId(orderGroupId);
-                                            setInlineEditData(prev => ({
-                                              ...prev,
-                                              [orderGroupId]: {
-                                                buy_date: order.buy_date,
-                                                buy_location: order.buy_location,
-                                                buy_quantity: order.buy_quantity,
-                                                buy_price_cents: order.buy_price_cents,
-                                                total_cost: ((order.buy_price_cents / 100) * order.buy_quantity).toFixed(2)
-                                              }
-                                            }));
-                                        }}
-                                        className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center hover:bg-gray-700 transition-colors"
-                                      >
-                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                        </svg>
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setEditingOrderGroupId(orderGroupId);
-                                          setInlineEditData(prev => ({
-                                            ...prev,
-                                            [orderGroupId]: {
-                                              ...prev[orderGroupId],
-                                              isMarkingAsSold: true,
-                                              sell_date: new Date().toISOString().split('T')[0],
-                                              sell_price_cents: order.buy_price_cents,
-                                              sell_quantity: order.buy_quantity,
-                                              sell_location: '',
-                                              sell_fees_cents: 0,
-                                              sell_fee_percentage: null
-                                            }
-                                          }));
-                                        }}
-                                        className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center hover:bg-indigo-700 transition-colors"
-                                      >
-                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                                        </svg>
-                                      </button>
-                                      <button
-                                        onClick={async () => {
-                                          if (!window.confirm('Delete this order?')) return;
-                                          
-                                          try {
-                                            const { error } = await supabase.rpc('delete_order_clean', {
-                                              p_order_id: order.id
-                                            });
-
-                                            if (error) throw error;
-
-                                            await Promise.all([
-                                              queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
-                                              queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary })
-                                            ]);
-                                          } catch (error) {
-                                            console.error('Error deleting order:', error);
-                                          }
-                                        }}
-                                        className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition-colors"
-                                      >
-                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Item Type */}
-                              <div className="text-xs text-indigo-400 mb-3">
-                                {group.itemType}
-                              </div>
-
-                              {/* Border separator */}
-                              <div className="border-b border-gray-600/50 mb-3"></div>
-                            </div>
-
-                            {/* Content Area with Image and Order Details */}
-                            <div className="flex items-start gap-4">
-                              {/* Item Image */}
-                              <div className="flex flex-col items-center gap-2">
-                                {group.itemImage && (
-                                  <img 
-                                    src={group.itemImage} 
-                                    alt={group.itemName}
-                                    className="w-16 h-20 object-contain rounded flex-shrink-0"
-                                  />
-                                )}
-                                <div className="w-16 px-2 py-1 bg-indigo-600/20 border border-indigo-500/30 rounded text-xs text-indigo-400 text-center" style={{ fontSize: '10px' }}>
-                                  On Hand
-                                </div>
-                              </div>
-
-                              {/* Order Details */}
-                              <div className="flex-1 min-w-0">
-
-                                  {/* Order Details Grid */}
-                                  <div className={isEditing ? "space-y-4" : "space-y-8"}>
-                                    {editData.isMarkingAsSold ? (
-                                      /* Mark as Sold Fields */
-                                      <>
-                                        {/* Top Row: Sell Date, Sell Location */}
-                                        <div className="grid grid-cols-12 gap-3">
-                                          <div className="col-span-6">
-                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Sell Date</div>
-                                            <input
-                                              type="date"
-                                              value={editData.sell_date || new Date().toISOString().split('T')[0]}
-                                              onChange={(e) => {
-                                                setInlineEditData(prev => ({
-                                                  ...prev,
-                                                  [orderGroupId]: { ...prev[orderGroupId], sell_date: e.target.value }
-                                                }));
-                                              }}
-                                              className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
-                                              style={{ fontSize: '12px' }}
-                                            />
-                                          </div>
-                                          <div className="col-span-6">
-                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Sell Location</div>
-                                            <div className="relative">
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setIsLocationDropdownClicked(prev => !prev);
-                                                  setIsLocationFocused(true);
-                                                }}
-                                                className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors text-left flex items-center justify-between"
-                                                style={{ fontSize: '12px' }}
-                                              >
-                                                <div className="flex items-center gap-2 truncate">
-                                                  <span className="truncate">{editData.sell_location || 'Select Marketplace'}</span>
-                                                  {editData.sell_fee_percentage !== undefined && editData.sell_fee_percentage !== null && (
-                                                    <span className="text-gray-400 text-xs flex-shrink-0">
-                                                      ({editData.sell_fee_percentage === 0 ? '0%' : editData.sell_fee_percentage.toFixed(2) + '%'})
-                                                    </span>
-                                                  )}
-                                                </div>
-                                                <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                              </button>
-                                              
-                                              {/* Marketplaces Dropdown */}
-                                              {(isLocationFocused || isLocationDropdownClicked) && (() => {
-                                                const marketplaces = [
-                                                  { id: 'ebay', name: 'eBay', fee_percentage: 12.9 },
-                                                  { id: 'tcgplayer', name: 'TCGPlayer', fee_percentage: 10.25 },
-                                                  { id: 'cardkingdom', name: 'Card Kingdom', fee_percentage: 0 },
-                                                  { id: 'starcitygames', name: 'StarCityGames', fee_percentage: 0 },
-                                                  { id: 'facebook', name: 'Facebook Marketplace', fee_percentage: 0 },
-                                                  { id: 'mercari', name: 'Mercari', fee_percentage: 10 },
-                                                  { id: 'whatnot', name: 'Whatnot', fee_percentage: 8 },
-                                                  { id: 'local', name: 'Local Sale', fee_percentage: 0 },
-                                                  { id: 'other', name: 'Other', fee_percentage: 0 }
-                                                ];
-                                                
-                                                return (
-                                                  <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-[10000] max-h-48 overflow-y-auto">
-                                                    {marketplaces.map((marketplace) => (
-                                                      <button
-                                                        key={marketplace.id}
-                                                        type="button"
-                                                        onClick={() => {
-                                                          const sellPrice = editData.sell_price_cents !== undefined 
-                                                            ? editData.sell_price_cents / 100 
-                                                            : order.buy_price_cents / 100;
-                                                          const autoFee = marketplace.fee_percentage > 0 
-                                                            ? (sellPrice * marketplace.fee_percentage / 100) 
-                                                            : 0;
-                                                          
-                                                          setInlineEditData(prev => ({
-                                                            ...prev,
-                                                            [orderGroupId]: { 
-                                                              ...prev[orderGroupId], 
-                                                              sell_location: marketplace.name,
-                                                              sell_fees_cents: Math.round(autoFee * 100),
-                                                              // Store the fee percentage for display
-                                                              sell_fee_percentage: marketplace.fee_percentage
-                                                            }
-                                                          }));
-                                                          setIsLocationFocused(false);
-                                                          setIsLocationDropdownClicked(false);
-                                                        }}
-                                                        className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors"
-                                                        style={{ fontSize: '12px' }}
-                                                      >
-                                                        {marketplace.name} {marketplace.fee_percentage > 0 && `(${marketplace.fee_percentage}%)`}
-                                                      </button>
-                                                    ))}
-                                                  </div>
-                                                );
-                                              })()}
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        {/* Bottom Row: Sell Quantity, Sell Price, Fees */}
-                                        <div className="grid grid-cols-12 gap-3">
-                                          <div className="col-span-3">
-                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Qty</div>
-                                            <input
-                                              type="number"
-                                              min="1"
-                                              value={editData.sell_quantity !== undefined ? editData.sell_quantity : order.buy_quantity}
-                                              onChange={(e) => {
-                                                setInlineEditData(prev => ({
-                                                  ...prev,
-                                                  [orderGroupId]: { ...prev[orderGroupId], sell_quantity: parseInt(e.target.value) || 1 }
-                                                }));
-                                              }}
-                                              className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
-                                              style={{ fontSize: '12px' }}
-                                            />
-                                          </div>
-                                          <div className="col-span-4">
-                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Sell Price</div>
-                                            <input
-                                              type="number"
-                                              step="0.01"
-                                              min="0"
-                                              value={editData.sell_price_cents !== undefined ? (editData.sell_price_cents / 100) : (order.buy_price_cents / 100)}
-                                              onChange={(e) => {
-                                                setInlineEditData(prev => ({
-                                                  ...prev,
-                                                  [orderGroupId]: { ...prev[orderGroupId], sell_price_cents: Math.round(parseFloat(e.target.value || 0) * 100) }
-                                                }));
-                                              }}
-                                              className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
-                                              style={{ fontSize: '12px' }}
-                                            />
-                                          </div>
-                                          <div className="col-span-5">
-                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Shipping</div>
-                                            <input
-                                              type="number"
-                                              step="0.01"
-                                              min="0"
-                                              value={editData.sell_fees_cents !== undefined ? (editData.sell_fees_cents / 100) : 0}
-                                              onChange={(e) => {
-                                                setInlineEditData(prev => ({
-                                                  ...prev,
-                                                  [orderGroupId]: { 
-                                                    ...prev[orderGroupId], 
-                                                    sell_fees_cents: Math.round(parseFloat(e.target.value || 0) * 100),
-                                                    // Clear auto percentage when manually edited
-                                                    sell_fee_percentage: null
-                                                  }
-                                                }));
-                                              }}
-                                              placeholder="0.00"
-                                              className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
-                                              style={{ fontSize: '12px' }}
-                                            />
-                                          </div>
-                                        </div>
-
-                                      </>
-                                    ) : (
-                                      /* Regular Edit Fields */
-                                      <>
-                                        {/* Top Row: Order # (non-editing only), Date, and Location */}
-                                        <div className={isEditing ? "grid grid-cols-12 gap-3" : "grid grid-cols-12 gap-6"}>
-                                          {/* Order # - Only show when not editing */}
-                                          {!isEditing && (
-                                            <div className="col-span-3">
-                                              <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Order #</div>
-                                              <div className="text-white text-left" style={{ fontSize: '12px' }}>
-                                                {order.order_number || 'N/A'}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* Date */}
-                                          <div className={isEditing ? "col-span-6" : "col-span-4"}>
-                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Date</div>
-                                            {isEditing ? (
-                                              <input
-                                                type="date"
-                                                value={editData.buy_date || order.buy_date}
-                                                onChange={(e) => {
-                                                  setInlineEditData(prev => ({
-                                                    ...prev,
-                                                    [orderGroupId]: { ...prev[orderGroupId], buy_date: e.target.value }
-                                                  }));
-                                                }}
-                                                className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
-                                                style={{ fontSize: '12px' }}
-                                              />
-                                            ) : (
-                                              <div className="text-white" style={{ fontSize: '12px' }}>
-                                                {new Date(order.buy_date).toLocaleDateString()}
-                                              </div>
-                                            )}
-                                          </div>
-
-                                          {/* Location */}
-                                          <div className={isEditing ? "col-span-6" : "col-span-5"}>
-                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Location</div>
-                                            {isEditing ? (
-                                              <div className="relative">
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setIsLocationDropdownClicked(prev => !prev);
-                                                    setIsLocationFocused(true);
-                                                  }}
-                                                  className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors text-left flex items-center justify-between"
-                                                  style={{ fontSize: '12px' }}
-                                                >
-                                                  <span className="truncate">{editData.buy_location || order.buy_location || 'Select'}</span>
-                                                  <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                  </svg>
-                                                </button>
-                                                
-                                                {/* Retailers Dropdown */}
-                                                {(isLocationFocused || isLocationDropdownClicked) && (() => {
-                                                  const retailers = [
-                                                    { id: 1, display_name: 'eBay', location: null },
-                                                    { id: 2, display_name: 'TCGPlayer', location: null },
-                                                    { id: 3, display_name: 'Amazon', location: null },
-                                                    { id: 4, display_name: 'Card Kingdom', location: null },
-                                                    { id: 5, display_name: 'StarCityGames', location: null },
-                                                    { id: 6, display_name: 'Local Card Shop', location: null },
-                                                    { id: 7, display_name: 'Facebook Marketplace', location: null },
-                                                    { id: 8, display_name: 'Mercari', location: null },
-                                                    { id: 9, display_name: 'Whatnot', location: null },
-                                                    { id: 10, display_name: 'Other', location: null }
-                                                  ];
-                                                  
-                                                  const filteredRetailers = isLocationDropdownClicked 
-                                                    ? retailers 
-                                                    : retailers.filter(retailer => 
-                                                        retailer.display_name.toLowerCase().includes((editData.buy_location || order.buy_location || '').toLowerCase())
-                                                      );
-                                                  
-                                                  return filteredRetailers.length > 0 ? (
-                                                    <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-[10000] max-h-48 overflow-y-auto">
-                                                      {filteredRetailers.map((retailer) => (
-                                                        <button
-                                                          key={retailer.id}
-                                                          type="button"
-                                                          onClick={() => {
-                                                            setInlineEditData(prev => ({
-                                                              ...prev,
-                                                              [orderGroupId]: { ...prev[orderGroupId], buy_location: retailer.display_name }
-                                                            }));
-                                                            setIsLocationFocused(false);
-                                                            setIsLocationDropdownClicked(false);
-                                                          }}
-                                                          className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors"
-                                                          style={{ fontSize: '12px' }}
-                                                        >
-                                                          {retailer.display_name}
-                                                        </button>
-                                                      ))}
-                                                    </div>
-                                                  ) : null;
-                                                })()}
-                                              </div>
-                                            ) : (
-                                              <div className="text-white truncate" style={{ fontSize: '12px' }}>
-                                                {order.buy_location || 'N/A'}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-
-                                        {/* Bottom Row: Quantity, Price (per item), and Total Cost */}
-                                        <div className={isEditing ? "grid grid-cols-12 gap-3" : "grid grid-cols-12 gap-6"}>
-                                          {/* Quantity */}
-                                          <div className="col-span-3">
-                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Qty</div>
-                                            {isEditing ? (
-                                              <input
-                                                type="number"
-                                                min="1"
-                                                value={editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity}
-                                                onChange={(e) => {
-                                                  const inputValue = e.target.value;
-                                                  
-                                                  // Allow empty string during editing
-                                                  if (inputValue === '') {
-                                                    setInlineEditData(prev => ({
-                                                      ...prev,
-                                                      [orderGroupId]: { 
-                                                        ...prev[orderGroupId], 
-                                                        buy_quantity: '',
-                                                        total_cost: '0.00'
-                                                      }
-                                                    }));
-                                                    return;
-                                                  }
-                                                  
-                                                  const newQty = parseInt(inputValue);
-                                                  if (!isNaN(newQty) && newQty >= 1) {
-                                                    const pricePerItem = editData.buy_price_cents !== undefined 
-                                                      ? editData.buy_price_cents / 100
-                                                      : order.buy_price_cents / 100;
-                                                    setInlineEditData(prev => ({
-                                                      ...prev,
-                                                      [orderGroupId]: { 
-                                                        ...prev[orderGroupId], 
-                                                        buy_quantity: newQty,
-                                                        total_cost: (pricePerItem * newQty).toFixed(2)
-                                                      }
-                                                    }));
-                                                  }
-                                                }}
-                                                onBlur={(e) => {
-                                                  // Ensure minimum value of 1 when losing focus
-                                                  const inputValue = e.target.value;
-                                                  if (inputValue === '' || parseInt(inputValue) < 1) {
-                                                    const defaultQty = order.buy_quantity;
-                                                    const pricePerItem = editData.buy_price_cents !== undefined 
-                                                      ? editData.buy_price_cents / 100
-                                                      : order.buy_price_cents / 100;
-                                                    setInlineEditData(prev => ({
-                                                      ...prev,
-                                                      [orderGroupId]: { 
-                                                        ...prev[orderGroupId], 
-                                                        buy_quantity: defaultQty,
-                                                        total_cost: (pricePerItem * defaultQty).toFixed(2)
-                                                      }
-                                                    }));
-                                                  }
-                                                }}
-                                                className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
-                                                style={{ fontSize: '12px' }}
-                                              />
-                                            ) : (
-                                              <div className="text-white font-medium" style={{ fontSize: '12px' }}>
-                                                {order.buy_quantity}
-                                              </div>
-                                            )}
-                                          </div>
-
-                                          {/* Price per item */}
-                                          <div className="col-span-4">
-                                            <div className="text-gray-400 mb-1 whitespace-nowrap" style={{ fontSize: '12px' }}>Price/ea</div>
-                                            {isEditing ? (
-                                              <input
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                value={editData.buy_price_cents !== undefined ? (editData.buy_price_cents === '' ? '' : editData.buy_price_cents / 100) : (order.buy_price_cents / 100)}
-                                                onChange={(e) => {
-                                                  const inputValue = e.target.value;
-                                                  
-                                                  // Allow empty string during editing
-                                                  if (inputValue === '') {
-                                                    setInlineEditData(prev => ({
-                                                      ...prev,
-                                                      [orderGroupId]: { 
-                                                        ...prev[orderGroupId], 
-                                                        buy_price_cents: '',
-                                                        total_cost: ''
-                                                      }
-                                                    }));
-                                                    return;
-                                                  }
-                                                  
-                                                  const newPricePerItem = parseFloat(inputValue);
-                                                  if (!isNaN(newPricePerItem) && newPricePerItem >= 0) {
-                                                    const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
-                                                    const totalCost = newPricePerItem * qty;
-                                                    setInlineEditData(prev => ({
-                                                      ...prev,
-                                                      [orderGroupId]: { 
-                                                        ...prev[orderGroupId], 
-                                                        buy_price_cents: Math.round(newPricePerItem * 100),
-                                                        total_cost: totalCost.toFixed(2)
-                                                      }
-                                                    }));
-                                                  }
-                                                }}
-                                                onBlur={(e) => {
-                                                  // Ensure minimum value of 0 when losing focus
-                                                  const inputValue = e.target.value;
-                                                  if (inputValue === '' || parseFloat(inputValue) < 0) {
-                                                    const defaultPrice = order.buy_price_cents / 100;
-                                                    const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
-                                                    const totalCost = defaultPrice * qty;
-                                                    setInlineEditData(prev => ({
-                                                      ...prev,
-                                                      [orderGroupId]: { 
-                                                        ...prev[orderGroupId], 
-                                                        buy_price_cents: Math.round(defaultPrice * 100),
-                                                        total_cost: totalCost.toFixed(2)
-                                                      }
-                                                    }));
-                                                  }
-                                                }}
-                                                className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
-                                                style={{ fontSize: '12px' }}
-                                              />
-                                            ) : (
-                                              <div className="text-white font-medium" style={{ fontSize: '12px' }}>
-                                                ${(order.buy_price_cents / 100).toFixed(2)}
-                                              </div>
-                                            )}
-                                          </div>
-
-                                          {/* Total Cost */}
-                                          <div className="col-span-5">
-                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Total Cost</div>
-                                            {isEditing ? (
-                                              <input
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                value={editData.total_cost !== undefined ? editData.total_cost : ((order.buy_price_cents / 100) * order.buy_quantity)}
-                                                onChange={(e) => {
-                                                  const inputValue = e.target.value;
-                                                  
-                                                  // Allow empty string during editing
-                                                  if (inputValue === '') {
-                                                    setInlineEditData(prev => ({
-                                                      ...prev,
-                                                      [orderGroupId]: { 
-                                                        ...prev[orderGroupId], 
-                                                        total_cost: '',
-                                                        buy_price_cents: ''
-                                                      }
-                                                    }));
-                                                    return;
-                                                  }
-                                                  
-                                                  const newTotal = parseFloat(inputValue);
-                                                  if (!isNaN(newTotal) && newTotal >= 0) {
-                                                    const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
-                                                    const pricePerItem = qty > 0 ? newTotal / qty : 0;
-                                                    setInlineEditData(prev => ({
-                                                      ...prev,
-                                                      [orderGroupId]: { 
-                                                        ...prev[orderGroupId], 
-                                                        total_cost: newTotal,
-                                                        buy_price_cents: Math.round(pricePerItem * 100)
-                                                      }
-                                                    }));
-                                                  }
-                                                }}
-                                                onBlur={(e) => {
-                                                  // Ensure minimum value of 0 when losing focus
-                                                  const inputValue = e.target.value;
-                                                  if (inputValue === '' || parseFloat(inputValue) < 0) {
-                                                    const defaultTotal = (order.buy_price_cents / 100) * order.buy_quantity;
-                                                    setInlineEditData(prev => ({
-                                                      ...prev,
-                                                      [orderGroupId]: { 
-                                                        ...prev[orderGroupId], 
-                                                        total_cost: defaultTotal,
-                                                        buy_price_cents: order.buy_price_cents
-                                                      }
-                                                    }));
-                                                  }
-                                                }}
-                                                className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
-                                                style={{ fontSize: '12px' }}
-                                              />
-                                            ) : (
-                                              <div className="text-white font-medium" style={{ fontSize: '12px' }}>
-                                                ${((order.buy_price_cents / 100) * order.buy_quantity).toFixed(2)}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Footer - Fixed at bottom */}
-              <div className="flex-shrink-0 px-6 py-4 border-t border-gray-700/50 bg-gray-900/95 backdrop-blur-sm">
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => {
-                      setShowBulkOrderBook(false);
-                      setEditingOrderGroupId(null);
-                      setInlineEditData({});
-                    }}
-                    className="py-3 bg-gray-700/50 hover:bg-gray-600/70 rounded-2xl text-white font-medium transition-colors"
-                  >
-                    Close
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowBulkOrderBook(false);
-                      setEditingOrderGroupId(null);
-                      setInlineEditData({});
-                    }}
-                    className="py-3 bg-indigo-600 hover:bg-indigo-700 rounded-2xl text-white font-medium transition-colors"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Delete Orders Modal */}
       {showDeleteModal && (
