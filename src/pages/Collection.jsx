@@ -70,6 +70,7 @@ const Collection = () => {
   
   // Bulk order book states
   const [showBulkOrderBook, setShowBulkOrderBook] = useState(false);
+  const [showBulkOverridePrice, setShowBulkOverridePrice] = useState(false);
   const [editingOrderGroupId, setEditingOrderGroupId] = useState(null);
   const [inlineEditData, setInlineEditData] = useState({});
   const [screenWidth, setScreenWidth] = useState(window.innerWidth);
@@ -1598,21 +1599,23 @@ const Collection = () => {
       )}
 
       {/* Backdrop blur overlay when expanded actions menu is active */}
-      {isBulkSelectionMode && (showBulkActionsMenu || showBulkOrderBook) && (
+      {isBulkSelectionMode && (showBulkActionsMenu || showBulkOrderBook || showBulkOverridePrice) && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" />
       )}
 
       {/* Bulk Selection Preview Bar - Fixed at bottom with expandable actions */}
       {isBulkSelectionMode && !showOverridePriceModal && selectedItems.size > 0 && (
-        <div className={`fixed bottom-0 left-0 right-0 z-50 bg-gray-950 border-t border-gray-700/30 transition-all duration-300 ease-out ${
-          (showBulkActionsMenu || showBulkOrderBook) ? 'rounded-t-3xl' : ''
+        <div className={`fixed bottom-0 left-0 right-0 z-50 bg-gray-950 transition-all duration-300 ease-out ${
+          (showBulkActionsMenu || showBulkOrderBook || showBulkOverridePrice) ? 'rounded-t-3xl' : 'rounded-t-3xl'
         }`}>
           <div className="flex flex-col">
             {/* Expanded Actions - Slides down from above */}
             <div className={`overflow-hidden transition-all duration-300 ease-out ${
-              (showBulkActionsMenu || showBulkOrderBook) ? (showBulkOrderBook ? 'max-h-[75vh]' : 'max-h-96') + ' opacity-100' : 'max-h-0 opacity-0'
+              (showBulkActionsMenu || showBulkOrderBook || showBulkOverridePrice) ? 
+                (showBulkOrderBook || showBulkOverridePrice ? 'max-h-[75vh]' : 'max-h-96') + ' opacity-100' : 
+                'max-h-0 opacity-0'
             }`}>
-              <div className={`border-t border-gray-600/30 border-b border-gray-700/50 bg-gray-900/50 backdrop-blur-sm rounded-t-2xl ${showBulkOrderBook ? 'border-t-2 border-t-gray-600' : ''}`}>
+              <div className={`border-t border-gray-600/30 border-b border-gray-700/50 bg-gray-900/50 backdrop-blur-sm rounded-t-2xl ${(showBulkOrderBook || showBulkOverridePrice) ? 'border-t-2 border-t-gray-600' : ''}`}>
                 {showBulkOrderBook ? (
                   /* Order Book Content */
                   <div className="px-6 py-4">
@@ -1784,7 +1787,7 @@ const Collection = () => {
                                               className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center hover:bg-indigo-700 transition-colors"
                                             >
                                               <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                                               </svg>
                                             </button>
                                             <button
@@ -1809,7 +1812,7 @@ const Collection = () => {
                                               className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition-colors"
                                             >
                                               <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                               </svg>
                                             </button>
                                           </>
@@ -2328,6 +2331,111 @@ const Collection = () => {
                       })()}
                     </div>
                   </div>
+                ) : showBulkOverridePrice ? (
+                  /* Override Market Price Content */
+                  <div className="px-6 py-4">
+                    {/* Override Price Header */}
+                    <div className="mb-4">
+                      <h2 className="text-lg font-semibold text-white">
+                        Override Market Price
+                      </h2>
+                      <p className="text-sm text-gray-400 m-0">
+                        Set custom market values for the following items. These values are only temporary and will be replaced when the app syncs new pricing data.
+                      </p>
+                    </div>
+
+                    {/* Items List */}
+                    <div className="max-h-[60vh] overflow-y-auto space-y-3">
+                      {(collectionData.items || [])
+                        .filter(item => selectedItems.has(item.id))
+                        .map((item) => {
+                          const currentOverride = marketValueOverrides[item.id];
+                          const originalValue = item.value || 0;
+
+                          return (
+                            <div key={item.id} className="bg-gray-800/30 border border-gray-600/50 rounded-xl p-4">
+                              <div className="flex items-stretch gap-3 h-20">
+                                {/* Item image */}
+                                <div className="w-16 flex-shrink-0 overflow-hidden rounded-lg">
+                                  {item.image ? (
+                                    <img
+                                      src={item.image}
+                                      alt={item.name}
+                                      className="w-full h-full object-contain rounded-lg"
+                                      onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        const fallback = e.target.nextElementSibling;
+                                        if (fallback) fallback.style.display = 'flex';
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div className={`w-full h-full bg-gray-700 rounded-lg flex items-center justify-center ${item.image ? 'hidden' : 'flex'}`}>
+                                    <svg className="w-6 h-6 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd"/>
+                                    </svg>
+                                  </div>
+                                </div>
+                                
+                                {/* Item details and override input */}
+                                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                                  <h3 className="text-xs font-medium text-white truncate">
+                                    {item.name}
+                                  </h3>
+                                  
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {/* Original Value */}
+                                    <div>
+                                      <label className="block text-xs text-gray-400 mb-0.5">
+                                        Original
+                                      </label>
+                                      <div className="w-full px-2 py-1.5 bg-gray-600/30 border border-gray-500/50 rounded text-gray-400 text-xs cursor-not-allowed">
+                                        ${originalValue.toFixed(2)}
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Custom Override Input */}
+                                    <div>
+                                      <label className="block text-xs text-gray-400 mb-0.5">
+                                        Custom Value
+                                      </label>
+                                      <div className="relative">
+                                        <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs">$</span>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          defaultValue={currentOverride !== undefined ? currentOverride : originalValue}
+                                          className="w-full pl-5 pr-2 py-1.5 bg-gray-700/50 border border-gray-600 rounded text-white text-xs focus:border-indigo-400 focus:outline-none transition-colors"
+                                          placeholder="0.00"
+                                          data-item-id={item.id}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Reset button for this item */}
+                                  {currentOverride !== undefined && (
+                                    <button
+                                      onClick={() => {
+                                        setMarketValueOverrides(prev => {
+                                          const newOverrides = { ...prev };
+                                          delete newOverrides[item.id];
+                                          return newOverrides;
+                                        });
+                                      }}
+                                      className="mt-2 px-2 py-1 bg-orange-600/20 hover:bg-orange-600/30 rounded text-orange-400 text-xs font-medium transition-colors"
+                                    >
+                                      Reset
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                  </div>
                 ) : (
                   /* Actions Menu Content */
                   <div className="px-6 py-4 space-y-3">
@@ -2335,6 +2443,7 @@ const Collection = () => {
                     <button 
                       className="w-full flex items-center justify-between p-4 bg-gray-800/30 border border-gray-600/50 rounded-xl hover:bg-gray-700/50 transition-colors"
                       onClick={() => {
+                        setShowBulkOverridePrice(false); // Ensure override is off
                         setShowBulkOrderBook(true);
                         setShowBulkActionsMenu(false);
                       }}
@@ -2360,18 +2469,8 @@ const Collection = () => {
                   <button 
                     className="w-full flex items-center justify-between p-4 bg-gray-800/30 border border-gray-600/50 rounded-xl hover:bg-gray-700/50 transition-colors"
                     onClick={() => {
-                      const selectedItemsArray = (collectionData.items || []).filter(item => selectedItems.has(item.id));
-                      const overrideData = {
-                        isBulk: true,
-                        items: selectedItemsArray.map(item => ({
-                          id: item.id,
-                          name: item.name,
-                          value: item.value || 0,
-                          image: item.image
-                        }))
-                      };
-                      setOverridePriceData(overrideData);
-                      setShowOverridePriceModal(true);
+                      setShowBulkOrderBook(false); // Ensure order book is off
+                      setShowBulkOverridePrice(true);
                       setShowBulkActionsMenu(false);
                     }}
                   >
@@ -2396,16 +2495,16 @@ const Collection = () => {
             </div>
 
             {/* Collapsed Preview - Always visible */}
-            <div className="flex flex-col px-6 pt-1 pb-2">
+            <div className="flex flex-col px-6 pt-3 pb-1">
               {/* Header with stats and actions */}
-              <div className="flex items-center justify-between w-full mb-3 min-w-0 pt-2">
+              <div className="flex items-end justify-between w-full mb-1 min-w-0 py-1">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <span className="text-xs font-medium text-gray-300 truncate">
+                  <span className="font-medium text-gray-400 truncate" style={{ fontSize: '13px' }}>
                     {selectedItems.size} {selectedItems.size === 1 ? 'Item' : 'Items'} Selected
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                  {!showBulkOrderBook && (
+                  {!(showBulkOrderBook || showBulkOverridePrice) && (
                     <button
                       onClick={() => {
                         const allFilteredItems = (collectionData.items || []).filter(item => {
@@ -2440,17 +2539,70 @@ const Collection = () => {
                       })()}
                     </button>
                   )}
-                {showBulkOrderBook ? (
-                  <button 
-                    onClick={() => {
-                      setShowBulkOrderBook(false);
-                      setEditingOrderGroupId(null);
-                      setInlineEditData({});
-                    }}
-                    className="px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700"
-                  >
-                    Go Back
-                  </button>
+                {(showBulkOrderBook || showBulkOverridePrice) ? (
+                  <div className="flex items-center gap-1.5">
+                    <button 
+                      onClick={() => {
+                        setShowBulkOrderBook(false);
+                        setShowBulkOverridePrice(false);
+                        setEditingOrderGroupId(null);
+                        setInlineEditData({});
+                        // Clear selection when going back from individual item menus
+                        if (selectedItems.size === 1) {
+                          setSelectedItems(new Set());
+                          exitBulkSelectionMode(); // Exit bulk selection mode
+                        }
+                      }}
+                      className="px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700"
+                    >
+                      Go Back
+                    </button>
+                    {showBulkOverridePrice && (
+                      <button
+                        onClick={() => {
+                          // Collect all custom values from inputs
+                          const inputs = document.querySelectorAll('input[data-item-id]');
+                          const newOverrides = { ...marketValueOverrides };
+                          
+                          inputs.forEach(input => {
+                            const itemId = input.getAttribute('data-item-id');
+                            const newValue = parseFloat(input.value) || 0;
+                            newOverrides[itemId] = newValue;
+                          });
+                          
+                          setMarketValueOverrides(newOverrides);
+                          
+                          // Add haptic feedback
+                          if (navigator.vibrate) {
+                            navigator.vibrate(10);
+                          }
+                          
+                          setShowBulkOverridePrice(false);
+                          
+                          // Clear selection when saving from individual item menu
+                          if (selectedItems.size === 1) {
+                            setSelectedItems(new Set());
+                            exitBulkSelectionMode(); // Exit bulk selection mode
+                          }
+                          
+                          // Show success notification
+                          setSuccessData({
+                            title: 'Market Values Updated!',
+                            message: `Updated ${selectedItems.size} item(s)`
+                          });
+                          setShowSuccessNotification(true);
+                          
+                          // Auto-dismiss after 4 seconds
+                          setTimeout(() => {
+                            setShowSuccessNotification(false);
+                          }, 4000);
+                        }}
+                        className="px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        Save
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <button 
                     onClick={() => {
@@ -2477,8 +2629,11 @@ const Collection = () => {
               </div>
             </div>
               
+              {/* Border separator */}
+              <div className="border-t border-gray-700/30 mx-4 my-1" />
+              
               {/* Image previews */}
-              <div className="flex items-center gap-3 overflow-x-auto pb-3 pr-4 pt-4">
+              <div className="flex items-center gap-3 overflow-x-auto py-2 pr-4">
                 {(collectionData.items || [])
                   .filter(item => selectedItems.has(item.id))
                   .slice(0, 6)
@@ -2584,12 +2739,12 @@ const Collection = () => {
                     navigator.vibrate(10);
                   }
                   
-                  // Use the new bulk order book system
-                  // Set up bulk selection mode for this single item
+                  // Use the new integrated order book system
                   setSelectedItems(new Set([selectedItemId]));
+                  enterBulkSelectionMode(); // Enter bulk selection mode
+                  setShowBulkOverridePrice(false); // Ensure override is off
                   setShowBulkOrderBook(true);
                   handleItemMenuClose();
-                  
                 }}
               >
                 <div className="flex items-center gap-4">
@@ -2613,44 +2768,17 @@ const Collection = () => {
               <button 
                 className="w-full flex items-center justify-between p-5 bg-purple-500/10 hover:bg-purple-500/20 active:bg-purple-500/30 rounded-2xl transition-all duration-150 touch-manipulation border border-purple-500/20"
                 onClick={() => {
-                  console.log('🎯 Override Market Price clicked!');
                   // Add haptic feedback simulation
                   if (navigator.vibrate) {
                     navigator.vibrate(10);
                   }
-                  // Find the item data for overriding market price
-                  const item = collectionData.items?.find(item => item.id === selectedItemId);
-                  console.log('🎯 Found item:', item, 'selectedItemId:', selectedItemId);
-                  if (item) {
-                    // Set up data for single item override
-                    const overrideData = {
-                      isBulk: false,
-                      items: [{
-                        id: item.id,
-                        name: item.name,
-                        value: item.value || 0,
-                        image: item.image
-                      }]
-                    };
-                    
-                    console.log('🎯 Setting override data:', overrideData);
-                    setOverridePriceData(overrideData);
-                    console.log('🎯 Setting showOverridePriceModal to true');
-                    setShowOverridePriceModal(true);
-                    
-                    // Delay closing the item menu to avoid conflicts
-                    setTimeout(() => {
-                      console.log('🎯 Setting showItemMenu to false (delayed)');
-                      handleItemMenuClose();
-                    }, 50);
-                    
-                    // Debug check after state updates
-                    setTimeout(() => {
-                      console.log('🎯 After state update - should render modal now');
-                    }, 100);
-                  } else {
-                    console.log('🎯 ERROR: No item found for selectedItemId:', selectedItemId);
-                  }
+                  
+                  // Use the new integrated override price system
+                  setSelectedItems(new Set([selectedItemId]));
+                  enterBulkSelectionMode(); // Enter bulk selection mode
+                  setShowBulkOrderBook(false); // Ensure order book is off
+                  setShowBulkOverridePrice(true);
+                  handleItemMenuClose();
                 }}
               >
                 <div className="flex items-center gap-4">
@@ -2959,181 +3087,6 @@ const Collection = () => {
         />
       )}
 
-      {/* Override Market Price Modal */}
-      {showOverridePriceModal && overridePriceData && (
-        <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]"
-          onClick={() => {
-            setShowOverridePriceModal(false);
-            setOverridePriceData(null);
-          }}
-        >
-          <div 
-            className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              animation: 'slideUp 0.3s ease-out'
-            }}
-          >
-            {/* Drag handle */}
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
-            </div>
-
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-700/50">
-              <h2 className="text-lg font-semibold text-white">
-                Override Market Price
-              </h2>
-              <p className="text-sm text-gray-400 mt-1">
-                Set custom market values for the following items. These values are only temporary and will be replaced when the app syncs new pricing data.
-              </p>
-            </div>
-
-            {/* Items List */}
-            <div className="px-6 py-4 space-y-3">
-              {overridePriceData.items?.map((item) => {
-                const currentOverride = marketValueOverrides[item.id];
-                const originalValue = item.value || 0;
-
-                return (
-                  <div key={item.id} className="bg-gray-800/30 border border-gray-600/50 rounded-xl p-4">
-                    <div className="flex items-stretch gap-3 h-20">
-                      {/* Item image */}
-                      <div className="w-16 flex-shrink-0 overflow-hidden rounded-lg">
-                        {item.image ? (
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="w-full h-full object-contain rounded-lg"
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              const fallback = e.target.nextElementSibling;
-                              if (fallback) fallback.style.display = 'flex';
-                            }}
-                          />
-                        ) : null}
-                        <div className={`w-full h-full bg-gray-700 rounded-lg flex items-center justify-center ${item.image ? 'hidden' : 'flex'}`}>
-                          <svg className="w-6 h-6 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd"/>
-                          </svg>
-                        </div>
-                      </div>
-                      
-                      {/* Item details and override input */}
-                      <div className="flex-1 min-w-0 flex flex-col justify-between">
-                        <h3 className="text-xs font-medium text-white truncate">
-                          {item.name}
-                        </h3>
-                        
-                        <div className="grid grid-cols-2 gap-2">
-                          {/* Original Value */}
-                <div>
-                            <label className="block text-xs text-gray-400 mb-0.5">
-                              Original
-                            </label>
-                            <div className="w-full px-2 py-1.5 bg-gray-600/30 border border-gray-500/50 rounded text-gray-400 text-xs cursor-not-allowed">
-                              ${originalValue.toFixed(2)}
-                            </div>
-                          </div>
-                          
-                          {/* Custom Override Input */}
-                          <div>
-                            <label className="block text-xs text-gray-400 mb-0.5">
-                              Custom Value
-                  </label>
-                  <div className="relative">
-                              <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs">$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                                defaultValue={originalValue}
-                                className="w-full pl-5 pr-2 py-1.5 bg-gray-700/50 border border-gray-600 rounded text-white text-xs focus:border-indigo-400 focus:outline-none transition-colors"
-                      placeholder="0.00"
-                                data-item-id={item.id}
-                    />
-                            </div>
-                  </div>
-                </div>
-
-                        {/* Reset button for this item */}
-                        {currentOverride !== undefined && (
-                          <button
-                            onClick={() => {
-                              setMarketValueOverrides(prev => {
-                                const newOverrides = { ...prev };
-                                delete newOverrides[item.id];
-                                return newOverrides;
-                              });
-                            }}
-                            className="mt-2 px-2 py-1 bg-orange-600/20 hover:bg-orange-600/30 rounded text-orange-400 text-xs font-medium transition-colors"
-                          >
-                            Reset
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Action buttons */}
-            <div className="px-6 pb-8 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => {
-                  setShowOverridePriceModal(false);
-                  setOverridePriceData(null);
-                  }}
-                  className="py-4 bg-gray-700/50 hover:bg-gray-600/70 active:bg-gray-500/70 rounded-2xl text-white font-medium transition-all duration-150 touch-manipulation"
-                >
-                  Cancel
-              </button>
-              <button
-                onClick={() => {
-                    // Collect all custom values from inputs
-                    const inputs = document.querySelectorAll('input[data-item-id]');
-                    const newOverrides = { ...marketValueOverrides };
-                    
-                    inputs.forEach(input => {
-                      const itemId = input.getAttribute('data-item-id');
-                      const newValue = parseFloat(input.value) || 0;
-                      newOverrides[itemId] = newValue;
-                    });
-                    
-                    setMarketValueOverrides(newOverrides);
-                  
-                  // Add haptic feedback
-                  if (navigator.vibrate) {
-                      navigator.vibrate(10);
-                  }
-                  
-                  setShowOverridePriceModal(false);
-                  setOverridePriceData(null);
-                  
-                  // Show success notification
-        setSuccessData({
-                      title: 'Market Values Updated!',
-                      message: `Updated ${overridePriceData.items?.length || 0} item(s)`
-        });
-                  setShowSuccessNotification(true);
-                  
-                  // Auto-dismiss after 4 seconds
-                  setTimeout(() => {
-                    setShowSuccessNotification(false);
-                  }, 4000);
-                }}
-                  className="py-4 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-2xl text-white font-semibold transition-all duration-150 touch-manipulation"
-                >
-                  Save
-              </button>
-            </div>
-          </div>
-        </div>
-        </div>
-      )}
       </div>
     </div>
   );
