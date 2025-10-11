@@ -8,11 +8,13 @@ import CardPreviewModal from '../components/CardPreviewModal';
 import CustomItemModal from '../components/CustomItemModal';
 import AddToCollectionModal from '../components/AddToCollectionModal';
 import CartBottomMenu from '../components/CartBottomMenu';
+import { createBulkOrders } from '../utils/orderNumbering';
 import { supabase } from '../lib/supabaseClient';
 import { useModal } from '../contexts/ModalContext';
 import { useCart } from '../contexts/CartContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryClient';
+import { getItemTypeClassification, getGradeFromCardType, getCompanyFromCardType } from '../utils/itemTypeUtils';
 
 const SearchApi = () => {
   const navigate = useNavigate();
@@ -1182,7 +1184,7 @@ const SearchApi = () => {
       // Generate a single order group ID for all items in this multi-order
       const orderGroupId = crypto.randomUUID();
 
-      // Create or find items and create orders
+      // Create or find items and prepare order data
       const orderPromises = cartItems.map(async (item) => {
         const itemPrice = orderData.itemPrices[item.id] || item.marketValue || 0;
         
@@ -1198,13 +1200,17 @@ const SearchApi = () => {
         if (existingItem) {
           itemId = existingItem.id;
         } else {
+          // Get the card type for this item
+          const cardType = orderData.itemCardTypes?.[item.id] || 'raw';
+          const itemType = getItemTypeClassification(item, cardType, 'api');
+          
           const { data: newItem, error: itemError } = await supabase
             .from('items')
             .insert({
               name: item.name,
               set_name: item.set || '',
               image_url: item.imageUrl,
-              item_type: 'Card',
+              item_type: itemType, // Use proper type classification
               market_value_cents: Math.round((item.marketValue || 0) * 100)
             })
             .select('id')
@@ -1218,30 +1224,35 @@ const SearchApi = () => {
         const buyPriceCents = Math.round(itemPrice * 100);
         const totalCostCents = Math.round(itemPrice * item.quantity * 100);
 
-        const { data: order, error: orderError } = await supabase
-          .from('orders')
-          .insert({
-            item_id: itemId,
-            order_type: 'buy',
-            buy_date: orderData.orderDate,
-            buy_price_cents: buyPriceCents,
-            buy_quantity: item.quantity,
-            total_cost_cents: totalCostCents,
-            buy_location: orderData.purchaseLocation || null,
-            buy_notes: null,
-            status: 'ordered',
-            order_group_id: orderGroupId,
-            order_group_name: orderData.purchaseLocation ? `${orderData.purchaseLocation} Order` : 'Multi-Item Order',
-            order_group_notes: null
-          })
-          .select('*')
-          .single();
-
-        if (orderError) throw orderError;
-        return order;
+        return {
+          item_id: itemId,
+          order_type: 'buy',
+          buy_date: orderData.orderDate,
+          buy_price_cents: buyPriceCents,
+          buy_quantity: item.quantity,
+          total_cost_cents: totalCostCents,
+          buy_location: orderData.purchaseLocation || null,
+          buy_notes: null,
+          status: 'ordered',
+          order_group_id: orderGroupId,
+          order_group_name: orderData.purchaseLocation ? `${orderData.purchaseLocation} Order` : 'Multi-Item Order',
+          order_group_notes: null
+        };
       });
 
-      await Promise.all(orderPromises);
+      // Wait for all order data to be prepared
+      const ordersData = await Promise.all(orderPromises);
+      
+      // Create all orders with the same order number
+      const ordersWithNumbers = await createBulkOrders(supabase, ordersData);
+      
+      // Insert all orders
+      const { data: orders, error: bulkOrderError } = await supabase
+        .from('orders')
+        .insert(ordersWithNumbers)
+        .select();
+        
+      if (bulkOrderError) throw bulkOrderError;
 
       // Show success popup
       setShowMultiOrderProcessing(false);

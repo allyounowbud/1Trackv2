@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Minus, BookOpen, ChevronUp, ChevronDown, Calendar, ChevronDownIcon } from 'lucide-react';
+import { getItemTypeClassification, getGradeFromCardType, getCompanyFromCardType, getMarketValueForCardType, isSealedProduct } from '../utils/itemTypeUtils';
 
 const CartBottomMenu = ({ 
   cartItems, 
@@ -212,7 +213,8 @@ const CartBottomMenu = ({
     const orderData = {
       orderDate,
       purchaseLocation,
-      itemPrices
+      itemPrices,
+      itemCardTypes // Pass the card type information
     };
     onCreateOrder(orderData);
     onClose();
@@ -754,6 +756,12 @@ const CartBottomMenu = ({
                           </div>
                           <div className="text-xs text-indigo-400">
                             {(() => {
+                              // Check if item is sealed
+                              if (isSealedProduct(item)) {
+                                const marketValue = item.marketValue || 0;
+                                return `Sealed • $${marketValue.toFixed(2)}`;
+                              }
+                              
                               const company = getCurrentCompany(item);
                               const grade = getCurrentGrade(item);
                               const marketValue = getMarketValueForType(item, company, grade);
@@ -779,6 +787,10 @@ const CartBottomMenu = ({
                           className="relative group cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
+                            // Don't allow expansion for sealed products
+                            if (isSealedProduct(item)) {
+                              return;
+                            }
                             if (expandedCardId === item.id) {
                               setExpandedCardId(null);
                             } else {
@@ -787,29 +799,31 @@ const CartBottomMenu = ({
                           }}
                         >
                           {/* Delete button above image */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onRemoveItem(item.id);
-                            }}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveItem(item.id);
+                        }}
                             className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors z-10"
-                          >
+                      >
                             <X className="w-3 h-3 text-white" />
-                          </button>
-                          <img 
-                            src={item.imageUrl} 
-                            alt={item.name}
+                      </button>
+                        <img 
+                          src={item.imageUrl} 
+                          alt={item.name}
                             className="w-12 h-16 object-contain rounded-lg flex-shrink-0 p-1 transition-opacity group-hover:opacity-50"
                             style={{ backgroundColor: '#111827' }}
                           />
-                          {/* Hover overlay with expand/collapse indicator */}
-                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center">
-                              <span className="text-white text-xs font-medium">
-                                {expandedCardId === item.id ? '▼' : '▶'}
-                              </span>
-                            </div>
+                          {/* Hover overlay with expand/collapse indicator - Only for non-sealed items */}
+                          {!isSealedProduct(item) && (
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-xs font-medium">
+                                  {expandedCardId === item.id ? '▼' : '▶'}
+                                </span>
                           </div>
+                          </div>
+                          )}
                         </div>
                       </div>
                       
@@ -888,8 +902,8 @@ const CartBottomMenu = ({
                         </div>
                       </div>
                       
-                      {/* Expandable Card Type Options */}
-                      {expandedCardId === item.id && (
+                      {/* Expandable Card Type Options - Only for non-sealed items */}
+                      {expandedCardId === item.id && !isSealedProduct(item) && (
                         <>
                           {/* Grading Company Buttons */}
                           <div className="grid grid-cols-4 gap-2 mt-3">

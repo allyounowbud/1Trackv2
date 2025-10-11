@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabaseClient';
 import { getItemDisplayName, getItemSetName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
+import { useCart } from '../contexts/CartContext';
+import { updateOrder } from '../utils/orderNumbering';
 import { queryKeys } from '../lib/queryClient';
 import SafeImage from '../components/SafeImage';
 import AddToCollectionModal from '../components/AddToCollectionModal';
@@ -32,6 +34,8 @@ async function getCollectionSummary() {
 const Collection = () => {
   const location = useLocation();
   const { isModalOpen, openModal, closeModal } = useModal();
+  const { openCollectionMenu, closeCollectionMenu, enterBulkSelectionMode, exitBulkSelectionMode, isBulkSelectionMode } = useCart();
+  
   const [searchQuery, setSearchQuery] = useState(
     location.state?.searchQuery || ''
   );
@@ -43,6 +47,7 @@ const Collection = () => {
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [showBulkActionsMenu, setShowBulkActionsMenu] = useState(false);
+  const [isBulkMenuExpanded, setIsBulkMenuExpanded] = useState(false);
   const [isBulkMenuClosing, setIsBulkMenuClosing] = useState(false);
   const [bulkMenuDragData, setBulkMenuDragData] = useState({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
   const [showItemMenu, setShowItemMenu] = useState(false);
@@ -61,11 +66,15 @@ const Collection = () => {
   const [showOverridePriceModal, setShowOverridePriceModal] = useState(false);
   const [overridePriceData, setOverridePriceData] = useState(null);
   const [marketValueOverrides, setMarketValueOverrides] = useState({});
-  const [showOrderBookModal, setShowOrderBookModal] = useState(false);
-  const [orderBookData, setOrderBookData] = useState(null);
-  const [selectedOrderBookIds, setSelectedOrderBookIds] = useState(new Set());
-  const [isOrderBookSelectionMode, setIsOrderBookSelectionMode] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  
+  // Bulk order book states
+  const [showBulkOrderBook, setShowBulkOrderBook] = useState(false);
+  const [editingOrderGroupId, setEditingOrderGroupId] = useState(null);
+  const [inlineEditData, setInlineEditData] = useState({});
+  const [screenWidth, setScreenWidth] = useState(window.innerWidth);
+  const [isLocationFocused, setIsLocationFocused] = useState(false);
+  const [isLocationDropdownClicked, setIsLocationDropdownClicked] = useState(false);
 
   // Load market value overrides from localStorage on component mount
   useEffect(() => {
@@ -120,6 +129,7 @@ const Collection = () => {
   // Touch gesture handlers for item menu
   const handleItemMenuClose = () => {
     setIsItemMenuClosing(true);
+    closeCollectionMenu();
     setTimeout(() => {
       setShowItemMenu(false);
       setIsItemMenuClosing(false);
@@ -180,7 +190,7 @@ const Collection = () => {
   const handleBulkMenuClose = () => {
     setIsBulkMenuClosing(true);
     setTimeout(() => {
-      handleBulkMenuClose();
+      setShowBulkActionsMenu(false);
       setIsBulkMenuClosing(false);
       setBulkMenuDragData({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
       closeModal();
@@ -248,6 +258,7 @@ const Collection = () => {
     
     if (newSelectedItems.size === 0) {
       setIsSelectionMode(false);
+      exitBulkSelectionMode();
     }
   };
 
@@ -265,18 +276,21 @@ const Collection = () => {
     if (totalItems === 1) {
       setSelectedItemId(itemId);
       setShowItemMenu(true);
+      openCollectionMenu();
       openModal();
       return;
     }
     
     // For multiple items, enter selection mode
     setIsSelectionMode(true);
+    enterBulkSelectionMode();
     handleItemSelect(itemId);
   };
 
   const clearSelection = () => {
     setSelectedItems(new Set());
     setIsSelectionMode(false);
+    exitBulkSelectionMode();
   };
 
   const selectAll = () => {
@@ -294,6 +308,7 @@ const Collection = () => {
       const allItemIds = new Set((collectionData.items || []).map(item => item.id));
       setSelectedItems(allItemIds);
       setIsSelectionMode(true);
+      enterBulkSelectionMode();
     }
   };
 
@@ -807,11 +822,12 @@ const Collection = () => {
       }
       return item.status === selectedFilter;
     }).length;
-    if (totalItems <= 1 && isSelectionMode) {
+    if (totalItems <= 1 && isBulkSelectionMode) {
       setIsSelectionMode(false);
+      exitBulkSelectionMode();
       setSelectedItems(new Set());
     }
-  }, [collectionData.items, selectedFilter, isSelectionMode]);
+  }, [collectionData.items, selectedFilter, isBulkSelectionMode]);
 
   // Generate real chart data based on actual order history
   const generateChartData = () => {
@@ -1351,7 +1367,7 @@ const Collection = () => {
         </div>
 
         {/* Items Grid */}
-        <div className={`px-3 md:px-6 lg:px-8 ${isSelectionMode ? 'pb-20' : 'pb-4'}`}>
+        <div className={`px-3 md:px-6 lg:px-8 ${isBulkSelectionMode ? 'pb-24' : 'pb-4'}`}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
           {(collectionData.items || [])
             .filter(item => {
@@ -1369,9 +1385,9 @@ const Collection = () => {
                    <div 
                      key={item.id} 
                      className={`relative bg-gray-900 border border-gray-800 rounded-xl overflow-hidden transition-all duration-200 ${
-                       isSelected && isSelectionMode && (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length > 1
+                       isSelected && isBulkSelectionMode && (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length > 1
                          ? 'border-indigo-400 bg-indigo-900/20 shadow-indigo-400/25' 
-                         : 'hover:bg-indigo-900/30 hover:border-indigo-400 hover:shadow-indigo-400/25'
+                         : 'hover:bg-gray-800/50 hover:border-gray-600'
                      }`}
                      onTouchStart={(e) => {
                        const totalItems = (collectionData.items || []).filter(item => {
@@ -1505,7 +1521,7 @@ const Collection = () => {
                     </div>
                     
                     {/* Menu Button / Check Icon - Bottom Right */}
-                    {isSelected && isSelectionMode && (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length > 1 ? (
+                    {isSelected && isBulkSelectionMode && (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length > 1 ? (
                       <div className="text-blue-400">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -1517,6 +1533,7 @@ const Collection = () => {
                           e.stopPropagation();
                           setSelectedItemId(item.id);
                           setShowItemMenu(true);
+                          openCollectionMenu();
                         }}
                         className="text-gray-400 hover:text-white"
                       >
@@ -1580,52 +1597,158 @@ const Collection = () => {
         />
       )}
 
-      {/* Bulk Actions Bar - Fixed at bottom - Only show if more than 1 item */}
-      {isSelectionMode && (collectionData.items || []).filter(item => {
+      {/* Backdrop blur overlay when expanded actions menu is active */}
+      {isBulkSelectionMode && showBulkActionsMenu && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" />
+      )}
+
+      {/* Bulk Selection Preview Bar - Fixed at bottom with expandable actions */}
+      {isBulkSelectionMode && !showBulkOrderBook && !showOverridePriceModal && selectedItems.size > 0 && (
+        <div className={`fixed bottom-0 left-0 right-0 z-50 bg-gray-950 border-t border-gray-700/30 transition-all duration-300 ease-out ${
+          showBulkActionsMenu ? 'rounded-t-3xl' : ''
+        }`}>
+          <div className="flex flex-col">
+            {/* Expanded Actions - Slides down from above */}
+            <div className={`overflow-hidden transition-all duration-300 ease-out ${
+              showBulkActionsMenu ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+            }`}>
+              <div className="border-t border-gray-600/30 border-b border-gray-700/50 bg-gray-900/50 backdrop-blur-sm rounded-t-2xl">
+                <div className="px-6 py-4 space-y-3">
+                  {/* View Order Book */}
+                  <button 
+                    className="w-full flex items-center justify-between p-4 bg-gray-800/30 border border-gray-600/50 rounded-xl hover:bg-gray-700/50 transition-colors"
+                    onClick={() => {
+                      setShowBulkOrderBook(true);
+                      setShowBulkActionsMenu(false);
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-indigo-600/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                          <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
+                        </svg>
+                      </div>
+                      <div className="text-left">
+                        <div className="text-sm font-medium text-white">View Order Book</div>
+                        <div className="text-xs text-gray-400">View and manage all orders for selected items</div>
+                      </div>
+                    </div>
+                    <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+
+                  {/* Override Market Price */}
+                  <button 
+                    className="w-full flex items-center justify-between p-4 bg-gray-800/30 border border-gray-600/50 rounded-xl hover:bg-gray-700/50 transition-colors"
+                    onClick={() => {
+                      const selectedItemsArray = (collectionData.items || []).filter(item => selectedItems.has(item.id));
+                      const overrideData = {
+                        isBulk: true,
+                        items: selectedItemsArray.map(item => ({
+                          id: item.id,
+                          name: item.name,
+                          value: item.value || 0,
+                          image: item.image
+                        }))
+                      };
+                      setOverridePriceData(overrideData);
+                      setShowOverridePriceModal(true);
+                      setShowBulkActionsMenu(false);
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-purple-600/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-purple-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+                        </svg>
+                      </div>
+                      <div className="text-left">
+                        <div className="text-sm font-medium text-white">Override Market Price</div>
+                        <div className="text-xs text-gray-400">Set custom market values for your view</div>
+                      </div>
+                    </div>
+                    <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Collapsed Preview - Always visible */}
+            <div className="flex flex-col px-6 py-3">
+              {/* Header with stats and actions */}
+              <div className="flex items-center justify-between w-full mb-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="text-xs font-medium text-gray-300 truncate">
+                    {selectedItems.size} {selectedItems.size === 1 ? 'Item' : 'Items'} Selected
+                  </span>
+                  {selectedItems.size > 0 && (() => {
+                    const selectedItemsArray = (collectionData.items || []).filter(item => selectedItems.has(item.id));
+                    const totalValue = selectedItemsArray.reduce((sum, item) => {
+                      const marketValue = marketValueOverrides[item.id] !== undefined ? marketValueOverrides[item.id] : (item.value || 0);
+                      return sum + (marketValue * item.quantity);
+                    }, 0);
+                    return (
+                      <>
+                        <span className="text-xs text-gray-400 flex-shrink-0">•</span>
+                        <span className="text-xs font-medium text-white flex-shrink-0">${totalValue.toFixed(2)}</span>
+                      </>
+                    );
+                  })()}
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                  <button
+                    onClick={() => {
+                      const allFilteredItems = (collectionData.items || []).filter(item => {
         if (selectedFilter === 'All') return true;
         if (selectedFilter === 'Graded') {
           return item.status.includes('PSA') || item.status.includes('BGS') || 
                  item.status.includes('CGC') || item.status.includes('SGC');
         }
         return item.status === selectedFilter;
-      }).length > 1 && (
-        <div className="fixed bottom-16 left-0 right-0 modal-overlay" style={{ zIndex: 10002 }}>
-          <div className="bg-blue-500 border-t border-blue-400 px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-white font-medium">
-                  {selectedItems.size}/{(collectionData.items || []).filter(item => {
+                      });
+                      
+                      if (selectedItems.size === allFilteredItems.length) {
+                        // All selected, so deselect all
+                        clearSelection();
+                      } else {
+                        // Not all selected, so select all
+                        selectAll();
+                      }
+                    }}
+                    className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors whitespace-nowrap"
+                  >
+                    {(() => {
+                      const allFilteredItems = (collectionData.items || []).filter(item => {
                     if (selectedFilter === 'All') return true;
                     if (selectedFilter === 'Graded') {
                       return item.status.includes('PSA') || item.status.includes('BGS') || 
                              item.status.includes('CGC') || item.status.includes('SGC');
                     }
                     return item.status === selectedFilter;
-                  }).length} Selected
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={selectAll}
-                  className="px-3 py-1 bg-blue-400 hover:bg-blue-300 rounded-md text-xs text-white transition-colors"
-                >
-                  Select All
+                      });
+                      return selectedItems.size === allFilteredItems.length ? 'Deselect All' : 'Select All';
+                    })()}
                 </button>
                 <button 
                   onClick={() => {
-                    setShowBulkActionsMenu(true);
-                    openModal();
+                      setShowBulkActionsMenu(!showBulkActionsMenu);
                   }}
-                  className="px-3 py-1 bg-blue-400 hover:bg-blue-300 rounded-md text-xs text-white transition-colors flex items-center gap-1"
+                    className={`px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap ${
+                      showBulkActionsMenu ? 'bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                    }`}
                 >
-                  Bulk Actions
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    Actions
+                    <svg className={`w-3 h-3 flex-shrink-0 transition-transform duration-300 ease-out ${showBulkActionsMenu ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
                 </button>
                 <button
                   onClick={clearSelection}
-                  className="text-white hover:text-blue-400 transition-colors"
+                    className="text-gray-400 hover:text-white transition-colors p-1 flex-shrink-0"
                 >
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -1633,76 +1756,65 @@ const Collection = () => {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Actions Menu Overlay */}
-      {showBulkActionsMenu && (
-        <div 
-          className="fixed inset-0 bg-black/50 flex items-end modal-overlay"
-          onClick={handleBulkMenuClose}
-        >
-          <div 
-            className="w-full bg-gray-900 border border-blue-400/50 rounded-t-2xl max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              animation: isBulkMenuClosing ? 'slideDown 0.3s ease-out' : 'slideUp 0.3s ease-out',
-              transform: getBulkMenuTransform(),
-              transition: bulkMenuDragData.isDragging ? 'none' : 'transform 0.3s ease-out'
-            }}
-            onTouchStart={handleBulkMenuTouchStart}
-            onTouchMove={handleBulkMenuTouchMove}
-            onTouchEnd={handleBulkMenuTouchEnd}
-          >
-            {/* Header */}
-            <div className="px-4 py-4 border-b border-gray-700">
-              <h2 className="text-sm font-semibold text-white">
-                Change {selectedItems.size} Selection{selectedItems.size !== 1 ? 's' : ''}
-              </h2>
+              
+              {/* Image previews */}
+              <div className="flex items-center gap-3 overflow-x-auto">
+                {(collectionData.items || [])
+                  .filter(item => selectedItems.has(item.id))
+                  .slice(0, 8)
+                  .map((item) => (
+                    <div 
+                      key={item.id}
+                      className="relative group cursor-pointer flex-shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleItemSelect(item.id);
+                      }}
+                    >
+                      {item.image ? (
+                        <img 
+                          src={item.image} 
+                          alt={item.name}
+                          className="w-10 h-14 object-contain rounded transition-opacity group-hover:opacity-50"
+                          style={{ imageRendering: 'crisp-edges' }}
+                        />
+                      ) : (
+                        <div className="w-10 h-14 bg-gray-800 rounded flex items-center justify-center">
+                          <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd"/>
+                          </svg>
             </div>
-
-            {/* Action Options */}
-            <div className="pb-6">
-              {/* Edit Price Paid */}
-              <button className="w-full flex items-center justify-between p-4 hover:bg-gray-700/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                      )}
+                      {/* Hover overlay with remove button */}
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  <div className="text-left">
-                    <div className="text-xs font-medium text-white">Edit Price Paid</div>
-                    <div className="text-xs text-gray-400">Change the price you paid for these selections.</div>
                   </div>
                 </div>
-                <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                </svg>
-              </button>
-
-              {/* Delete All Selected */}
-              <button className="w-full flex items-center justify-between p-4 hover:bg-gray-700/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd"/>
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/>
-                  </svg>
-                  <div className="text-left">
-                    <div className="text-xs text-red-400 font-medium">Delete All Selected</div>
-                    <div className="text-xs text-gray-400">Remove these selections from your collection.</div>
+                      {/* Quantity badge if > 1 */}
+                      {item.quantity > 1 && (
+                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center border-2 border-gray-950">
+                          <span className="text-xs font-semibold text-white">{item.quantity}</span>
                   </div>
+                      )}
                 </div>
-                <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                </svg>
-              </button>
+                  ))}
+                {selectedItems.size > 8 && (
+                  <div className="flex-shrink-0 w-10 h-14 bg-gray-800 rounded flex items-center justify-center">
+                    <span className="text-xs font-medium text-gray-400">+{selectedItems.size - 8}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
+
 
       {/* Individual Item Menu Overlay - Hide when bulk actions bar is showing */}
-      {showItemMenu && !isSelectionMode && (
+      {showItemMenu && !isBulkSelectionMode && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end modal-overlay transition-opacity duration-200"
           onClick={handleItemMenuClose}
@@ -1752,27 +1864,12 @@ const Collection = () => {
                     navigator.vibrate(10);
                   }
                   
-                  // Get all orders for this item
-                  const itemOrders = orders.filter(order => order.item_id === selectedItemId);
-                  const item = collectionData.items?.find(item => item.id === selectedItemId);
-                  
-                  // Debug logging
-                  console.log('🔍 Order Book Debug:', {
-                    selectedItemId,
-                    totalOrders: orders.length,
-                    filteredOrders: itemOrders.length,
-                    itemFound: !!item,
-                    itemName: item?.name,
-                    firstFewOrders: orders.slice(0, 3).map(o => ({ id: o.id, item_id: o.item_id, item_name: o.item_name }))
-                  });
-                  
-                  setOrderBookData({
-                    itemId: selectedItemId,
-                    itemName: item?.name || 'Unknown Item',
-                    orders: itemOrders
-                  });
-                  setShowOrderBookModal(true);
+                  // Use the new bulk order book system
+                  // Set up bulk selection mode for this single item
+                  setSelectedItems(new Set([selectedItemId]));
+                  setShowBulkOrderBook(true);
                   handleItemMenuClose();
+                  
                 }}
               >
                 <div className="flex items-center gap-4">
@@ -1805,15 +1902,15 @@ const Collection = () => {
                   const item = collectionData.items?.find(item => item.id === selectedItemId);
                   console.log('🎯 Found item:', item, 'selectedItemId:', selectedItemId);
                   if (item) {
-                    const overrideKey = selectedItemId;
-                    const currentOverride = marketValueOverrides[overrideKey];
-                    const originalValue = item.value || 0;
-                    
+                    // Set up data for single item override
                     const overrideData = {
-                      itemId: selectedItemId,
-                      itemName: item.name,
-                      currentMarketValue: currentOverride ? currentOverride.toFixed(2) : originalValue.toFixed(2),
-                      originalMarketValue: originalValue.toFixed(2)
+                      isBulk: false,
+                      items: [{
+                        id: item.id,
+                        name: item.name,
+                        value: item.value || 0,
+                        image: item.image
+                      }]
                     };
                     
                     console.log('🎯 Setting override data:', overrideData);
@@ -1856,6 +1953,786 @@ const Collection = () => {
           </div>
         </div>
       )}
+
+      {/* Bulk Order Book View - Grouped by Item */}
+      {showBulkOrderBook && selectedItems.size > 0 && (() => {
+        // Get all orders for selected items
+        const selectedItemsOrders = orders.filter(order => 
+          selectedItems.has(order.item_id)
+        );
+        
+        // Group orders by item
+        const groupedOrders = {};
+        selectedItemsOrders.forEach(order => {
+          if (!groupedOrders[order.item_id]) {
+            const item = collectionData.items?.find(i => i.id === order.item_id);
+            groupedOrders[order.item_id] = {
+              itemId: order.item_id,
+              itemName: order.item_name || item?.name || 'Unknown Item',
+              itemImage: item?.image,
+              itemType: item?.status || 'Unknown',
+              orders: []
+            };
+          }
+          groupedOrders[order.item_id].orders.push(order);
+        });
+
+        return (
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]"
+            onClick={() => {
+              setShowBulkOrderBook(false);
+              setEditingOrderGroupId(null);
+              setInlineEditData({});
+            }}
+          >
+            <div 
+              className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[90vh] flex flex-col animate-slide-up"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-2">
+                <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
+              </div>
+
+              {/* Header - Fixed at top */}
+              <div className="flex-shrink-0 px-6 py-4 border-b border-gray-700/50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">
+                      {editingOrderGroupId ? 
+                        (inlineEditData[editingOrderGroupId]?.isMarkingAsSold ? 'Marking Order as Sold' : 'Editing Order') : 
+                        'Viewing On Hand Orders'
+                      }
+                    </h2>
+                    <p className="text-sm text-gray-400 m-0">
+                      {editingOrderGroupId ? 
+                        (inlineEditData[editingOrderGroupId]?.isMarkingAsSold ? 'You are marking the following items as sold.' : 'You are about to change details in the order book.') : 
+                        'Edit, mark as sold or delete orders all together.'
+                      }
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowBulkOrderBook(false);
+                      setEditingOrderGroupId(null);
+                      setInlineEditData({});
+                    }}
+                    className="text-gray-400 hover:text-white transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Orders List */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="px-6 py-2">
+                  {Object.values(groupedOrders).map((group) => (
+                    <div key={group.itemId} className="mb-4">
+                      {group.orders.map((order, orderIndex) => {
+                        const orderGroupId = `${group.itemId}-${orderIndex}`;
+                        const isEditing = editingOrderGroupId === orderGroupId;
+                        const editData = inlineEditData[orderGroupId] || {};
+
+                        return (
+                          <div
+                            key={order.id}
+                            className={`bg-gray-800/20 border border-gray-700/30 rounded-lg p-4 hover:bg-gray-800/30 transition-all duration-300 mb-3 ${editingOrderGroupId && editingOrderGroupId !== orderGroupId ? 'blur-sm opacity-50 pointer-events-none' : ''}`}
+                          >
+                            {/* Full Width Header */}
+                            <div className="mb-4">
+                              {/* Item Name and Actions */}
+                              <div className="flex items-center justify-between mb-0">
+                                <h3 className="text-sm font-semibold text-white truncate">
+                                  {group.itemName}
+                                </h3>
+                                <div className="flex gap-2">
+                                  {isEditing ? (
+                                    <>
+                                      <button
+                                        onClick={async () => {
+                                          try {
+                                            if (editData.isMarkingAsSold) {
+                                              // Mark as sold functionality
+                                              const sellData = {
+                                                sellDate: editData.sell_date,
+                                                sellPrice: (editData.sell_price_cents / 100).toFixed(2),
+                                                quantity: editData.sell_quantity,
+                                                location: editData.sell_location || '',
+                                                shipping: (editData.sell_fees_cents / 100).toFixed(2),
+                                                notes: ''
+                                              };
+
+                                              await markOrderAsSold(order.id, sellData);
+                                            } else {
+                                              // Regular edit functionality
+                                              const updateData = {
+                                                buy_date: editData.buy_date || order.buy_date,
+                                                buy_location: editData.buy_location || order.buy_location,
+                                                buy_quantity: editData.buy_quantity || order.buy_quantity,
+                                                buy_price_cents: editData.buy_price_cents !== undefined ? editData.buy_price_cents : order.buy_price_cents
+                                              };
+
+                                              await updateOrder(supabase, order.id, updateData);
+                                            }
+
+                                            await Promise.all([
+                                              queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
+                                              queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary })
+                                            ]);
+
+                                            setEditingOrderGroupId(null);
+                                            setInlineEditData(prev => {
+                                              const newData = { ...prev };
+                                              delete newData[orderGroupId];
+                                              return newData;
+                                            });
+                                          } catch (error) {
+                                            console.error('Error updating order:', error);
+                                          }
+                                        }}
+                                        className="w-6 h-6 bg-emerald-600 rounded-full flex items-center justify-center hover:bg-emerald-700 transition-colors"
+                                      >
+                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setEditingOrderGroupId(null);
+                                          setInlineEditData(prev => {
+                                            const newData = { ...prev };
+                                            delete newData[orderGroupId];
+                                            return newData;
+                                          });
+                                        }}
+                                        className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center hover:bg-gray-700 transition-colors"
+                                      >
+                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          setEditingOrderGroupId(orderGroupId);
+                                            setInlineEditData(prev => ({
+                                              ...prev,
+                                              [orderGroupId]: {
+                                                buy_date: order.buy_date,
+                                                buy_location: order.buy_location,
+                                                buy_quantity: order.buy_quantity,
+                                                buy_price_cents: order.buy_price_cents,
+                                                total_cost: ((order.buy_price_cents / 100) * order.buy_quantity).toFixed(2)
+                                              }
+                                            }));
+                                        }}
+                                        className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center hover:bg-gray-700 transition-colors"
+                                      >
+                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setEditingOrderGroupId(orderGroupId);
+                                          setInlineEditData(prev => ({
+                                            ...prev,
+                                            [orderGroupId]: {
+                                              ...prev[orderGroupId],
+                                              isMarkingAsSold: true,
+                                              sell_date: new Date().toISOString().split('T')[0],
+                                              sell_price_cents: order.buy_price_cents,
+                                              sell_quantity: order.buy_quantity,
+                                              sell_location: '',
+                                              sell_fees_cents: 0,
+                                              sell_fee_percentage: null
+                                            }
+                                          }));
+                                        }}
+                                        className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center hover:bg-indigo-700 transition-colors"
+                                      >
+                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                                        </svg>
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          if (!window.confirm('Delete this order?')) return;
+                                          
+                                          try {
+                                            const { error } = await supabase.rpc('delete_order_clean', {
+                                              p_order_id: order.id
+                                            });
+
+                                            if (error) throw error;
+
+                                            await Promise.all([
+                                              queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
+                                              queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary })
+                                            ]);
+                                          } catch (error) {
+                                            console.error('Error deleting order:', error);
+                                          }
+                                        }}
+                                        className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition-colors"
+                                      >
+                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Item Type */}
+                              <div className="text-xs text-indigo-400 mb-3">
+                                {group.itemType}
+                              </div>
+
+                              {/* Border separator */}
+                              <div className="border-b border-gray-600/50 mb-3"></div>
+                            </div>
+
+                            {/* Content Area with Image and Order Details */}
+                            <div className="flex items-start gap-4">
+                              {/* Item Image */}
+                              <div className="flex flex-col items-center gap-2">
+                                {group.itemImage && (
+                                  <img 
+                                    src={group.itemImage} 
+                                    alt={group.itemName}
+                                    className="w-16 h-20 object-contain rounded flex-shrink-0"
+                                  />
+                                )}
+                                <div className="w-16 px-2 py-1 bg-indigo-600/20 border border-indigo-500/30 rounded text-xs text-indigo-400 text-center" style={{ fontSize: '10px' }}>
+                                  On Hand
+                                </div>
+                              </div>
+
+                              {/* Order Details */}
+                              <div className="flex-1 min-w-0">
+
+                                  {/* Order Details Grid */}
+                                  <div className={isEditing ? "space-y-4" : "space-y-8"}>
+                                    {editData.isMarkingAsSold ? (
+                                      /* Mark as Sold Fields */
+                                      <>
+                                        {/* Top Row: Sell Date, Sell Location */}
+                                        <div className="grid grid-cols-12 gap-3">
+                                          <div className="col-span-6">
+                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Sell Date</div>
+                                            <input
+                                              type="date"
+                                              value={editData.sell_date || new Date().toISOString().split('T')[0]}
+                                              onChange={(e) => {
+                                                setInlineEditData(prev => ({
+                                                  ...prev,
+                                                  [orderGroupId]: { ...prev[orderGroupId], sell_date: e.target.value }
+                                                }));
+                                              }}
+                                              className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                              style={{ fontSize: '12px' }}
+                                            />
+                                          </div>
+                                          <div className="col-span-6">
+                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Sell Location</div>
+                                            <div className="relative">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setIsLocationDropdownClicked(prev => !prev);
+                                                  setIsLocationFocused(true);
+                                                }}
+                                                className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors text-left flex items-center justify-between"
+                                                style={{ fontSize: '12px' }}
+                                              >
+                                                <div className="flex items-center gap-2 truncate">
+                                                  <span className="truncate">{editData.sell_location || 'Select Marketplace'}</span>
+                                                  {editData.sell_fee_percentage !== undefined && editData.sell_fee_percentage !== null && (
+                                                    <span className="text-gray-400 text-xs flex-shrink-0">
+                                                      ({editData.sell_fee_percentage === 0 ? '0%' : editData.sell_fee_percentage.toFixed(2) + '%'})
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                              </button>
+                                              
+                                              {/* Marketplaces Dropdown */}
+                                              {(isLocationFocused || isLocationDropdownClicked) && (() => {
+                                                const marketplaces = [
+                                                  { id: 'ebay', name: 'eBay', fee_percentage: 12.9 },
+                                                  { id: 'tcgplayer', name: 'TCGPlayer', fee_percentage: 10.25 },
+                                                  { id: 'cardkingdom', name: 'Card Kingdom', fee_percentage: 0 },
+                                                  { id: 'starcitygames', name: 'StarCityGames', fee_percentage: 0 },
+                                                  { id: 'facebook', name: 'Facebook Marketplace', fee_percentage: 0 },
+                                                  { id: 'mercari', name: 'Mercari', fee_percentage: 10 },
+                                                  { id: 'whatnot', name: 'Whatnot', fee_percentage: 8 },
+                                                  { id: 'local', name: 'Local Sale', fee_percentage: 0 },
+                                                  { id: 'other', name: 'Other', fee_percentage: 0 }
+                                                ];
+                                                
+                                                return (
+                                                  <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-[10000] max-h-48 overflow-y-auto">
+                                                    {marketplaces.map((marketplace) => (
+                                                      <button
+                                                        key={marketplace.id}
+                                                        type="button"
+                                                        onClick={() => {
+                                                          const sellPrice = editData.sell_price_cents !== undefined 
+                                                            ? editData.sell_price_cents / 100 
+                                                            : order.buy_price_cents / 100;
+                                                          const autoFee = marketplace.fee_percentage > 0 
+                                                            ? (sellPrice * marketplace.fee_percentage / 100) 
+                                                            : 0;
+                                                          
+                                                          setInlineEditData(prev => ({
+                                                            ...prev,
+                                                            [orderGroupId]: { 
+                                                              ...prev[orderGroupId], 
+                                                              sell_location: marketplace.name,
+                                                              sell_fees_cents: Math.round(autoFee * 100),
+                                                              // Store the fee percentage for display
+                                                              sell_fee_percentage: marketplace.fee_percentage
+                                                            }
+                                                          }));
+                                                          setIsLocationFocused(false);
+                                                          setIsLocationDropdownClicked(false);
+                                                        }}
+                                                        className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors"
+                                                        style={{ fontSize: '12px' }}
+                                                      >
+                                                        {marketplace.name} {marketplace.fee_percentage > 0 && `(${marketplace.fee_percentage}%)`}
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                );
+                                              })()}
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Bottom Row: Sell Quantity, Sell Price, Fees */}
+                                        <div className="grid grid-cols-12 gap-3">
+                                          <div className="col-span-3">
+                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Qty</div>
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              value={editData.sell_quantity !== undefined ? editData.sell_quantity : order.buy_quantity}
+                                              onChange={(e) => {
+                                                setInlineEditData(prev => ({
+                                                  ...prev,
+                                                  [orderGroupId]: { ...prev[orderGroupId], sell_quantity: parseInt(e.target.value) || 1 }
+                                                }));
+                                              }}
+                                              className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                              style={{ fontSize: '12px' }}
+                                            />
+                                          </div>
+                                          <div className="col-span-4">
+                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Sell Price</div>
+                                            <input
+                                              type="number"
+                                              step="0.01"
+                                              min="0"
+                                              value={editData.sell_price_cents !== undefined ? (editData.sell_price_cents / 100) : (order.buy_price_cents / 100)}
+                                              onChange={(e) => {
+                                                setInlineEditData(prev => ({
+                                                  ...prev,
+                                                  [orderGroupId]: { ...prev[orderGroupId], sell_price_cents: Math.round(parseFloat(e.target.value || 0) * 100) }
+                                                }));
+                                              }}
+                                              className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                              style={{ fontSize: '12px' }}
+                                            />
+                                          </div>
+                                          <div className="col-span-5">
+                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Shipping</div>
+                                            <input
+                                              type="number"
+                                              step="0.01"
+                                              min="0"
+                                              value={editData.sell_fees_cents !== undefined ? (editData.sell_fees_cents / 100) : 0}
+                                              onChange={(e) => {
+                                                setInlineEditData(prev => ({
+                                                  ...prev,
+                                                  [orderGroupId]: { 
+                                                    ...prev[orderGroupId], 
+                                                    sell_fees_cents: Math.round(parseFloat(e.target.value || 0) * 100),
+                                                    // Clear auto percentage when manually edited
+                                                    sell_fee_percentage: null
+                                                  }
+                                                }));
+                                              }}
+                                              placeholder="0.00"
+                                              className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                              style={{ fontSize: '12px' }}
+                                            />
+                                          </div>
+                                        </div>
+
+                                      </>
+                                    ) : (
+                                      /* Regular Edit Fields */
+                                      <>
+                                        {/* Top Row: Order # (non-editing only), Date, and Location */}
+                                        <div className={isEditing ? "grid grid-cols-12 gap-3" : "grid grid-cols-12 gap-6"}>
+                                          {/* Order # - Only show when not editing */}
+                                          {!isEditing && (
+                                            <div className="col-span-3">
+                                              <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Order #</div>
+                                              <div className="text-white text-left" style={{ fontSize: '12px' }}>
+                                                {order.order_number || 'N/A'}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Date */}
+                                          <div className={isEditing ? "col-span-6" : "col-span-4"}>
+                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Date</div>
+                                            {isEditing ? (
+                                              <input
+                                                type="date"
+                                                value={editData.buy_date || order.buy_date}
+                                                onChange={(e) => {
+                                                  setInlineEditData(prev => ({
+                                                    ...prev,
+                                                    [orderGroupId]: { ...prev[orderGroupId], buy_date: e.target.value }
+                                                  }));
+                                                }}
+                                                className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                style={{ fontSize: '12px' }}
+                                              />
+                                            ) : (
+                                              <div className="text-white" style={{ fontSize: '12px' }}>
+                                                {new Date(order.buy_date).toLocaleDateString()}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Location */}
+                                          <div className={isEditing ? "col-span-6" : "col-span-5"}>
+                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Location</div>
+                                            {isEditing ? (
+                                              <div className="relative">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setIsLocationDropdownClicked(prev => !prev);
+                                                    setIsLocationFocused(true);
+                                                  }}
+                                                  className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors text-left flex items-center justify-between"
+                                                  style={{ fontSize: '12px' }}
+                                                >
+                                                  <span className="truncate">{editData.buy_location || order.buy_location || 'Select'}</span>
+                                                  <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                  </svg>
+                                                </button>
+                                                
+                                                {/* Retailers Dropdown */}
+                                                {(isLocationFocused || isLocationDropdownClicked) && (() => {
+                                                  const retailers = [
+                                                    { id: 1, display_name: 'eBay', location: null },
+                                                    { id: 2, display_name: 'TCGPlayer', location: null },
+                                                    { id: 3, display_name: 'Amazon', location: null },
+                                                    { id: 4, display_name: 'Card Kingdom', location: null },
+                                                    { id: 5, display_name: 'StarCityGames', location: null },
+                                                    { id: 6, display_name: 'Local Card Shop', location: null },
+                                                    { id: 7, display_name: 'Facebook Marketplace', location: null },
+                                                    { id: 8, display_name: 'Mercari', location: null },
+                                                    { id: 9, display_name: 'Whatnot', location: null },
+                                                    { id: 10, display_name: 'Other', location: null }
+                                                  ];
+                                                  
+                                                  const filteredRetailers = isLocationDropdownClicked 
+                                                    ? retailers 
+                                                    : retailers.filter(retailer => 
+                                                        retailer.display_name.toLowerCase().includes((editData.buy_location || order.buy_location || '').toLowerCase())
+                                                      );
+                                                  
+                                                  return filteredRetailers.length > 0 ? (
+                                                    <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded-lg shadow-xl z-[10000] max-h-48 overflow-y-auto">
+                                                      {filteredRetailers.map((retailer) => (
+                                                        <button
+                                                          key={retailer.id}
+                                                          type="button"
+                                                          onClick={() => {
+                                                            setInlineEditData(prev => ({
+                                                              ...prev,
+                                                              [orderGroupId]: { ...prev[orderGroupId], buy_location: retailer.display_name }
+                                                            }));
+                                                            setIsLocationFocused(false);
+                                                            setIsLocationDropdownClicked(false);
+                                                          }}
+                                                          className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors"
+                                                          style={{ fontSize: '12px' }}
+                                                        >
+                                                          {retailer.display_name}
+                                                        </button>
+                                                      ))}
+                                                    </div>
+                                                  ) : null;
+                                                })()}
+                                              </div>
+                                            ) : (
+                                              <div className="text-white truncate" style={{ fontSize: '12px' }}>
+                                                {order.buy_location || 'N/A'}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Bottom Row: Quantity, Price (per item), and Total Cost */}
+                                        <div className={isEditing ? "grid grid-cols-12 gap-3" : "grid grid-cols-12 gap-6"}>
+                                          {/* Quantity */}
+                                          <div className="col-span-3">
+                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Qty</div>
+                                            {isEditing ? (
+                                              <input
+                                                type="number"
+                                                min="1"
+                                                value={editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity}
+                                                onChange={(e) => {
+                                                  const inputValue = e.target.value;
+                                                  
+                                                  // Allow empty string during editing
+                                                  if (inputValue === '') {
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { 
+                                                        ...prev[orderGroupId], 
+                                                        buy_quantity: '',
+                                                        total_cost: '0.00'
+                                                      }
+                                                    }));
+                                                    return;
+                                                  }
+                                                  
+                                                  const newQty = parseInt(inputValue);
+                                                  if (!isNaN(newQty) && newQty >= 1) {
+                                                    const pricePerItem = editData.buy_price_cents !== undefined 
+                                                      ? editData.buy_price_cents / 100
+                                                      : order.buy_price_cents / 100;
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { 
+                                                        ...prev[orderGroupId], 
+                                                        buy_quantity: newQty,
+                                                        total_cost: (pricePerItem * newQty).toFixed(2)
+                                                      }
+                                                    }));
+                                                  }
+                                                }}
+                                                onBlur={(e) => {
+                                                  // Ensure minimum value of 1 when losing focus
+                                                  const inputValue = e.target.value;
+                                                  if (inputValue === '' || parseInt(inputValue) < 1) {
+                                                    const defaultQty = order.buy_quantity;
+                                                    const pricePerItem = editData.buy_price_cents !== undefined 
+                                                      ? editData.buy_price_cents / 100
+                                                      : order.buy_price_cents / 100;
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { 
+                                                        ...prev[orderGroupId], 
+                                                        buy_quantity: defaultQty,
+                                                        total_cost: (pricePerItem * defaultQty).toFixed(2)
+                                                      }
+                                                    }));
+                                                  }
+                                                }}
+                                                className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                style={{ fontSize: '12px' }}
+                                              />
+                                            ) : (
+                                              <div className="text-white font-medium" style={{ fontSize: '12px' }}>
+                                                {order.buy_quantity}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Price per item */}
+                                          <div className="col-span-4">
+                                            <div className="text-gray-400 mb-1 whitespace-nowrap" style={{ fontSize: '12px' }}>Price/ea</div>
+                                            {isEditing ? (
+                                              <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={editData.buy_price_cents !== undefined ? (editData.buy_price_cents === '' ? '' : editData.buy_price_cents / 100) : (order.buy_price_cents / 100)}
+                                                onChange={(e) => {
+                                                  const inputValue = e.target.value;
+                                                  
+                                                  // Allow empty string during editing
+                                                  if (inputValue === '') {
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { 
+                                                        ...prev[orderGroupId], 
+                                                        buy_price_cents: '',
+                                                        total_cost: ''
+                                                      }
+                                                    }));
+                                                    return;
+                                                  }
+                                                  
+                                                  const newPricePerItem = parseFloat(inputValue);
+                                                  if (!isNaN(newPricePerItem) && newPricePerItem >= 0) {
+                                                    const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
+                                                    const totalCost = newPricePerItem * qty;
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { 
+                                                        ...prev[orderGroupId], 
+                                                        buy_price_cents: Math.round(newPricePerItem * 100),
+                                                        total_cost: totalCost.toFixed(2)
+                                                      }
+                                                    }));
+                                                  }
+                                                }}
+                                                onBlur={(e) => {
+                                                  // Ensure minimum value of 0 when losing focus
+                                                  const inputValue = e.target.value;
+                                                  if (inputValue === '' || parseFloat(inputValue) < 0) {
+                                                    const defaultPrice = order.buy_price_cents / 100;
+                                                    const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
+                                                    const totalCost = defaultPrice * qty;
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { 
+                                                        ...prev[orderGroupId], 
+                                                        buy_price_cents: Math.round(defaultPrice * 100),
+                                                        total_cost: totalCost.toFixed(2)
+                                                      }
+                                                    }));
+                                                  }
+                                                }}
+                                                className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                style={{ fontSize: '12px' }}
+                                              />
+                                            ) : (
+                                              <div className="text-white font-medium" style={{ fontSize: '12px' }}>
+                                                ${(order.buy_price_cents / 100).toFixed(2)}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Total Cost */}
+                                          <div className="col-span-5">
+                                            <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Total Cost</div>
+                                            {isEditing ? (
+                                              <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={editData.total_cost !== undefined ? editData.total_cost : ((order.buy_price_cents / 100) * order.buy_quantity)}
+                                                onChange={(e) => {
+                                                  const inputValue = e.target.value;
+                                                  
+                                                  // Allow empty string during editing
+                                                  if (inputValue === '') {
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { 
+                                                        ...prev[orderGroupId], 
+                                                        total_cost: '',
+                                                        buy_price_cents: ''
+                                                      }
+                                                    }));
+                                                    return;
+                                                  }
+                                                  
+                                                  const newTotal = parseFloat(inputValue);
+                                                  if (!isNaN(newTotal) && newTotal >= 0) {
+                                                    const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
+                                                    const pricePerItem = qty > 0 ? newTotal / qty : 0;
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { 
+                                                        ...prev[orderGroupId], 
+                                                        total_cost: newTotal,
+                                                        buy_price_cents: Math.round(pricePerItem * 100)
+                                                      }
+                                                    }));
+                                                  }
+                                                }}
+                                                onBlur={(e) => {
+                                                  // Ensure minimum value of 0 when losing focus
+                                                  const inputValue = e.target.value;
+                                                  if (inputValue === '' || parseFloat(inputValue) < 0) {
+                                                    const defaultTotal = (order.buy_price_cents / 100) * order.buy_quantity;
+                                                    setInlineEditData(prev => ({
+                                                      ...prev,
+                                                      [orderGroupId]: { 
+                                                        ...prev[orderGroupId], 
+                                                        total_cost: defaultTotal,
+                                                        buy_price_cents: order.buy_price_cents
+                                                      }
+                                                    }));
+                                                  }
+                                                }}
+                                                className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                style={{ fontSize: '12px' }}
+                                              />
+                                            ) : (
+                                              <div className="text-white font-medium" style={{ fontSize: '12px' }}>
+                                                ${((order.buy_price_cents / 100) * order.buy_quantity).toFixed(2)}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Footer - Fixed at bottom */}
+              <div className="flex-shrink-0 px-6 py-4 border-t border-gray-700/50 bg-gray-900/95 backdrop-blur-sm">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => {
+                      setShowBulkOrderBook(false);
+                      setEditingOrderGroupId(null);
+                      setInlineEditData({});
+                    }}
+                    className="py-3 bg-gray-700/50 hover:bg-gray-600/70 rounded-2xl text-white font-medium transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowBulkOrderBook(false);
+                      setEditingOrderGroupId(null);
+                      setInlineEditData({});
+                    }}
+                    className="py-3 bg-indigo-600 hover:bg-indigo-700 rounded-2xl text-white font-medium transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Delete Orders Modal */}
       {showDeleteModal && (
@@ -2142,7 +3019,7 @@ const Collection = () => {
       )}
 
       {/* Override Market Price Modal */}
-      {showOverridePriceModal === true && (
+      {showOverridePriceModal && overridePriceData && (
         <div 
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]"
           onClick={() => {
@@ -2162,80 +3039,134 @@ const Collection = () => {
               <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
             </div>
 
-            {/* Header with close button */}
-            <div className="px-6 py-4 border-b border-gray-700/50 relative">
-              <button
-                onClick={() => {
-                  setShowOverridePriceModal(false);
-                  setOverridePriceData(null);
-                }}
-                className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition-colors"
-              >
-                <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              <h2 className="text-lg font-semibold text-white pr-12">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-700/50">
+              <h2 className="text-lg font-semibold text-white">
                 Override Market Price
               </h2>
-              <p className="text-sm text-gray-400 mt-1 pr-12">
-                {overridePriceData?.itemName}
+              <p className="text-sm text-gray-400 mt-1">
+                Set custom market values for the following items. These values are only temporary and will be replaced when the app syncs new pricing data.
               </p>
             </div>
 
-            {/* Form content */}
-            <div className="px-6 py-6">
-              <div className="space-y-4">
+            {/* Items List */}
+            <div className="px-6 py-4 space-y-3">
+              {overridePriceData.items?.map((item) => {
+                const currentOverride = marketValueOverrides[item.id];
+                const originalValue = item.value || 0;
+
+                return (
+                  <div key={item.id} className="bg-gray-800/30 border border-gray-600/50 rounded-xl p-4">
+                    <div className="flex items-stretch gap-3 h-20">
+                      {/* Item image */}
+                      <div className="w-16 flex-shrink-0 overflow-hidden rounded-lg">
+                        {item.image ? (
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="w-full h-full object-contain rounded-lg"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              const fallback = e.target.nextElementSibling;
+                              if (fallback) fallback.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        <div className={`w-full h-full bg-gray-700 rounded-lg flex items-center justify-center ${item.image ? 'hidden' : 'flex'}`}>
+                          <svg className="w-6 h-6 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd"/>
+                          </svg>
+                        </div>
+                      </div>
+                      
+                      {/* Item details and override input */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-between">
+                        <h3 className="text-xs font-medium text-white truncate">
+                          {item.name}
+                        </h3>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Original Value */}
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">
-                    Custom Market Value
+                            <label className="block text-xs text-gray-400 mb-0.5">
+                              Original
+                            </label>
+                            <div className="w-full px-2 py-1.5 bg-gray-600/30 border border-gray-500/50 rounded text-gray-400 text-xs cursor-not-allowed">
+                              ${originalValue.toFixed(2)}
+                            </div>
+                          </div>
+                          
+                          {/* Custom Override Input */}
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-0.5">
+                              Custom Value
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-lg">$</span>
+                              <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs">$</span>
                     <input
                       type="number"
                       step="0.01"
                       min="0"
-                      defaultValue={overridePriceData?.currentMarketValue}
-                      className="w-full pl-8 pr-4 py-4 bg-gray-800/50 border border-gray-600 rounded-2xl text-white text-lg focus:border-purple-500 focus:outline-none transition-colors"
+                                defaultValue={originalValue}
+                                className="w-full pl-5 pr-2 py-1.5 bg-gray-700/50 border border-gray-600 rounded text-white text-xs focus:border-indigo-400 focus:outline-none transition-colors"
                       placeholder="0.00"
-                      id="overridePriceInput"
+                                data-item-id={item.id}
                     />
+                            </div>
                   </div>
                 </div>
 
-                {/* Info box */}
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <svg className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/>
-                    </svg>
-                    <div>
-                      <div className="text-sm font-medium text-blue-400 mb-1">Personal Override</div>
-                      <div className="text-xs text-gray-300">
-                        This only affects your personal view. The original market value (${overridePriceData?.originalMarketValue}) remains unchanged for other users.
+                        {/* Reset button for this item */}
+                        {currentOverride !== undefined && (
+                          <button
+                            onClick={() => {
+                              setMarketValueOverrides(prev => {
+                                const newOverrides = { ...prev };
+                                delete newOverrides[item.id];
+                                return newOverrides;
+                              });
+                            }}
+                            className="mt-2 px-2 py-1 bg-orange-600/20 hover:bg-orange-600/30 rounded text-orange-400 text-xs font-medium transition-colors"
+                          >
+                            Reset
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
+                );
+              })}
             </div>
 
             {/* Action buttons */}
             <div className="px-6 pb-8 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => {
-                  const newMarketValue = parseFloat(document.getElementById('overridePriceInput').value) || 0;
-                  
-                  // Save the override to state (which will trigger localStorage save)
-                  setMarketValueOverrides(prev => ({
-                    ...prev,
-                    [overridePriceData.itemId]: newMarketValue
-                  }));
+                  setShowOverridePriceModal(false);
+                  setOverridePriceData(null);
+                  }}
+                  className="py-4 bg-gray-700/50 hover:bg-gray-600/70 active:bg-gray-500/70 rounded-2xl text-white font-medium transition-all duration-150 touch-manipulation"
+                >
+                  Cancel
+              </button>
+              <button
+                onClick={() => {
+                    // Collect all custom values from inputs
+                    const inputs = document.querySelectorAll('input[data-item-id]');
+                    const newOverrides = { ...marketValueOverrides };
+                    
+                    inputs.forEach(input => {
+                      const itemId = input.getAttribute('data-item-id');
+                      const newValue = parseFloat(input.value) || 0;
+                      newOverrides[itemId] = newValue;
+                    });
+                    
+                    setMarketValueOverrides(newOverrides);
                   
                   // Add haptic feedback
                   if (navigator.vibrate) {
-                    navigator.vibrate(10);
+                      navigator.vibrate(10);
                   }
                   
                   setShowOverridePriceModal(false);
@@ -2243,8 +3174,8 @@ const Collection = () => {
                   
                   // Show success notification
         setSuccessData({
-          title: 'Market Value Updated!',
-          message: `$${overridePriceData.originalMarketValue} → $${newMarketValue.toFixed(2)}`
+                      title: 'Market Values Updated!',
+                      message: `Updated ${overridePriceData.items?.length || 0} item(s)`
         });
                   setShowSuccessNotification(true);
                   
@@ -2253,285 +3184,13 @@ const Collection = () => {
                     setShowSuccessNotification(false);
                   }, 4000);
                 }}
-                className="w-full py-4 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 rounded-2xl text-white font-semibold transition-all duration-150 touch-manipulation"
-              >
-                Set Custom Value
-              </button>
-              
-              <button
-                onClick={() => {
-                  // Remove the override (reset to original value)
-                  setMarketValueOverrides(prev => {
-                    const newOverrides = { ...prev };
-                    delete newOverrides[overridePriceData.itemId];
-                    return newOverrides;
-                  });
-                  
-                  // Add haptic feedback
-                  if (navigator.vibrate) {
-                    navigator.vibrate([10, 20, 10]);
-                  }
-                  
-                  setShowOverridePriceModal(false);
-                  setOverridePriceData(null);
-                  
-                  // Show success notification
-        setSuccessData({
-          title: 'Market Value Reset!',
-          message: `$${overridePriceData.currentMarketValue} → $${overridePriceData.originalMarketValue}`
-        });
-                  setShowSuccessNotification(true);
-                  
-                  // Auto-dismiss after 4 seconds
-                  setTimeout(() => {
-                    setShowSuccessNotification(false);
-                  }, 4000);
-                }}
-                className="w-full py-4 bg-orange-600/20 hover:bg-orange-600/30 active:bg-orange-600/40 rounded-2xl text-orange-400 font-medium transition-all duration-150 touch-manipulation border border-orange-500/20"
-              >
-                Reset to Original
-              </button>
-              
-              <button
-                onClick={() => {
-                  setShowOverridePriceModal(false);
-                  setOverridePriceData(null);
-                }}
-                className="w-full py-4 bg-gray-700/50 hover:bg-gray-600/70 active:bg-gray-500/70 rounded-2xl text-white font-medium transition-all duration-150 touch-manipulation"
-              >
-                Cancel
+                  className="py-4 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-2xl text-white font-semibold transition-all duration-150 touch-manipulation"
+                >
+                  Save
               </button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Order Book Modal */}
-      {showOrderBookModal && orderBookData && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]"
-          onClick={() => {
-            setShowOrderBookModal(false);
-            setOrderBookData(null);
-            setSelectedOrderBookIds(new Set());
-            setIsOrderBookSelectionMode(false);
-          }}
-        >
-          <div 
-            className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[90vh] overflow-y-auto animate-slide-up"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              animation: 'slideUp 0.3s ease-out'
-            }}
-          >
-            {/* Drag handle */}
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
-            </div>
-
-            {/* Header with close button and selection mode toggle */}
-            <div className="px-6 py-4 border-b border-gray-700/50 relative">
-              <button
-                onClick={() => {
-                  setShowOrderBookModal(false);
-                  setOrderBookData(null);
-                  setSelectedOrderBookIds(new Set());
-                  setIsOrderBookSelectionMode(false);
-                }}
-                className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition-colors"
-              >
-                <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              
-              <div className="flex items-center justify-between pr-12">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">
-                    Order Book
-                  </h2>
-                  <p className="text-sm text-gray-400 mt-1">
-                    {orderBookData.itemName} • {orderBookData.orders.length} orders
-                  </p>
-                </div>
-                
-                {orderBookData.orders.length > 0 && (
-                  <button
-                    onClick={() => {
-                      setIsOrderBookSelectionMode(!isOrderBookSelectionMode);
-                      if (isOrderBookSelectionMode) {
-                        setSelectedOrderBookIds(new Set());
-                      }
-                      if (navigator.vibrate) {
-                        navigator.vibrate(10);
-                      }
-                    }}
-                    className="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 rounded-xl text-blue-400 text-sm font-medium transition-colors"
-                  >
-                    {isOrderBookSelectionMode ? 'Cancel' : 'Select'}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Bulk Actions Bar */}
-            {isOrderBookSelectionMode && selectedOrderBookIds.size > 0 && (
-              <div className="px-6 py-3 bg-blue-600/10 border-b border-blue-500/20">
-                <div className="flex items-center justify-between">
-                  <span className="text-blue-400 text-sm font-medium">
-                    {selectedOrderBookIds.size} selected
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        // TODO: Implement bulk edit
-                        if (navigator.vibrate) {
-                          navigator.vibrate(10);
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 rounded-lg text-blue-400 text-xs font-medium transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => {
-                        // TODO: Implement bulk delete
-                        if (navigator.vibrate) {
-                          navigator.vibrate([10, 20, 10]);
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 rounded-lg text-red-400 text-xs font-medium transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Orders List */}
-            <div className="px-6 py-4">
-              {orderBookData.orders.length === 0 ? (
-                <div className="text-center py-12">
-                  <svg className="w-16 h-16 text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <h3 className="text-lg font-medium text-gray-300 mb-2">No Orders Found</h3>
-                  <p className="text-gray-500 text-sm">This item doesn't have any order history yet.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {orderBookData.orders.map((order, index) => (
-                    <div
-                      key={order.id || index}
-                      className={`p-4 rounded-2xl transition-all duration-150 ${
-                        selectedOrderBookIds.has(order.id) 
-                          ? 'bg-blue-600/20 border border-blue-500/30' 
-                          : 'bg-gray-800/50 hover:bg-gray-700/70'
-                      } ${isOrderBookSelectionMode ? 'cursor-pointer' : ''}`}
-                      onClick={() => {
-                        if (isOrderBookSelectionMode) {
-                          const newSelected = new Set(selectedOrderBookIds);
-                          if (newSelected.has(order.id)) {
-                            newSelected.delete(order.id);
-                          } else {
-                            newSelected.add(order.id);
-                          }
-                          setSelectedOrderBookIds(newSelected);
-                          if (navigator.vibrate) {
-                            navigator.vibrate(10);
-                          }
-                        }
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {isOrderBookSelectionMode && (
-                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                              selectedOrderBookIds.has(order.id) 
-                                ? 'bg-blue-600 border-blue-600' 
-                                : 'border-gray-500'
-                            }`}>
-                              {selectedOrderBookIds.has(order.id) && (
-                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              )}
-                            </div>
-                          )}
-                          
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-white font-medium">
-                                ${order.buy_price_cents ? (order.buy_price_cents / 100).toFixed(2) : '0.00'}
-                              </span>
-                              <span className="text-gray-400 text-sm">
-                                × {order.buy_quantity || 1}
-                              </span>
-                            </div>
-                            <div className="text-gray-400 text-xs">
-                              {order.buy_date ? new Date(order.buy_date).toLocaleDateString() : 'No date'}
-                              {order.buy_location && ` • ${order.buy_location}`}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {!isOrderBookSelectionMode && (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // TODO: Implement edit individual order
-                                if (navigator.vibrate) {
-                                  navigator.vibrate(10);
-                                }
-                              }}
-                              className="p-2 hover:bg-gray-600/50 rounded-lg transition-colors"
-                            >
-                              <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-                              </svg>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // TODO: Implement delete individual order
-                                if (navigator.vibrate) {
-                                  navigator.vibrate([10, 20, 10]);
-                                }
-                              }}
-                              className="p-2 hover:bg-red-600/20 rounded-lg transition-colors"
-                            >
-                              <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
-                              </svg>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Footer Actions */}
-            {!isOrderBookSelectionMode && orderBookData.orders.length > 0 && (
-              <div className="px-6 py-4 border-t border-gray-700/50">
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      setShowOrderBookModal(false);
-                      setOrderBookData(null);
-                    }}
-                    className="flex-1 py-3 bg-gray-700/50 hover:bg-gray-600/70 rounded-2xl text-white font-medium transition-colors"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       )}
       </div>

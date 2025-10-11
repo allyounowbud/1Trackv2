@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { getItemTypeClassification } from '../utils/itemTypeUtils';
 import { useModal } from '../contexts/ModalContext';
 // Notification service removed - using Scrydex API only
 import DesktopSideMenu from './DesktopSideMenu';
@@ -157,16 +158,19 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
       let item, itemError;
       
       if (editingItem) {
+        // Determine proper item type classification for custom items
+        const itemData = {
+          name: formData.name.trim(),
+          set_name: formData.set_name.trim() || null,
+          item_type: getItemTypeClassification(formData, 'raw', 'custom'), // Custom items always classified as "Custom"
+          market_value_cents: Math.round(parseFloat(formData.market_value) * 100),
+          image_url: formData.image_url.trim() || null
+        };
+        
         // Update existing item
         const { data, error } = await supabase
           .from('items')
-          .update({
-            name: formData.name.trim(),
-            set_name: formData.set_name.trim() || null,
-            item_type: formData.item_type,
-            market_value_cents: Math.round(parseFloat(formData.market_value) * 100),
-            image_url: formData.image_url.trim() || null
-          })
+          .update(itemData)
           .eq('id', editingItem.id)
           .select()
           .single();
@@ -174,17 +178,20 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
         item = data;
         itemError = error;
       } else {
+        // Determine proper item type classification for custom items
+        const itemData = {
+          name: formData.name.trim(),
+          set_name: formData.set_name.trim() || null,
+          item_type: getItemTypeClassification(formData, 'raw', 'custom'), // Custom items always classified as "Custom"
+          source: 'manual',
+          market_value_cents: Math.round(parseFloat(formData.market_value) * 100),
+          image_url: formData.image_url.trim() || null
+        };
+        
         // Insert new custom item into items table
         const { data, error } = await supabase
           .from('items')
-          .insert({
-            name: formData.name.trim(),
-            set_name: formData.set_name.trim() || null,
-            item_type: formData.item_type,
-            source: 'manual',
-            market_value_cents: Math.round(parseFloat(formData.market_value) * 100),
-            image_url: formData.image_url.trim() || null
-          })
+          .insert(itemData)
           .select()
           .single();
         

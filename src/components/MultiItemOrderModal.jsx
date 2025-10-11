@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { getItemTypeClassification } from '../utils/itemTypeUtils';
 import { useModal } from '../contexts/ModalContext';
+import { createBulkOrders } from '../utils/orderNumbering';
 
 const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
   const { openModal, closeModal } = useModal();
@@ -246,13 +248,16 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
             // Create new item with market value from Pokemon card data
             const marketValueCents = Math.round((item.marketValue || 0) * 100);
             
+            // Determine proper item type classification
+            const itemType = getItemTypeClassification(item, 'raw', 'api');
+            
             const { data: newItem, error: itemError } = await supabase
               .from('items')
               .insert({
                 name: item.name,
                 set_name: item.set || '',
                 image_url: item.imageUrl || '',
-                item_type: 'Card',
+                item_type: itemType, // Use proper type classification
                 market_value_cents: marketValueCents
               })
               .select('id')
@@ -273,13 +278,16 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
           if (existingItem) {
             itemId = existingItem.id;
           } else {
+            // Determine proper item type classification for manual items
+            const itemType = getItemTypeClassification(item, 'raw', 'manual');
+            
             const { data: newItem, error: itemError } = await supabase
               .from('items')
               .insert({
                 name: item.name,
                 set_name: item.set || '',
                 image_url: item.imageUrl || '',
-                item_type: 'Card'
+                item_type: itemType // Use proper type classification
               })
               .select('id')
               .single();
@@ -293,7 +301,7 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
         const buyPriceCents = Math.round(parseFloat(itemDetail.pricePerItem) * 100);
         const totalCostCents = Math.round(parseFloat(itemDetail.totalPrice) * 100);
         
-        const orderData = {
+        const baseOrderData = {
           item_id: itemId,
           order_type: 'buy',
           buy_date: formData.buyDate,
@@ -305,18 +313,22 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
           status: 'ordered'
         };
 
-        const { data: orderResult, error: orderError } = await supabase
-          .from('orders')
-          .insert(orderData)
-          .select()
-          .single();
-
-        if (orderError) throw orderError;
-        return orderResult;
+        return baseOrderData;
       });
 
-      // Wait for all orders to be created
-      const orders = await Promise.all(orderPromises);
+      // Wait for all order data to be prepared
+      const ordersData = await Promise.all(orderPromises);
+      
+      // Create all orders with the same order number
+      const ordersWithNumbers = await createBulkOrders(supabase, ordersData);
+      
+      // Insert all orders
+      const { data: orders, error: bulkOrderError } = await supabase
+        .from('orders')
+        .insert(ordersWithNumbers)
+        .select();
+        
+      if (bulkOrderError) throw bulkOrderError;
 
       // Show success state
       setSuccessData({

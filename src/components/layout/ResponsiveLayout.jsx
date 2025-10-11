@@ -8,7 +8,7 @@ import { useCart } from '../../contexts/CartContext';
 const ResponsiveLayout = ({ children }) => {
   const location = useLocation();
   const { isModalOpen, customBottomButtons } = useModal();
-  const { isCartMenuOpen } = useCart();
+  const { isCartMenuOpen, isBulkSelectionMode, isCollectionMenuOpen } = useCart();
   const [isDesktop, setIsDesktop] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [isMobileSafari, setIsMobileSafari] = useState(false);
@@ -60,8 +60,8 @@ const ResponsiveLayout = ({ children }) => {
         {children}
       </div>
       
-      {/* Bottom Navigation - Show normal nav when cart menu is closed */}
-      {!isCartMenuOpen && (
+      {/* Bottom Navigation - Show normal nav when all menus are closed */}
+      {!isCartMenuOpen && !isBulkSelectionMode && !isCollectionMenuOpen && (
         <BottomNavigation 
           currentPath={location.pathname} 
           customButtons={null}

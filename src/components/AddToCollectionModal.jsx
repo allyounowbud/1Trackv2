@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { getCleanItemName } from '../utils/nameUtils';
+import { getItemTypeClassification } from '../utils/itemTypeUtils';
 import { useModal } from '../contexts/ModalContext';
+import { createSingleOrder } from '../utils/orderNumbering';
 import DesktopSideMenu from './DesktopSideMenu';
 
 // Cache bust: Updated theme colors - v3 - Fixed JSX structure
@@ -183,13 +185,16 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
             marketValueCents: marketValueCents
           });
           
+          // Determine proper item type classification
+          const itemType = getItemTypeClassification(product, 'raw', 'api');
+          
           const { data: newItem, error: itemError } = await supabase
             .from('items')
             .insert({
               name: product.name,
               set_name: product.set || '',
               image_url: product.imageUrl || '',
-              item_type: 'Card',
+              item_type: itemType, // Use proper type classification
               market_value_cents: marketValueCents
             })
             .select('id')
@@ -212,13 +217,16 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         if (existingItem) {
           itemId = existingItem.id;
         } else {
+          // Determine proper item type classification for manual items
+          const itemType = getItemTypeClassification(product, 'raw', 'manual');
+          
           const { data: newItem, error: itemError } = await supabase
             .from('items')
             .insert({
               name: itemName,
               set_name: product.set || '',
               image_url: product.imageUrl || '',
-              item_type: 'Card'
+              item_type: itemType // Use proper type classification
             })
             .select('id')
             .single();
@@ -232,7 +240,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       const buyPriceCents = Math.round(parseFloat(formData.pricePerItem) * 100); // Price per item in cents
       const totalCostCents = Math.round(parseFloat(formData.buyPrice) * 100); // Total cost in cents
       
-      const orderData = {
+      const baseOrderData = {
         item_id: itemId,
         order_type: 'buy',
         buy_date: formData.buyDate,
@@ -243,6 +251,9 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         buy_notes: formData.buyNotes || null,
         status: 'ordered'
       };
+
+      // Create order with proper numbering
+      const orderData = await createSingleOrder(supabase, baseOrderData);
 
       // Insert order
       const { data: orderResult, error: orderError } = await supabase
