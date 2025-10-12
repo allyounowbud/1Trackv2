@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Plus, Minus, BookOpen, ChevronUp, ChevronDown, ChevronDownIcon, Calendar } from 'lucide-react';
+import { X, Plus, Minus, BookOpen, ChevronUp, ChevronDown, ChevronDownIcon, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getItemTypeClassification, getGradeFromCardType, getCompanyFromCardType, getMarketValueForCardType, isSealedProduct } from '../utils/itemTypeUtils';
 
 const CartBottomMenu = ({ 
@@ -27,6 +27,7 @@ const CartBottomMenu = ({
   const [activePriceField, setActivePriceField] = useState({});
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [expandedCardId, setExpandedCardId] = useState(null);
   const [itemCardTypes, setItemCardTypes] = useState({});
   const [selectedGrade, setSelectedGrade] = useState(10);
@@ -129,6 +130,42 @@ const CartBottomMenu = ({
     setSelectedDate(date);
     setOrderDate(date.toISOString().split('T')[0]);
     setShowCustomCalendar(false);
+  };
+
+  // Calendar helper functions
+  const getDaysInMonth = (date) => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (date) => {
+    return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  };
+
+  const formatMonthYear = (date) => {
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  const isSameDay = (date1, date2) => {
+    return date1.getFullYear() === date2.getFullYear() &&
+           date1.getMonth() === date2.getMonth() &&
+           date1.getDate() === date2.getDate();
+  };
+
+  const handleDayClick = (day) => {
+    const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    handleCustomDateChange(newDate);
+  };
+
+  const navigateMonth = (direction) => {
+    setCurrentMonth(prev => {
+      const newMonth = new Date(prev);
+      if (direction === 'prev') {
+        newMonth.setMonth(prev.getMonth() - 1);
+    } else {
+        newMonth.setMonth(prev.getMonth() + 1);
+      }
+      return newMonth;
+    });
   };
 
 
@@ -354,19 +391,66 @@ const CartBottomMenu = ({
               {showCustomCalendar && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-50">
                   <div className="p-4">
-                    <input
-                      type="date"
-                      value={orderDate}
-                      onChange={handleDateChange}
-                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <button
-                      onClick={() => setShowCustomCalendar(false)}
-                      className="w-full mt-3 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition-colors"
-                    >
-                      Done
-                    </button>
-              </div>
+                    {/* Calendar Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <button
+                        onClick={() => navigateMonth('prev')}
+                        className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                      >
+                        <ChevronLeft className="w-5 h-5 text-gray-400" />
+                      </button>
+                      <h3 className="text-white font-medium text-lg">
+                        {formatMonthYear(currentMonth)}
+                      </h3>
+                      <button
+                        onClick={() => navigateMonth('next')}
+                        className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                      >
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      </button>
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7 gap-1 mb-2">
+                      {/* Day Headers */}
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                        <div key={day} className="p-2 text-center text-xs font-medium text-gray-400">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Calendar Days */}
+                    <div className="grid grid-cols-7 gap-1">
+                      {/* Empty cells for days before month starts */}
+                      {Array.from({ length: getFirstDayOfMonth(currentMonth) }).map((_, index) => (
+                        <div key={`empty-${index}`} className="h-8"></div>
+                      ))}
+                      
+                      {/* Days of the month */}
+                      {Array.from({ length: getDaysInMonth(currentMonth) }, (_, i) => i + 1).map(day => {
+                        const dayDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                        const isSelected = isSameDay(dayDate, selectedDate);
+                        const isToday = isSameDay(dayDate, new Date());
+                        
+                        return (
+                          <button
+                            key={day}
+                            onClick={() => handleDayClick(day)}
+                            className={`h-8 w-full text-sm rounded transition-colors ${
+                              isSelected
+                                ? 'bg-indigo-600 text-white'
+                                : isToday
+                                ? 'bg-gray-700 text-white'
+                                : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
