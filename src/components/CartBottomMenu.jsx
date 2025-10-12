@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Plus, Minus, BookOpen, ChevronUp, ChevronDown, Calendar, ChevronDownIcon } from 'lucide-react';
+import { X, Plus, Minus, BookOpen, ChevronUp, ChevronDown, ChevronDownIcon } from 'lucide-react';
 import { getItemTypeClassification, getGradeFromCardType, getCompanyFromCardType, getMarketValueForCardType, isSealedProduct } from '../utils/itemTypeUtils';
 
 const CartBottomMenu = ({ 
@@ -25,8 +25,6 @@ const CartBottomMenu = ({
   const [showRetailerDropdown, setShowRetailerDropdown] = useState(false);
   const [itemPrices, setItemPrices] = useState({});
   const [activePriceField, setActivePriceField] = useState({});
-  const [showCustomCalendar, setShowCustomCalendar] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
   const [expandedCardId, setExpandedCardId] = useState(null);
   const [itemCardTypes, setItemCardTypes] = useState({});
   const [selectedGrade, setSelectedGrade] = useState(10);
@@ -125,11 +123,6 @@ const CartBottomMenu = ({
     setOrderDate(e.target.value);
   };
 
-  const handleCustomDateChange = (date) => {
-    setSelectedDate(date);
-    setOrderDate(date.toISOString().split('T')[0]);
-    setShowCustomCalendar(false);
-  };
 
   const handlePriceChange = (itemId, newPrice) => {
     setItemPrices(prev => ({
@@ -264,43 +257,13 @@ const CartBottomMenu = ({
                 <label className="block text-sm font-medium text-gray-400 mb-2">Order Date</label>
                   <div className="relative">
                 <input
-                      type="text"
-                      value={(() => {
-                        // Parse the date string safely to avoid timezone issues
-                        const [year, month, day] = orderDate.split('-').map(Number);
-                        const date = new Date(year, month - 1, day);
-                        return date.toLocaleDateString('en-US', { 
-                          month: 'short', 
-                          day: 'numeric', 
-                          year: 'numeric' 
-                        });
-                      })()}
-                      readOnly
-                      onClick={() => setShowCustomCalendar(!showCustomCalendar)}
-                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                      type="date"
+                      value={orderDate}
+                      onChange={handleDateChange}
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
-                    <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
+                  </div>
               
-                  {/* Custom Calendar */}
-                  {showCustomCalendar && (
-                    <div className="absolute top-full left-0 mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-50">
-                      <div className="p-3">
-                  <input
-                          type="date"
-                          value={orderDate}
-                          onChange={handleDateChange}
-                          className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <button
-                          onClick={() => setShowCustomCalendar(false)}
-                          className="w-full mt-2 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition-colors"
-                        >
-                          Done
-                        </button>
-                      </div>
-                    </div>
-                  )}
               </div>
               
                 {/* Purchase Location - 55% */}
