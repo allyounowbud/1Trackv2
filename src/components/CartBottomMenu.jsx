@@ -395,6 +395,11 @@ const CartBottomMenu = ({
                 </div>
                 </div>
                 
+              {/* Calendar Backdrop */}
+              {showCustomCalendar && (
+                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" />
+              )}
+              
               {/* Custom Calendar - Full Width */}
               {showCustomCalendar && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-indigo-400 ring-0.5 ring-indigo-400/50 rounded-lg shadow-lg z-50">
