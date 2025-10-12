@@ -30,18 +30,18 @@ const CartBottomMenu = ({
   const [expandedCardId, setExpandedCardId] = useState(null);
   const [itemCardTypes, setItemCardTypes] = useState({});
   const [selectedGrade, setSelectedGrade] = useState(10);
+  const [selectedGradingCompany, setSelectedGradingCompany] = useState({});
+  const [selectedGradingGrade, setSelectedGradingGrade] = useState({});
 
   // Prevent background scrolling only when menu is expanded
   useEffect(() => {
-    if (isOpen && isExpanded) {
-      // Lock body scroll only when expanded
+    if (isExpanded) {
       document.body.style.overflow = 'hidden';
       document.body.style.position = 'fixed';
       document.body.style.width = '100%';
-      document.body.style.top = '0';
+      document.body.style.top = `-${window.scrollY}px`;
       document.body.classList.add('modal-open');
     } else {
-      // Restore body scroll when collapsed or closed
       document.body.style.overflow = '';
       document.body.style.position = '';
       document.body.style.width = '';
@@ -57,145 +57,22 @@ const CartBottomMenu = ({
       document.body.style.top = '';
       document.body.classList.remove('modal-open');
     };
-  }, [isOpen, isExpanded]);
+  }, [isExpanded]);
 
-  // Retailer data (same as AddToCollectionModal)
-  const retailers = [
-    'Amazon', 'eBay', 'Target', 'Walmart', 'Best Buy', 'GameStop',
-    'TCGPlayer', 'Card Kingdom', 'CoolStuffInc', 'Miniature Market',
-    'Local Game Store', 'Facebook Marketplace', 'Craigslist', 'Other'
-  ];
-
-  // Card type options - matching the grading companies we track
-  const cardTypes = [
-    { 
-      value: 'raw', 
-      label: 'Ungraded', 
-      priceKey: 'raw_price',
-      logo: '📄'
-    },
-    { 
-      value: 'psa', 
-      label: 'PSA', 
-      priceKey: 'graded_price',
-      logo: 'PSA',
-      color: 'bg-blue-600'
-    },
-    { 
-      value: 'bgs', 
-      label: 'Beckett', 
-      priceKey: 'graded_price',
-      logo: 'BGS',
-      color: 'bg-emerald-600'
-    },
-    { 
-      value: 'cgc', 
-      label: 'CGC', 
-      priceKey: 'graded_price',
-      logo: 'CGC',
-      color: 'bg-red-600'
-    }
-  ];
-
-  const filteredRetailers = retailers.filter(retailer =>
-    retailer.toLowerCase().includes(retailerSearch.toLowerCase()) &&
-    retailer !== purchaseLocation
-  );
-
-  // Handle retailer selection
-  const handleRetailerSelect = (retailer) => {
-    setPurchaseLocation(retailer);
-    setRetailerSearch('');
-    setIsRetailerFocused(false);
-  };
-
-  // Calculate total value including custom prices
-  const calculateTotalValue = () => {
-    return cartItems.reduce((sum, item) => {
-      const customPrice = itemPrices[item.id];
-      const price = customPrice !== undefined ? customPrice : item.marketValue;
-      return sum + (price * item.quantity);
-    }, 0);
-  };
-
-  // Ensure menu is ready before rendering
   useEffect(() => {
     if (isOpen) {
-      // Set collapsed state and mark as ready
-      setIsExpanded(false);
+      setIsReady(true);
       setIsClosing(false);
-      // Use a small delay to ensure state is set before rendering
-      requestAnimationFrame(() => {
-        setIsReady(true);
-      });
     } else {
+      setIsClosing(true);
+      const timer = setTimeout(() => {
       setIsReady(false);
+        setIsClosing(false);
+        setIsExpanded(false);
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
-
-  // Initialize itemPrices with market values when cart items change
-  useEffect(() => {
-    const newItemPrices = {};
-    cartItems.forEach(item => {
-      // Only set if not already in itemPrices (preserve user edits)
-      if (itemPrices[item.id] === undefined) {
-        newItemPrices[item.id] = item.marketValue;
-      }
-    });
-    
-    // Update itemPrices if there are new items to initialize
-    if (Object.keys(newItemPrices).length > 0) {
-      setItemPrices(prev => ({
-        ...prev,
-        ...newItemPrices
-      }));
-    }
-  }, [cartItems]);
-
-  // Initialize selected grade when expanding card
-  useEffect(() => {
-    if (expandedCardId) {
-      const expandedItem = cartItems.find(item => item.id === expandedCardId);
-      if (expandedItem) {
-        const currentGrade = getCurrentGrade(expandedItem);
-        setSelectedGrade(currentGrade || 10);
-      }
-    }
-  }, [expandedCardId]);
-
-  // Handle escape key
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isOpen]);
-
-  // Calculate totals
-  const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const totalValue = calculateTotalValue();
-
-  const handleClose = () => {
-    if (isAnimating) return;
-    
-    setIsAnimating(true);
-    setIsClosing(true);
-    
-    setTimeout(() => {
-      onClose();
-      setIsAnimating(false);
-      setIsClosing(false);
-    }, 300);
-  };
 
   const handleToggleExpanded = () => {
     if (isAnimating) return;
@@ -208,463 +85,133 @@ const CartBottomMenu = ({
     }, 300);
   };
 
+  const totalValue = cartItems.reduce((sum, item) => {
+    const price = itemPrices[item.id] || item.price || 0;
+    return sum + (price * item.quantity);
+  }, 0);
+
+  const handleDateChange = (e) => {
+    setOrderDate(e.target.value);
+  };
+
+  const handleCustomDateChange = (date) => {
+    setSelectedDate(date);
+    setOrderDate(date.toISOString().split('T')[0]);
+    setShowCustomCalendar(false);
+  };
+
+  const handlePriceChange = (itemId, newPrice) => {
+    setItemPrices(prev => ({
+      ...prev,
+      [itemId]: parseFloat(newPrice) || 0
+    }));
+  };
+
+  const handlePriceFocus = (itemId) => {
+    setActivePriceField(prev => ({
+      ...prev,
+      [itemId]: true
+    }));
+  };
+
+  const handlePriceBlur = (itemId) => {
+    setActivePriceField(prev => ({
+      ...prev,
+      [itemId]: false
+    }));
+  };
 
   const handleCreateOrder = () => {
     const orderData = {
-      orderDate,
-      purchaseLocation,
-      itemPrices,
-      itemCardTypes // Pass the card type information
+      date: orderDate,
+      location: purchaseLocation,
+      items: cartItems.map(item => ({
+        ...item,
+        price: itemPrices[item.id] || item.price || 0
+      }))
     };
     onCreateOrder(orderData);
-    onClose();
   };
 
-
-  // Handle price updates
-  const handlePriceChange = (itemId, price) => {
-    const numericPrice = parseFloat(price);
-    // Only update if it's a valid number or empty string
-    if (!isNaN(numericPrice) || price === '') {
-    setItemPrices(prev => ({
+  const handleGradingCompanySelect = (itemId, company) => {
+    setSelectedGradingCompany(prev => ({
       ...prev,
-        [itemId]: numericPrice || 0
+      [itemId]: company
     }));
-    }
-  };
-
-  // Handle price field focus
-  const handlePriceFocus = (itemId, field) => {
-    setActivePriceField(prev => ({
+    // Clear grade selection when company changes
+    setSelectedGradingGrade(prev => ({
       ...prev,
-      [itemId]: field
+      [itemId]: null
     }));
   };
 
-  // Handle card type selection
-  const handleCardTypeSelect = (itemId, cardType) => {
-    // If selecting a graded company, keep the current grade
-    // If selecting raw, reset grade to null
-    const newCardType = cardType === 'raw' ? 'raw' : `${cardType}_${selectedGrade}`;
-    
-    setItemCardTypes(prev => ({
+  const handleGradingGradeSelect = (itemId, grade) => {
+    setSelectedGradingGrade(prev => ({
       ...prev,
-      [itemId]: newCardType
+      [itemId]: grade
     }));
-    
-    // Don't collapse card immediately - let user adjust grade if needed
-    if (cardType === 'raw') {
-      setExpandedCardId(null);
-    }
   };
 
-  // Get current card type for an item
-  const getCurrentCardType = (item) => {
-    return itemCardTypes[item.id] || 'raw';
-  };
-
-  // Get current company from card type
-  const getCurrentCompany = (item) => {
-    const cardType = getCurrentCardType(item);
-    if (cardType === 'raw') return 'raw';
-    return cardType.split('_')[0];
-  };
-
-  // Get current grade from card type
-  const getCurrentGrade = (item) => {
-    const cardType = getCurrentCardType(item);
-    if (cardType === 'raw') return null;
-    const parts = cardType.split('_');
-    return parts.length > 1 ? parseInt(parts[1]) : 10;
-  };
-
-  // Get market value based on card type and grade
-  const getMarketValueForType = (item, cardType, grade = null) => {
-    if (cardType === 'raw') {
-      return item.raw_price ? parseFloat(item.raw_price) : item.marketValue;
-    } else {
-      // For graded cards, check if graded_price exists
-      return item.graded_price ? parseFloat(item.graded_price) : (item.raw_price ? parseFloat(item.raw_price) : item.marketValue);
-    }
-  };
-
-  // Check if using raw price for display
-  const isUsingRawPrice = (item, cardType) => {
-    if (cardType === 'raw') return false; // Raw is expected
-    // If it's a graded type but no graded_price exists, we're using raw
-    return !item.graded_price && item.raw_price;
-  };
-
-  // Calculate total price for an item
-  const calculateItemTotal = (item) => {
-    const customPrice = itemPrices[item.id];
-    const cardType = getCurrentCardType(item);
-    const marketValue = getMarketValueForType(item, cardType);
-    const price = customPrice !== undefined ? customPrice : marketValue;
-    return price * item.quantity;
-  };
-
-
-  // Custom Calendar Component
-  const CustomCalendar = () => {
-    const [currentDate, setCurrentDate] = useState(selectedDate);
-    
-    const formatDate = (date) => {
-      // Use local date formatting to avoid timezone issues
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-    
-    const getDaysInMonth = (date) => {
-      const year = date.getFullYear();
-      const month = date.getMonth();
-      const firstDay = new Date(year, month, 1);
-      const lastDay = new Date(year, month + 1, 0);
-      const daysInMonth = lastDay.getDate();
-      const startingDayOfWeek = firstDay.getDay();
-      
-      const days = [];
-      
-      // Add empty cells for days before the first day of the month
-      for (let i = 0; i < startingDayOfWeek; i++) {
-        days.push(null);
-      }
-      
-      // Add days of the month
-      for (let day = 1; day <= daysInMonth; day++) {
-        days.push(new Date(year, month, day));
-      }
-      
-      return days;
-    };
-    
-    const handleDateSelect = (date) => {
-      if (date) {
-        setSelectedDate(date);
-        setOrderDate(formatDate(date));
-        setShowCustomCalendar(false);
-      }
-    };
-    
-    const goToPreviousMonth = () => {
-      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1));
-    };
-    
-    const goToNextMonth = () => {
-      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
-    };
-    
-    const isToday = (date) => {
-      const today = new Date();
-      return date && date.toDateString() === today.toDateString();
-    };
-    
-    const isSelected = (date) => {
-      return date && date.toDateString() === selectedDate.toDateString();
-    };
-    
-    const days = getDaysInMonth(currentDate);
-    const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-    
-    return (
-      <div className="absolute top-full left-0 right-0 mt-2 bg-gray-900 border border-indigo-400/50 rounded-lg shadow-lg z-50 p-4">
-        {/* Calendar Header */}
-        <div className="flex items-center justify-between mb-3">
-          <button
-            onClick={goToPreviousMonth}
-            className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            <ChevronUp className="w-4 h-4 text-gray-400 rotate-90" />
-          </button>
-          <h3 className="text-white font-medium text-base">
-            {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-          </h3>
-          <button
-            onClick={goToNextMonth}
-            className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            <ChevronUp className="w-4 h-4 text-gray-400 -rotate-90" />
-          </button>
-        </div>
-        
-        {/* Day Headers */}
-        <div className="grid grid-cols-7 gap-1 mb-2">
-          {dayNames.map((day) => (
-            <div key={day} className="text-center text-xs text-gray-400 py-1">
-              {day}
-            </div>
-          ))}
-        </div>
-        
-        {/* Calendar Grid */}
-        <div className="grid grid-cols-7 gap-1 mb-3">
-          {days.map((date, index) => (
-            <button
-              key={index}
-              onClick={() => handleDateSelect(date)}
-              className={`
-                aspect-square flex items-center justify-center text-xs rounded-lg transition-colors
-                ${date ? 'hover:bg-gray-800 cursor-pointer' : 'cursor-default'}
-                ${isToday(date) ? 'text-indigo-400' : ''}
-                ${isSelected(date) ? 'bg-indigo-500 text-white' : ''}
-                ${date && !isToday(date) && !isSelected(date) ? 'text-gray-300' : ''}
-              `}
-            >
-              {date ? date.getDate() : ''}
-            </button>
-          ))}
-        </div>
-        
-        {/* Calendar Footer */}
-        <div className="flex justify-between pt-3 border-t border-gray-700">
-          <button
-            onClick={() => {
-              const today = new Date();
-              handleDateSelect(today);
-            }}
-            className="px-3 py-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-          >
-            Today
-          </button>
-          <button
-            onClick={() => setShowCustomCalendar(false)}
-            className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-300 transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  if (!isOpen || cartItems.length === 0 || !isReady) return null;
+  if (!isReady) return null;
 
   return (
     <>
-      {/* Dark theme date picker styles */}
-      <style>{`
-        input[type="date"]::-webkit-calendar-picker-indicator {
-          cursor: pointer;
-          filter: invert(0.5) sepia(1) saturate(5) hue-rotate(200deg);
-        }
-        
-        input[type="date"]::-webkit-datetime-edit {
-          color: white;
-        }
-        
-        input[type="date"]::-webkit-datetime-edit-fields-wrapper {
-          background-color: transparent;
-        }
-        
-        input[type="date"]::-webkit-datetime-edit-text {
-          color: white;
-        }
-        
-        input[type="date"]::-webkit-datetime-edit-month-field,
-        input[type="date"]::-webkit-datetime-edit-day-field,
-        input[type="date"]::-webkit-datetime-edit-year-field {
-          color: white;
-        }
-        
-        /* Calendar picker positioning */
-        .date-picker-container {
-          position: relative;
-          overflow: visible;
-        }
-        
-        /* Force calendar to render within menu bounds */
-        input[type="date"]:focus {
-          position: relative;
-          z-index: 1000;
-        }
-        
-        /* Ensure calendar doesn't get cut off */
-        input[type="date"]::-webkit-calendar-picker-indicator {
-          position: relative;
-          z-index: 1001;
-        }
-        
-        /* Override browser default calendar positioning */
-        input[type="date"]::-webkit-datetime-edit-fields-wrapper {
-          position: relative;
-        }
-        
-        /* Calendar icon styling - smaller size */
-        .date-picker-container input[type="date"]::-webkit-calendar-picker-indicator {
-          cursor: pointer;
-          filter: invert(0.5) sepia(1) saturate(5) hue-rotate(200deg);
-          width: 16px;
-          height: 16px;
-          opacity: 1;
-        }
-        
-        /* Force calendar to render in center of screen to avoid cutoff */
-        .date-picker-container {
-          position: relative;
-          overflow: visible;
-          z-index: 10;
-        }
-        
-        /* Override calendar positioning to center it */
-        input[type="date"]:focus {
-          position: fixed !important;
-          top: 50% !important;
-          left: 50% !important;
-          transform: translate(-50%, -50%) !important;
-          z-index: 9999 !important;
-          width: 300px !important;
-          height: 40px !important;
-        }
-        
-        /* Hide the actual input when focused and show calendar centered */
-        .date-picker-container input[type="date"]:focus {
-          opacity: 0;
-        }
-        
-        /* Create a visual placeholder when input is focused */
-        .date-picker-container input[type="date"]:focus::before {
-          content: attr(value);
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: #111827;
-          border: 1px solid #374151;
-          border-radius: 8px;
-          padding: 12px 16px;
-          color: white;
-          display: flex;
-          align-items: center;
-          opacity: 1;
-          z-index: 1;
-        }
-        
-        /* Custom slider styling */
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #10b981;
-          cursor: pointer;
-          border: 2px solid #ffffff;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-        
-        .slider::-moz-range-thumb {
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #10b981;
-          cursor: pointer;
-          border: 2px solid #ffffff;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-      `}</style>
-      
-      {/* Backdrop - Only when expanded */}
+      {/* Backdrop - Only when expanded, blurs background content */}
       {isExpanded && (
         <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+          className="fixed bg-black/50 backdrop-blur-sm"
+          style={{ 
+            pointerEvents: 'auto',
+            touchAction: 'none',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: '133px', // Stop above the preview menu (133px is the height of the preview menu)
+            width: '100vw',
+            position: 'fixed',
+            zIndex: 45
+          }}
           onClick={() => setIsExpanded(false)}
         />
       )}
       
-
-      {/* Main Container - Always full height, moves up/down */}
-      <div 
-        ref={menuRef}
-        className="fixed left-0 right-0 z-50 bg-gray-950 cart-menu rounded-t-xl"
-        data-menu="true"
-        style={{ 
-          height: '85vh',
-          bottom: isExpanded ? '0px' : 'calc(-85vh + 105px)',
-          transition: 'bottom 0.3s ease-out',
-          overflow: 'visible',
-          minHeight: '85vh'
-        }}
-      >
-        {/* Unified Menu Content */}
-        <div className="flex flex-col h-full overflow-visible">
-          {/* Header Section - Changes based on expanded state */}
-          <div 
-            className={`flex flex-col px-6 py-3 flex-shrink-0 cursor-pointer hover:bg-gray-800/30 transition-colors active:bg-gray-800/30 bg-gray-950 rounded-t-xl border-t border-gray-700/30 ${isExpanded ? 'border-b border-gray-700/50' : ''}`}
-            onClick={handleToggleExpanded}
-          >
+      {/* Expanded Modal - Only when expanded, appears above preview menu */}
+      {isExpanded && (
+        <div 
+          className="fixed left-0 right-0 z-50 transition-all duration-300 ease-out rounded-t-3xl"
+          style={{ 
+            height: '60vh',
+            bottom: '133px', // Position above the preview menu (133px is the height of the preview menu)
+            backgroundColor: '#111827',
+            borderTop: '1px solid #374151',
+            position: 'fixed',
+            transform: 'none',
+            WebkitTransform: 'none',
+            willChange: 'auto',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
+            pointerEvents: 'auto',
+            touchAction: 'auto',
+            isolation: 'isolate'
+          }}
+          data-menu="true"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex flex-col h-full">
             {/* Drag Handle - Always visible and centered */}
-            <div className="flex justify-center mb-2">
+            <div className="flex justify-center pt-2 pb-1">
               <div className="w-8 h-1 rounded-full bg-gray-600 transition-colors group-hover:bg-gray-500"></div>
-        </div>
-
-            {isExpanded ? (
-              /* Expanded Header */
-              <>
-                <h2 className="text-lg font-semibold text-white mb-0">Add to Collection</h2>
-                <p className="text-sm text-gray-400 leading-relaxed -mt-1">
-                  Add multiple items to your collection all at once.
-                </p>
-              </>
-            ) : (
-              /* Collapsed Preview Header - Show image previews */
-              <>
-                <div className="flex items-center justify-between w-full mb-2">
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs font-medium text-gray-300">Value:</span>
-                    <span className="text-xs font-medium text-white">${totalValue.toFixed(2)}</span>
-                    <span className="text-xs text-gray-400">({cartItems.length} items)</span>
-              </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-gray-400">Tap to expand</span>
-                    <ChevronUp className="w-4 h-4 text-gray-400" />
             </div>
-          </div>
-                
-                {/* Image previews - Main content area */}
-                <div className="flex items-center gap-3 overflow-x-auto">
-                  {cartItems.slice(0, 8).map((item) => (
-                    <div 
-                      key={item.id}
-                      className="relative group cursor-pointer flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemoveItem(item.id);
-                      }}
-                    >
-                    <img 
-                      src={item.imageUrl} 
-                      alt={item.name}
-                        className="w-10 h-12 object-contain rounded transition-opacity group-hover:opacity-50"
-                        style={{ imageRendering: 'crisp-edges' }}
-                      />
-                      {/* Hover overlay with delete button */}
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-                          <X className="w-4 h-4 text-white" />
-                        </div>
-                      </div>
-                  </div>
-                ))}
-              {cartItems.length > 8 && (
-                    <div className="w-10 h-12 bg-gray-700/50 rounded flex items-center justify-center text-xs text-gray-300 flex-shrink-0">
-                  +{cartItems.length - 8}
-                </div>
-              )}
-            </div>
-              </>
-            )}
-          </div>
+            <h2 className="text-lg font-semibold text-white px-6">Add to Collection</h2>
+            <p className="text-sm text-gray-400 leading-relaxed px-6 mb-4">
+                Add multiple items to your collection all at once.
+              </p>
+              
+            {/* Header border separator */}
+            <div className="border-t border-gray-700/50 mx-6 mb-4"></div>
           
-          {/* Expanded Content - Always rendered, visible when menu is positioned correctly - Page content color */}
-          <div className="flex flex-col flex-1 min-h-0 overflow-visible" style={{ backgroundColor: '#111827' }}>
             {/* Cart Items */}
-            <div className="flex-1 overflow-y-auto min-h-0 overflow-x-visible">
+            <div className="flex-1 overflow-y-auto min-h-0 overflow-x-visible" style={{ pointerEvents: 'auto', touchAction: 'auto' }}>
             {/* Order Details Section */}
             <div className="px-6 py-4 space-y-4 overflow-visible">
               {/* Order Date and Location Row */}
@@ -679,51 +226,64 @@ const CartBottomMenu = ({
                         // Parse the date string safely to avoid timezone issues
                         const [year, month, day] = orderDate.split('-').map(Number);
                         const date = new Date(year, month - 1, day);
-                        return date.toLocaleDateString();
+                        return date.toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric', 
+                          year: 'numeric' 
+                        });
                       })()}
                       readOnly
                       onClick={() => setShowCustomCalendar(!showCustomCalendar)}
-                      className={`w-full px-4 py-3 border rounded-lg text-gray-400 text-sm focus:outline-none transition-colors cursor-pointer ${
-                        showCustomCalendar 
-                          ? 'border-indigo-400/50' 
-                          : 'border-gray-700 focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50'
-                      }`}
-                      style={{ backgroundColor: '#111827' }}
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                     />
                     <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                   </div>
+                  
+                  {/* Custom Calendar */}
+                  {showCustomCalendar && (
+                    <div className="absolute top-full left-0 mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-50">
+                      <div className="p-3">
+                        <input
+                          type="date"
+                          value={orderDate}
+                          onChange={handleDateChange}
+                          className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <button
+                          onClick={() => setShowCustomCalendar(false)}
+                          className="w-full mt-2 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded transition-colors"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  )}
               </div>
               
-                {/* Location - 60% */}
+                {/* Purchase Location - 60% */}
                 <div className="w-[60%]">
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Location</label>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Purchase Location</label>
                 <div className="relative">
                   <input
                     type="text"
-                      placeholder={purchaseLocation || "Purchase location..."}
                     value={retailerSearch}
                     onChange={(e) => setRetailerSearch(e.target.value)}
                     onFocus={() => setIsRetailerFocused(true)}
-                    onBlur={() => setTimeout(() => setIsRetailerFocused(false), 150)}
-                      className="w-full px-4 py-3 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
-                      style={{ backgroundColor: '#111827' }}
+                      onBlur={() => setIsRetailerFocused(false)}
+                      placeholder="Search retailers..."
+                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setIsRetailerFocused(!isRetailerFocused)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 hover:text-gray-300 transition-colors"
-                    >
-                      <ChevronDownIcon className={`w-4 h-4 transition-transform ${isRetailerFocused ? 'rotate-180' : ''}`} />
-                    </button>
-                  
-                  {/* Retailer Dropdown */}
                     {isRetailerFocused && (
-                      <div className="absolute top-full left-0 right-0 z-20 mt-1 border border-indigo-400/50 rounded-lg shadow-lg max-h-40 overflow-y-auto ring-0.5 ring-indigo-400/50" style={{ backgroundColor: '#111827' }}>
-                      {filteredRetailers.map((retailer, index) => (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                        {['Amazon', 'TCGPlayer', 'eBay', 'Local Store', 'Other'].map((retailer) => (
                         <button
-                          key={index}
-                          onClick={() => handleRetailerSelect(retailer)}
-                          className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 transition-colors first:rounded-t-lg last:rounded-b-lg"
+                            key={retailer}
+                            onClick={() => {
+                              setPurchaseLocation(retailer);
+                              setRetailerSearch(retailer);
+                              setIsRetailerFocused(false);
+                            }}
+                            className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 text-sm transition-colors"
                         >
                           {retailer}
                         </button>
@@ -731,308 +291,298 @@ const CartBottomMenu = ({
                     </div>
                   )}
                 </div>
-                </div>
-                
-                {/* Calendar positioned relative to the entire row */}
-                {showCustomCalendar && <CustomCalendar />}
               </div>
             </div>
             
-            <div className="px-6 py-4 space-y-3">
-              {cartItems.map((item) => {
-                return (
-                  <div key={item.id} className="relative rounded-lg border border-gray-700" style={{ backgroundColor: '#111827' }}>
-                    
-                    {/* Main item container */}
-                    <div className="rounded-lg p-3">
-                      {/* Item Info Row */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-white truncate">
-                            {item.name}
-                          </div>
-                          <div className="text-xs text-gray-400 truncate">
-                            {item.set}
-                          </div>
-                          <div className="text-xs text-indigo-400">
+              {/* Cart Items List */}
+              <div className="space-y-4">
+                {cartItems.map((item, index) => (
+                  <div key={`${item.cardId}-${index}`} className="rounded-lg border border-gray-600" style={{ backgroundColor: '#111827' }}>
+                    {/* Item Header */}
+                    <div className="flex items-start justify-between p-4">
+                      {/* Left side - Item info */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-white text-sm leading-tight mb-1 truncate">
+                          {item.name}
+                        </h3>
+                        <p className="text-xs text-gray-400 mb-1">
+                          {item.setName || 'Unknown Set'}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-emerald-400 text-xs">
                             {(() => {
-                              // Check if item is sealed
-                              if (isSealedProduct(item)) {
-                                const marketValue = item.marketValue || 0;
-                                return `Sealed • $${marketValue.toFixed(2)}`;
+                              const company = selectedGradingCompany[item.id];
+                              const grade = selectedGradingGrade[item.id];
+                              if (!company || company === 'Raw') {
+                                return 'Raw';
                               }
-                              
-                              const company = getCurrentCompany(item);
-                              const grade = getCurrentGrade(item);
-                              const marketValue = getMarketValueForType(item, company, grade);
-                              const usingRaw = isUsingRawPrice(item, company);
-                              
-                              // Create card type display
-                              let cardTypeDisplay = '';
-                              if (company === 'raw') {
-                                cardTypeDisplay = 'Raw';
-                              } else {
-                                const companyLabel = cardTypes.find(ct => ct.value === company)?.label || company;
-                                cardTypeDisplay = `${companyLabel} ${grade}`;
-                              }
-                              
-                              const priceText = `$${marketValue.toFixed(2)}`;
-                              const rawIndicator = usingRaw ? ' (raw)' : '';
-                              
-                              return `${cardTypeDisplay} • ${priceText}${rawIndicator}`;
+                              return `${company} ${grade || ''}`.trim();
                             })()}
-                          </div>
+                          </span>
+                          <span className="text-gray-400 text-xs">•</span>
+                          <span className="text-white text-xs">${(itemPrices[item.id] || item.price || 0).toFixed(2)}</span>
                         </div>
-                        <div 
-                          className="relative group cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Don't allow expansion for sealed products
-                            if (isSealedProduct(item)) {
-                              return;
-                            }
-                            if (expandedCardId === item.id) {
-                              setExpandedCardId(null);
-                            } else {
-                              setExpandedCardId(item.id);
-                            }
-                          }}
-                        >
-                          {/* Delete button above image */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveItem(item.id);
-                        }}
-                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors z-10"
-                      >
-                            <X className="w-3 h-3 text-white" />
-                      </button>
-                        <img 
-                          src={item.imageUrl} 
+                      </div>
+                      
+                      {/* Right side - Item image */}
+                      <div className="w-12 h-16 bg-gray-700 rounded-lg overflow-hidden flex-shrink-0 ml-4">
+                        <img
+                          src={item.imageUrl || '/placeholder-card.png'}
                           alt={item.name}
-                            className="w-12 h-16 object-contain rounded-lg flex-shrink-0 p-1 transition-opacity group-hover:opacity-50"
-                            style={{ backgroundColor: '#111827' }}
-                          />
-                          {/* Hover overlay with expand/collapse indicator - Only for non-sealed items */}
-                          {!isSealedProduct(item) && (
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <div className="w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center">
-                                <span className="text-white text-xs font-medium">
-                                  {expandedCardId === item.id ? '▼' : '▶'}
-                                </span>
-                          </div>
-                          </div>
-                          )}
-                        </div>
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            e.target.src = '/placeholder-card.png';
+                          }}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Input Fields Row */}
+                    <div className="grid grid-cols-3 gap-4 px-4 pb-4">
+                      {/* Quantity */}
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Qty</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => onUpdateQuantity(item.id, Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-indigo-500"
+                        />
                       </div>
                       
-                      {/* Quantity and Price Controls Row */}
-                      <div className="flex items-center justify-center gap-6 w-full max-w-md mx-auto">
-                        {/* Quantity Input - 15% */}
-                        <div className="flex flex-col gap-1 w-[15%]">
-                          <label className="text-xs text-gray-400">Qty</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity === '' ? '' : item.quantity}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              // Allow empty value for clearing with backspace
-                              if (value === '') {
-                                onUpdateQuantity(item.id, '');
-                              } else {
-                                const numValue = parseInt(value);
-                                onUpdateQuantity(item.id, numValue || 1);
-                              }
-                            }}
-                            onBlur={(e) => {
-                              // Default to 1 if empty when user leaves the field
-                              if (e.target.value === '') {
-                                onUpdateQuantity(item.id, 1);
-                              }
-                            }}
-                            className="w-full px-2 py-1 border border-gray-700 rounded text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
-                            style={{ backgroundColor: '#111827' }}
-                          />
-                        </div>
-                        
-                        {/* Price per Item - 35% */}
-                        <div className="flex flex-col gap-1 w-[35%]">
-                          <label className={`text-xs ${activePriceField[item.id] === 'perItem' ? 'text-white' : 'text-gray-400'}`}>
-                            Price (per item)
-                          </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={itemPrices[item.id] !== undefined ? itemPrices[item.id] : item.marketValue}
-                            onChange={(e) => handlePriceChange(item.id, e.target.value)}
-                            onFocus={() => handlePriceFocus(item.id, 'perItem')}
-                            className={`w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors border-gray-700 ${
-                              activePriceField[item.id] === 'perItem' 
-                                ? 'text-white' 
-                                : 'text-gray-400'
-                            }`}
-                            style={{ backgroundColor: '#111827' }}
-                          />
-                        </div>
-                        
-                        {/* Total Price - 35% */}
-                        <div className="flex flex-col gap-1 w-[35%]">
-                          <label className={`text-xs ${activePriceField[item.id] === 'total' ? 'text-white' : 'text-gray-400'}`}>
-                            Total Price
-                          </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={calculateItemTotal(item)}
-                            onChange={(e) => {
-                              const totalPrice = parseFloat(e.target.value) || 0;
-                              const newPricePerItem = totalPrice / (item.quantity || 1);
-                              handlePriceChange(item.id, newPricePerItem);
-                            }}
-                            onFocus={() => handlePriceFocus(item.id, 'total')}
-                            className={`w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors border-gray-700 ${
-                              activePriceField[item.id] === 'total' 
-                                ? 'text-white' 
-                                : 'text-gray-400'
-                            }`}
-                            style={{ backgroundColor: '#111827' }}
-                          />
-                        </div>
+                      {/* Price per item */}
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Price (per item)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={itemPrices[item.id] || item.price || ''}
+                          onChange={(e) => handlePriceChange(item.id, e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-indigo-500"
+                          placeholder="0.00"
+                        />
                       </div>
                       
-                      {/* Expandable Card Type Options - Only for non-sealed items */}
-                      {expandedCardId === item.id && !isSealedProduct(item) && (
-                        <>
-                          {/* Grading Company Buttons */}
-                          <div className="grid grid-cols-4 gap-2 mt-3">
-                            {cardTypes.map((cardType) => {
-                              const currentCompany = getCurrentCompany(item);
-                              const isSelected = currentCompany === cardType.value;
-                              
-                              return (
-                                <button
-                                  key={cardType.value}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleCardTypeSelect(item.id, cardType.value);
-                                    if (cardType.value !== 'raw') {
-                                      setSelectedGrade(10); // Reset to 10 for new graded selection
-                                    }
-                                  }}
-                                  className={`aspect-[4/3] flex items-center justify-center rounded-lg border transition-all p-2 ${
-                                    isSelected
-                                      ? 'border-emerald-400'
-                                      : 'border-gray-700 hover:border-gray-600'
-                                  }`}
-                                  style={{ backgroundColor: '#111827' }}
-                                >
-                                  {cardType.value === 'raw' ? (
-                                    <span className="text-lg">{cardType.logo}</span>
-                                  ) : cardType.value === 'psa' ? (
-                                    <img 
-                                      src="https://www.pngkey.com/png/full/231-2310791_psa-grading-standards-professional-sports-authenticator.png"
-                                      alt="PSA Logo"
-                                      className="w-full h-full object-contain rounded-lg"
-                                    />
-                                  ) : cardType.value === 'bgs' ? (
-                                    <img 
-                                      src="https://www.cherrycollectables.com.au/cdn/shop/products/HH02578_Cherry_BGS_Logo.png?v=1654747644&width=500"
-                                      alt="Beckett Logo"
-                                      className="w-full h-full object-contain rounded-lg"
-                                    />
-                                  ) : cardType.value === 'cgc' ? (
-                                    <img 
-                                      src="https://www.cgccomics.com/Resources/images/grading/about-cgc/cgc-cards.png"
-                                      alt="CGC Logo"
-                                      className="w-full h-full object-contain rounded-lg"
-                                    />
-                                  ) : (
-                                    <div className={`w-8 h-8 rounded-full ${cardType.color} flex items-center justify-center`}>
-                                      <span className="text-white text-xs font-bold">{cardType.logo}</span>
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          
-                          {/* Grade Buttons - Only show for graded companies */}
-                          {getCurrentCompany(item) !== 'raw' && (
-                            <div className="mt-3">
-                              <div className="grid grid-cols-10 gap-1">
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((grade) => (
-                                  <button
-                                    key={grade}
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setSelectedGrade(grade);
-                                      const company = getCurrentCompany(item);
-                                      handleCardTypeSelect(item.id, company);
-                                    }}
-                                    className={`aspect-square flex items-center justify-center rounded border transition-all text-xs font-medium ${
-                                      selectedGrade === grade
-                                        ? 'border-emerald-400 text-emerald-400'
-                                        : 'border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-300'
-                                    }`}
-                                    style={{ backgroundColor: '#111827' }}
-                                  >
-                                    {grade}
-                                  </button>
-                                ))}
-                              </div>
+                      {/* Total Price */}
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Total Price</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={((itemPrices[item.id] || item.price || 0) * item.quantity).toFixed(2)}
+                          readOnly
+                          className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Grading Buttons */}
+                    <div className="px-4 pb-4">
+                      <div className="grid grid-cols-4 gap-2">
+                        {/* Raw Button */}
+                        <button
+                          onClick={() => handleGradingCompanySelect(item.id, 'Raw')}
+                          className={`aspect-square flex items-center justify-center rounded-lg border transition-all p-2 ${
+                            selectedGradingCompany[item.id] === 'Raw'
+                              ? 'border-indigo-400'
+                              : 'border-gray-700 hover:border-gray-600'
+                          }`}
+                          style={{ backgroundColor: '#111827' }}
+                        >
+                          <div className="text-center">
+                            <div className="w-4 h-4 mx-auto mb-1">
+                              <svg className="w-full h-full text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                              </svg>
                             </div>
-                          )}
-                        </>
+                            <span className="text-xs text-white font-medium">Raw</span>
+                          </div>
+                        </button>
+                        
+                        {/* PSA Button */}
+                        <button
+                          onClick={() => handleGradingCompanySelect(item.id, 'PSA')}
+                          className={`aspect-square flex items-center justify-center rounded-lg border transition-all p-2 ${
+                            selectedGradingCompany[item.id] === 'PSA'
+                              ? 'border-indigo-400'
+                              : 'border-gray-700 hover:border-gray-600'
+                          }`}
+                          style={{ backgroundColor: '#111827' }}
+                        >
+                          <div className="text-center">
+                            <div className="w-4 h-4 mx-auto mb-1 text-red-500 font-bold text-xs">PSA</div>
+                          </div>
+                        </button>
+                        
+                        {/* BGS Button */}
+                        <button
+                          onClick={() => handleGradingCompanySelect(item.id, 'BGS')}
+                          className={`aspect-square flex items-center justify-center rounded-lg border transition-all p-2 ${
+                            selectedGradingCompany[item.id] === 'BGS'
+                              ? 'border-indigo-400'
+                              : 'border-gray-700 hover:border-gray-600'
+                          }`}
+                          style={{ backgroundColor: '#111827' }}
+                        >
+                          <div className="text-center">
+                            <div className="w-4 h-4 mx-auto mb-1 text-yellow-500 font-bold text-xs">B</div>
+                          </div>
+                        </button>
+                        
+                        {/* CGC Button */}
+                        <button
+                          onClick={() => handleGradingCompanySelect(item.id, 'CGC')}
+                          className={`aspect-square flex items-center justify-center rounded-lg border transition-all p-2 ${
+                            selectedGradingCompany[item.id] === 'CGC'
+                              ? 'border-indigo-400'
+                              : 'border-gray-700 hover:border-gray-600'
+                          }`}
+                          style={{ backgroundColor: '#111827' }}
+                        >
+                          <div className="text-center">
+                            <div className="w-4 h-4 mx-auto mb-1 text-red-500 font-bold text-xs">CGC</div>
+                          </div>
+                        </button>
+                      </div>
+                      
+                      {/* Grade Selection Row - Only show if a graded company is selected */}
+                      {selectedGradingCompany[item.id] && selectedGradingCompany[item.id] !== 'Raw' && (
+                        <div className="mt-3">
+                          <div className="text-xs text-gray-400 mb-2 px-1">
+                            Select Grade ({selectedGradingCompany[item.id]})
+                          </div>
+                          <div className="grid grid-cols-10 gap-1">
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((grade) => (
+                              <button
+                                key={grade}
+                                onClick={() => handleGradingGradeSelect(item.id, grade)}
+                                className={`aspect-square flex items-center justify-center rounded border transition-all text-xs font-medium ${
+                                  selectedGradingGrade[item.id] === grade
+                                    ? 'border-indigo-400 bg-indigo-400/10 text-indigo-400'
+                                    : 'border-gray-600 bg-gray-800/50 text-gray-300 hover:border-gray-500'
+                                }`}
+                              >
+                                {grade}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
           </div>
 
-            {/* Footer - Bottom bar color */}
-            <div className="flex-shrink-0 border-t border-gray-800/50 bg-gray-950/95 backdrop-blur-xl">
-          {/* Action Buttons */}
-          <div className="p-4 pt-2">
-            {/* Total Summary */}
-            <div className="px-2 pb-3">
-              <div className="text-left">
-                <span className="text-xs text-gray-400">
-                  Total: <span className="font-semibold text-white">${totalValue.toFixed(2)}</span> 
-                  <span className="text-gray-400"> ({totalItems} items)</span>
-                </span>
-              </div>
-            </div>
-            {isMultiSelectMode ? (
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={onCancel}
-                  className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={onDone}
-                  className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Create Order
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleCreateOrder}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-6 rounded-lg transition-colors text-base"
-              >
-                Create Order ({cartItems.length} items)
-              </button>
-            )}
-              </div>
           </div>
+        </div>
+      )}
+
+      {/* Preview Menu - Always visible at bottom */}
+      <div 
+        className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ease-out ${isExpanded ? '' : 'rounded-t-3xl'}`}
+        data-menu="true"
+        style={{ 
+          backgroundColor: '#030712',
+          borderTop: '1px solid #374151',
+          position: 'fixed',
+          bottom: '-1px',
+          transform: 'none',
+          WebkitTransform: 'none',
+          willChange: 'auto',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden'
+        }}
+      >
+        <div className="flex flex-col px-6 pt-3 pb-2">
+          {/* Header with stats and actions */}
+          <div className="flex items-end justify-between w-full mb-1 min-w-0 py-1">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <span className="font-medium text-gray-400 truncate" style={{ fontSize: '13px' }}>
+                Value: ${totalValue.toFixed(2)} ({cartItems.length} {cartItems.length === 1 ? 'Item' : 'Items'})
+                </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+              {!isExpanded ? (
+                <button
+                  onClick={handleToggleExpanded}
+                  className={`px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700`}
+                >
+                  Add to Collection
+                  <svg className="w-3 h-3 flex-shrink-0 transition-transform duration-300 ease-out" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setIsExpanded(false)}
+                    className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors flex items-center justify-center flex-shrink-0"
+                  >
+                    Cancel
+                </button>
+                <button
+                    onClick={handleCreateOrder}
+                    className="px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700"
+                >
+                    Add Order
+                </button>
+                </>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
+                className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors flex items-center justify-center flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Border line break */}
+          <div className="w-full h-px bg-gray-700/50 mb-2"></div>
+
+          {/* Image previews */}
+          <div className="flex items-center gap-3 overflow-x-auto py-2 pr-4">
+            {cartItems.slice(0, 6).map((item, index) => (
+              <div 
+                key={`${item.cardId}-${index}`} 
+                className="relative group cursor-pointer flex-shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveItem(item.id);
+                }}
+              >
+                <img
+                  src={item.imageUrl || '/placeholder-card.png'}
+                  alt={item.name}
+                  className="w-10 h-14 object-contain"
+                  onError={(e) => {
+                    e.target.src = '/placeholder-card.png';
+                  }}
+                />
+                {item.quantity > 1 && (
+                  <div className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs font-medium rounded-full w-5 h-5 flex items-center justify-center border border-gray-900">
+                    {item.quantity}
+                  </div>
+                )}
+                {/* Remove button overlay */}
+                <div className="absolute inset-0 bg-red-500 rounded opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <X className="w-4 h-4 text-white" />
+                </div>
+              </div>
+            ))}
+            {cartItems.length > 6 && (
+              <div className="w-10 h-14 bg-gray-700/50 rounded flex items-center justify-center text-xs text-gray-300 flex-shrink-0">
+                +{cartItems.length - 6}
+          </div>
+            )}
         </div>
       </div>
       </div>

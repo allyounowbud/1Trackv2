@@ -1605,9 +1605,18 @@ const Collection = () => {
 
       {/* Bulk Selection Preview Bar - Fixed at bottom with expandable actions */}
       {isBulkSelectionMode && !showOverridePriceModal && selectedItems.size > 0 && (
-        <div className={`fixed bottom-0 left-0 right-0 z-50 bg-gray-950 transition-all duration-300 ease-out ${
-          (showBulkActionsMenu || showBulkOrderBook || showBulkOverridePrice) ? 'rounded-t-3xl' : 'rounded-t-3xl'
-        }`}>
+        <div className="fixed bottom-0 left-0 right-0 z-50 transition-all duration-300 ease-out rounded-t-3xl"
+        style={{ 
+          bottom: '-1px',
+          backgroundColor: '#030712',
+          borderTop: '1px solid #374151',
+          position: 'fixed',
+          transform: 'none',
+          WebkitTransform: 'none',
+          willChange: 'auto',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden'
+        }}>
           <div className="flex flex-col">
             {/* Expanded Actions - Slides down from above */}
             <div className={`overflow-hidden transition-all duration-300 ease-out ${
