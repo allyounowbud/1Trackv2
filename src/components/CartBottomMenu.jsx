@@ -259,8 +259,8 @@ const CartBottomMenu = ({
             <div className="px-6 py-4 space-y-4 overflow-visible">
               {/* Order Date and Location Row */}
               <div className="flex gap-4 relative">
-                {/* Order Date - 40% */}
-                <div className="w-[40%]">
+                {/* Order Date - 45% */}
+                <div className="w-[45%]">
                 <label className="block text-sm font-medium text-gray-400 mb-2">Order Date</label>
                   <div className="relative">
                 <input
@@ -303,8 +303,8 @@ const CartBottomMenu = ({
                   )}
               </div>
               
-                {/* Purchase Location - 60% */}
-                <div className="w-[60%]">
+                {/* Purchase Location - 55% */}
+                <div className="w-[55%]">
                   <label className="block text-sm font-medium text-gray-400 mb-2">Purchase Location</label>
                   <div className="relative retailer-dropdown-container">
                     <div 
