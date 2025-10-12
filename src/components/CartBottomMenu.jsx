@@ -32,6 +32,19 @@ const CartBottomMenu = ({
   const [selectedGrade, setSelectedGrade] = useState(10);
   const [selectedGradingCompany, setSelectedGradingCompany] = useState({});
   const [selectedGradingGrade, setSelectedGradingGrade] = useState({});
+  const [expandedGradingSections, setExpandedGradingSections] = useState({});
+  const [isModalAnimating, setIsModalAnimating] = useState(false);
+
+  // Handle modal animation timing
+  useEffect(() => {
+    if (isExpanded) {
+      setIsModalAnimating(true);
+      const timer = setTimeout(() => {
+        setIsModalAnimating(false);
+      }, 300); // Match animation duration
+      return () => clearTimeout(timer);
+    }
+  }, [isExpanded]);
 
   // Prevent background scrolling only when menu is expanded
   useEffect(() => {
@@ -59,9 +72,16 @@ const CartBottomMenu = ({
     };
   }, [isExpanded]);
 
+  // Auto-close menu when all items are manually deselected
+  useEffect(() => {
+    if (isOpen && cartItems.length === 0) {
+      onClose();
+    }
+  }, [cartItems.length, isOpen, onClose]);
+
   useEffect(() => {
     if (isOpen) {
-      setIsReady(true);
+        setIsReady(true);
       setIsClosing(false);
     } else {
       setIsClosing(true);
@@ -86,7 +106,7 @@ const CartBottomMenu = ({
   };
 
   const totalValue = cartItems.reduce((sum, item) => {
-    const price = itemPrices[item.id] || item.price || 0;
+    const price = itemPrices[item.id] || item.price || item.marketValue || 0;
     return sum + (price * item.quantity);
   }, 0);
 
@@ -127,7 +147,7 @@ const CartBottomMenu = ({
       location: purchaseLocation,
       items: cartItems.map(item => ({
         ...item,
-        price: itemPrices[item.id] || item.price || 0
+        price: itemPrices[item.id] || item.price || item.marketValue || 0
       }))
     };
     onCreateOrder(orderData);
@@ -149,6 +169,13 @@ const CartBottomMenu = ({
     setSelectedGradingGrade(prev => ({
       ...prev,
       [itemId]: grade
+    }));
+  };
+
+  const toggleGradingSection = (itemId) => {
+    setExpandedGradingSections(prev => ({
+      ...prev,
+      [itemId]: !prev[itemId]
     }));
   };
 
@@ -176,23 +203,28 @@ const CartBottomMenu = ({
       )}
       
       {/* Expanded Modal - Only when expanded, appears above preview menu */}
-      {isExpanded && (
-        <div 
-          className="fixed left-0 right-0 z-50 transition-all duration-300 ease-out rounded-t-3xl"
-          style={{ 
-            height: '60vh',
+      {(isExpanded || isModalAnimating) && (
+      <div 
+          className="fixed z-50 rounded-t-3xl"
+        style={{ 
+            width: '402px',
+            maxHeight: 'calc(85vh - 133px)',
+            height: cartItems.length <= 2 ? 'auto' : 'calc(85vh - 133px)',
             bottom: '133px', // Position above the preview menu (133px is the height of the preview menu)
+            left: '50%',
+            transform: isExpanded ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(100%)',
             backgroundColor: '#111827',
             borderTop: '1px solid #374151',
             position: 'fixed',
-            transform: 'none',
-            WebkitTransform: 'none',
-            willChange: 'auto',
+            WebkitTransform: isExpanded ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(100%)',
+            willChange: 'transform',
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
             pointerEvents: 'auto',
             touchAction: 'auto',
-            isolation: 'isolate'
+            isolation: 'isolate',
+            transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            WebkitTransition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
           }}
           data-menu="true"
           onClick={(e) => e.stopPropagation()}
@@ -201,11 +233,11 @@ const CartBottomMenu = ({
             {/* Drag Handle - Always visible and centered */}
             <div className="flex justify-center pt-2 pb-1">
               <div className="w-8 h-1 rounded-full bg-gray-600 transition-colors group-hover:bg-gray-500"></div>
-            </div>
+        </div>
             <h2 className="text-lg font-semibold text-white px-6">Add to Collection</h2>
             <p className="text-sm text-gray-400 leading-relaxed px-6 mb-4">
-                Add multiple items to your collection all at once.
-              </p>
+                  Add multiple items to your collection all at once.
+                </p>
               
             {/* Header border separator */}
             <div className="border-t border-gray-700/50 mx-6 mb-4"></div>
@@ -301,16 +333,21 @@ const CartBottomMenu = ({
                     {/* Item Header */}
                     <div className="flex items-start justify-between p-4">
                       {/* Left side - Item info */}
-                      <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0">
                         <h3 className="font-medium text-white text-sm leading-tight mb-1 truncate">
-                          {item.name}
+                            {item.name}
                         </h3>
                         <p className="text-xs text-gray-400 mb-1">
-                          {item.setName || 'Unknown Set'}
+                          {item.setName || item.set || item.set_name || 'Unknown Set'}
                         </p>
                         <div className="flex items-center gap-2">
                           <span className="text-emerald-400 text-xs">
                             {(() => {
+                              // Check if item is a sealed product
+                              if (isSealedProduct(item)) {
+                                return 'Sealed';
+                              }
+                              // For single cards, show grading info
                               const company = selectedGradingCompany[item.id];
                               const grade = selectedGradingGrade[item.id];
                               if (!company || company === 'Raw') {
@@ -318,168 +355,204 @@ const CartBottomMenu = ({
                               }
                               return `${company} ${grade || ''}`.trim();
                             })()}
-                          </span>
+                                </span>
                           <span className="text-gray-400 text-xs">•</span>
-                          <span className="text-white text-xs">${(itemPrices[item.id] || item.price || 0).toFixed(2)}</span>
+                          <span className="text-white text-xs">${(itemPrices[item.id] || item.price || item.marketValue || 0).toFixed(2)}</span>
+                          </div>
                         </div>
-                      </div>
                       
-                      {/* Right side - Item image */}
-                      <div className="w-12 h-16 bg-gray-700 rounded-lg overflow-hidden flex-shrink-0 ml-4">
+                      {/* Right side - Item image (clickable to expand grading options) */}
+                      <div 
+                        className={`relative w-12 h-16 flex-shrink-0 ml-4 transition-all duration-200 ${
+                          isSealedProduct(item) ? 'cursor-default' : 'cursor-pointer'
+                        } ${expandedGradingSections[item.id] ? 'ring-2 ring-indigo-400 rounded-lg' : ''}`}
+                        onClick={() => !isSealedProduct(item) && toggleGradingSection(item.id)}
+                        title={isSealedProduct(item) ? "Sealed product - no grading options" : "Click to expand/collapse grading options"}
+                      >
                         <img
                           src={item.imageUrl || '/placeholder-card.png'}
                           alt={item.name}
-                          className="w-full h-full object-contain"
+                          className="w-full h-full object-cover"
                           onError={(e) => {
                             e.target.src = '/placeholder-card.png';
                           }}
                         />
+                        {/* Expand/collapse indicator - Only show for non-sealed products */}
+                          {!isSealedProduct(item) && (
+                          <div className="absolute bottom-0 right-0 bg-black/50 text-white text-xs p-1 rounded-tl">
+                            {expandedGradingSections[item.id] ? '−' : '+'}
+                          </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    
+                      
                     {/* Input Fields Row */}
                     <div className="grid grid-cols-3 gap-4 px-4 pb-4">
                       {/* Quantity */}
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Qty</label>
-                        <input
-                          type="number"
-                          min="1"
+                          <input
+                            type="number"
+                            min="1"
                           value={item.quantity}
                           onChange={(e) => onUpdateQuantity(item.id, Math.max(1, parseInt(e.target.value) || 1))}
                           className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-                      
+                          />
+                        </div>
+                        
                       {/* Price per item */}
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Price (per item)</label>
-                        <input
-                          type="number"
-                          step="0.01"
+                          <input
+                            type="number"
+                            step="0.01"
                           min="0"
-                          value={itemPrices[item.id] || item.price || ''}
-                          onChange={(e) => handlePriceChange(item.id, e.target.value)}
+                          value={itemPrices[item.id] || item.price || item.marketValue || ''}
+                            onChange={(e) => handlePriceChange(item.id, e.target.value)}
                           className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-indigo-500"
                           placeholder="0.00"
-                        />
-                      </div>
-                      
+                          />
+                        </div>
+                        
                       {/* Total Price */}
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">Total Price</label>
-                        <input
-                          type="number"
-                          step="0.01"
+                          <input
+                            type="number"
+                            step="0.01"
                           min="0"
-                          value={((itemPrices[item.id] || item.price || 0) * item.quantity).toFixed(2)}
+                          value={((itemPrices[item.id] || item.price || item.marketValue || 0) * item.quantity).toFixed(2)}
                           readOnly
                           className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* Grading Buttons */}
-                    <div className="px-4 pb-4">
-                      <div className="grid grid-cols-4 gap-2">
-                        {/* Raw Button */}
-                        <button
-                          onClick={() => handleGradingCompanySelect(item.id, 'Raw')}
-                          className={`aspect-square flex items-center justify-center rounded-lg border transition-all p-2 ${
-                            selectedGradingCompany[item.id] === 'Raw'
-                              ? 'border-indigo-400'
-                              : 'border-gray-700 hover:border-gray-600'
-                          }`}
-                          style={{ backgroundColor: '#111827' }}
-                        >
-                          <div className="text-center">
-                            <div className="w-4 h-4 mx-auto mb-1">
-                              <svg className="w-full h-full text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
-                              </svg>
-                            </div>
-                            <span className="text-xs text-white font-medium">Raw</span>
-                          </div>
-                        </button>
-                        
-                        {/* PSA Button */}
-                        <button
-                          onClick={() => handleGradingCompanySelect(item.id, 'PSA')}
-                          className={`aspect-square flex items-center justify-center rounded-lg border transition-all p-2 ${
-                            selectedGradingCompany[item.id] === 'PSA'
-                              ? 'border-indigo-400'
-                              : 'border-gray-700 hover:border-gray-600'
-                          }`}
-                          style={{ backgroundColor: '#111827' }}
-                        >
-                          <div className="text-center">
-                            <div className="w-4 h-4 mx-auto mb-1 text-red-500 font-bold text-xs">PSA</div>
-                          </div>
-                        </button>
-                        
-                        {/* BGS Button */}
-                        <button
-                          onClick={() => handleGradingCompanySelect(item.id, 'BGS')}
-                          className={`aspect-square flex items-center justify-center rounded-lg border transition-all p-2 ${
-                            selectedGradingCompany[item.id] === 'BGS'
-                              ? 'border-indigo-400'
-                              : 'border-gray-700 hover:border-gray-600'
-                          }`}
-                          style={{ backgroundColor: '#111827' }}
-                        >
-                          <div className="text-center">
-                            <div className="w-4 h-4 mx-auto mb-1 text-yellow-500 font-bold text-xs">B</div>
-                          </div>
-                        </button>
-                        
-                        {/* CGC Button */}
-                        <button
-                          onClick={() => handleGradingCompanySelect(item.id, 'CGC')}
-                          className={`aspect-square flex items-center justify-center rounded-lg border transition-all p-2 ${
-                            selectedGradingCompany[item.id] === 'CGC'
-                              ? 'border-indigo-400'
-                              : 'border-gray-700 hover:border-gray-600'
-                          }`}
-                          style={{ backgroundColor: '#111827' }}
-                        >
-                          <div className="text-center">
-                            <div className="w-4 h-4 mx-auto mb-1 text-red-500 font-bold text-xs">CGC</div>
-                          </div>
-                        </button>
+                          />
+                        </div>
                       </div>
                       
-                      {/* Grade Selection Row - Only show if a graded company is selected */}
-                      {selectedGradingCompany[item.id] && selectedGradingCompany[item.id] !== 'Raw' && (
-                        <div className="mt-3">
-                          <div className="text-xs text-gray-400 mb-2 px-1">
-                            Select Grade ({selectedGradingCompany[item.id]})
+                    {/* Grading Buttons - Only show when expanded AND item is not a sealed product */}
+                    {expandedGradingSections[item.id] && !isSealedProduct(item) && (
+                      <div className="px-4 pb-4">
+                        <div className="grid grid-cols-4 gap-2">
+                          {/* Raw Button */}
+                          <button
+                            onClick={() => handleGradingCompanySelect(item.id, 'Raw')}
+                            className={`flex items-center justify-center rounded border transition-all p-1 ${
+                              selectedGradingCompany[item.id] === 'Raw'
+                                ? 'border-indigo-400'
+                                : 'border-gray-700 hover:border-gray-600'
+                            }`}
+                            style={{ backgroundColor: '#111827', height: '40px' }}
+                          >
+                            <svg className="w-full h-full text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                          
+                          {/* PSA Button */}
+                                <button
+                            onClick={() => handleGradingCompanySelect(item.id, 'PSA')}
+                            className={`flex items-center justify-center rounded border transition-all p-1 ${
+                              selectedGradingCompany[item.id] === 'PSA'
+                                ? 'border-indigo-400'
+                                      : 'border-gray-700 hover:border-gray-600'
+                                  }`}
+                            style={{ backgroundColor: '#111827', height: '40px' }}
+                                >
+                                    <img 
+                                      src="https://www.pngkey.com/png/full/231-2310791_psa-grading-standards-professional-sports-authenticator.png"
+                              alt="PSA"
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'block';
+                              }}
+                            />
+                            <div className="w-full h-full text-red-500 font-bold text-xs hidden flex items-center justify-center">
+                              PSA
+                            </div>
+                          </button>
+                          
+                          {/* BGS Button */}
+                          <button
+                            onClick={() => handleGradingCompanySelect(item.id, 'BGS')}
+                            className={`flex items-center justify-center rounded border transition-all p-1 ${
+                              selectedGradingCompany[item.id] === 'BGS'
+                                ? 'border-indigo-400'
+                                : 'border-gray-700 hover:border-gray-600'
+                            }`}
+                            style={{ backgroundColor: '#111827', height: '40px' }}
+                          >
+                                    <img 
+                                      src="https://www.cherrycollectables.com.au/cdn/shop/products/HH02578_Cherry_BGS_Logo.png?v=1654747644&width=500"
+                              alt="BGS"
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'block';
+                              }}
+                            />
+                            <div className="w-full h-full text-yellow-500 font-bold text-xs hidden flex items-center justify-center">
+                              B
+                            </div>
+                          </button>
+                          
+                          {/* CGC Button */}
+                          <button
+                            onClick={() => handleGradingCompanySelect(item.id, 'CGC')}
+                            className={`flex items-center justify-center rounded border transition-all p-1 ${
+                              selectedGradingCompany[item.id] === 'CGC'
+                                ? 'border-indigo-400'
+                                : 'border-gray-700 hover:border-gray-600'
+                            }`}
+                            style={{ backgroundColor: '#111827', height: '40px' }}
+                          >
+                            <img
+                              src="https://www.dustyatticcomics.com/cdn/shop/collections/CGC_LOGO.webp?v=1730621733"
+                              alt="CGC"
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'block';
+                              }}
+                            />
+                            <div className="w-full h-full text-red-500 font-bold text-sm hidden flex items-center justify-center">
+                              CGC
+                                    </div>
+                                </button>
                           </div>
-                          <div className="grid grid-cols-10 gap-1">
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((grade) => (
-                              <button
-                                key={grade}
-                                onClick={() => handleGradingGradeSelect(item.id, grade)}
-                                className={`aspect-square flex items-center justify-center rounded border transition-all text-xs font-medium ${
-                                  selectedGradingGrade[item.id] === grade
-                                    ? 'border-indigo-400 bg-indigo-400/10 text-indigo-400'
-                                    : 'border-gray-600 bg-gray-800/50 text-gray-300 hover:border-gray-500'
-                                }`}
-                              >
-                                {grade}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+                          
+                        {/* Grade Selection Row - Only show if a graded company is selected */}
+                        {selectedGradingCompany[item.id] && selectedGradingCompany[item.id] !== 'Raw' && (
+                            <div className="mt-3">
+                            <div className="text-xs text-gray-400 mb-2 px-1">
+                              Select Grade ({selectedGradingCompany[item.id]})
+                            </div>
+                              <div className="grid grid-cols-10 gap-1">
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((grade) => (
+                                  <button
+                                    key={grade}
+                                  onClick={() => handleGradingGradeSelect(item.id, grade)}
+                                    className={`aspect-square flex items-center justify-center rounded border transition-all text-xs font-medium ${
+                                    selectedGradingGrade[item.id] === grade
+                                      ? 'border-indigo-400 bg-indigo-400/10 text-indigo-400'
+                                      : 'border-gray-600 bg-gray-800/50 text-gray-300 hover:border-gray-500'
+                                  }`}
+                                  >
+                                    {grade}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                      </div>
                       )}
                     </div>
-                  </div>
                 ))}
-              </div>
+                  </div>
             </div>
           </div>
 
-          </div>
-        </div>
+              </div>
+            </div>
       )}
 
       {/* Preview Menu - Always visible at bottom */}
@@ -519,30 +592,34 @@ const CartBottomMenu = ({
                 </button>
               ) : (
                 <>
-                  <button
+                <button
                     onClick={() => setIsExpanded(false)}
                     className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors flex items-center justify-center flex-shrink-0"
-                  >
-                    Cancel
-                </button>
-                <button
-                    onClick={handleCreateOrder}
-                    className="px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700"
                 >
-                    Add Order
+                  Cancel
                 </button>
+              <button
+                onClick={handleCreateOrder}
+                    className="px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700"
+              >
+                    Add Order
+              </button>
                 </>
               )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose();
-                }}
-                className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors flex items-center justify-center flex-shrink-0"
-              >
-                <X className="w-4 h-4" />
+              {/* X Close Button - Only show when modal is NOT expanded */}
+              {!isExpanded && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClearCart(); // Deselect all items
+                    onClose(); // Close the menu
+                  }}
+                  className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors flex items-center justify-center flex-shrink-0"
+                >
+                  <X className="w-4 h-4" />
               </button>
-            </div>
+            )}
+              </div>
           </div>
 
           {/* Border line break */}
@@ -562,7 +639,7 @@ const CartBottomMenu = ({
                 <img
                   src={item.imageUrl || '/placeholder-card.png'}
                   alt={item.name}
-                  className="w-10 h-14 object-contain"
+                  className="w-10 h-14 object-cover"
                   onError={(e) => {
                     e.target.src = '/placeholder-card.png';
                   }}

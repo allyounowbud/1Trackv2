@@ -1,0 +1,592 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Plus, Minus, BookOpen, ChevronUp, ChevronDown, Calendar, ChevronDownIcon } from 'lucide-react';
+import { getItemTypeClassification, getGradeFromCardType, getCompanyFromCardType, getMarketValueForCardType, isSealedProduct } from '../utils/itemTypeUtils';
+
+const CartBottomMenu = ({ 
+  cartItems, 
+  isOpen, 
+  onClose, 
+  onUpdateQuantity, 
+  onRemoveItem, 
+  onClearCart, 
+  onCreateOrder,
+  onCancel,
+  onDone,
+  isMultiSelectMode = false
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const menuRef = useRef(null);
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [purchaseLocation, setPurchaseLocation] = useState('');
+  const [retailerSearch, setRetailerSearch] = useState('');
+  const [isRetailerFocused, setIsRetailerFocused] = useState(false);
+  const [itemPrices, setItemPrices] = useState({});
+  const [activePriceField, setActivePriceField] = useState({});
+  const [showCustomCalendar, setShowCustomCalendar] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [expandedCardId, setExpandedCardId] = useState(null);
+  const [itemCardTypes, setItemCardTypes] = useState({});
+  const [selectedGrade, setSelectedGrade] = useState(10);
+
+  // Prevent background scrolling only when menu is expanded
+  useEffect(() => {
+    if (isExpanded) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.top = `-${window.scrollY}px`;
+      document.body.classList.add('modal-open');
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
+      document.body.classList.remove('modal-open');
+    }
+
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
+      document.body.classList.remove('modal-open');
+    };
+  }, [isExpanded]);
+
+  // Initialize menu state
+  useEffect(() => {
+    if (isOpen && cartItems.length > 0) {
+      setIsReady(true);
+      setIsClosing(false);
+    } else if (!isOpen) {
+      setIsReady(false);
+      setIsClosing(false);
+      setIsExpanded(false);
+    }
+  }, [isOpen, cartItems.length]);
+
+  // Calculate total value including custom prices
+  const calculateTotalValue = () => {
+    return cartItems.reduce((sum, item) => {
+      const customPrice = itemPrices[item.id];
+      const price = customPrice !== undefined ? customPrice : item.marketValue;
+      return sum + (price * item.quantity);
+    }, 0);
+  };
+
+  // Ensure menu is ready before rendering
+  useEffect(() => {
+    if (isOpen && cartItems.length > 0) {
+      const timer = setTimeout(() => {
+        setIsReady(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, cartItems.length]);
+
+  // Handle escape key
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape' && isOpen) {
+        if (isExpanded) {
+          setIsExpanded(false);
+        } else {
+          onClose();
+        }
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen]);
+
+  // Calculate totals
+  const totalValue = calculateTotalValue();
+  const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+  const handleClose = () => {
+    if (isAnimating) return;
+    
+    setIsAnimating(true);
+    setIsClosing(true);
+    
+    setTimeout(() => {
+      setIsAnimating(false);
+      setIsClosing(false);
+      onClose();
+    }, 300);
+  };
+
+  const handleToggleExpanded = () => {
+    if (isAnimating) return;
+    
+    setIsAnimating(true);
+    setIsExpanded(!isExpanded);
+    
+    setTimeout(() => {
+      setIsAnimating(false);
+    }, 300);
+  };
+
+  const handleCreateOrder = () => {
+    if (cartItems.length === 0) return;
+    
+    // Create order data
+    const orderData = {
+      orderDate: orderDate,
+      purchaseLocation: purchaseLocation,
+      items: cartItems.map(item => ({
+        ...item,
+        customPrice: itemPrices[item.id]
+      }))
+    };
+    
+    onCreateOrder(orderData);
+  };
+
+  // Get current card type for an item
+  const getCurrentCardType = (item) => {
+    return itemCardTypes[item.id] || 'raw';
+  };
+
+  // Get current company from card type
+  const getCurrentCompany = (item) => {
+    const cardType = getCurrentCardType(item);
+    if (cardType === 'raw') return 'raw';
+    return cardType.split('_')[0];
+  };
+
+  // Get current grade from card type
+  const getCurrentGrade = (item) => {
+    const cardType = getCurrentCardType(item);
+    if (cardType === 'raw') return null;
+    const parts = cardType.split('_');
+    return parts.length > 1 ? parseInt(parts[1]) : 10;
+  };
+
+  // Get market value based on card type and grade
+  const getMarketValueForType = (item, cardType, grade = null) => {
+    if (cardType === 'raw') {
+      return item.raw_price ? parseFloat(item.raw_price) : item.marketValue;
+    } else {
+      // For graded cards, check if graded_price exists
+      return item.graded_price ? parseFloat(item.graded_price) : (item.raw_price ? parseFloat(item.raw_price) : item.marketValue);
+    }
+  };
+
+  // Check if using raw price for display
+  const isUsingRawPrice = (item, cardType) => {
+    if (cardType === 'raw') return false; // Raw is expected
+    // If it's a graded type but no graded_price exists, we're using raw
+    return !item.graded_price && item.raw_price;
+  };
+
+  // Calculate total price for an item
+  const calculateItemTotal = (item) => {
+    const customPrice = itemPrices[item.id];
+    const cardType = getCurrentCardType(item);
+    const marketValue = getMarketValueForType(item, cardType);
+    const price = customPrice !== undefined ? customPrice : marketValue;
+    return price * item.quantity;
+  };
+
+  if (!isOpen || cartItems.length === 0 || !isReady) return null;
+
+  return (
+    <>
+      {/* Dark theme date picker styles */}
+      <style>{`
+        input[type="date"]::-webkit-calendar-picker-indicator {
+          cursor: pointer;
+          filter: invert(0.5) sepia(1) saturate(5) hue-rotate(200deg);
+        }
+        
+        input[type="date"]::-webkit-calendar-picker-indicator:hover {
+          filter: invert(0.7) sepia(1) saturate(5) hue-rotate(200deg);
+        }
+        
+        input[type="date"]::-webkit-calendar-picker-indicator:active {
+          filter: invert(0.9) sepia(1) saturate(5) hue-rotate(200deg);
+        }
+        
+        .slider::-webkit-slider-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #10b981;
+          cursor: pointer;
+          border: 2px solid #ffffff;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .slider::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #10b981;
+          cursor: pointer;
+          border: 2px solid #ffffff;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+      `}</style>
+      
+      {/* Backdrop - Only when expanded */}
+      {isExpanded && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+          onClick={() => setIsExpanded(false)}
+        />
+      )}
+
+      {/* Expanded Modal - Only when expanded, appears above preview menu */}
+      {isExpanded && (
+        <div 
+          className="fixed bottom-0 left-0 right-0 z-50 transition-all duration-300 ease-out rounded-t-3xl"
+          style={{ 
+            height: '85vh',
+            bottom: '0px',
+            backgroundColor: '#111827',
+            borderTop: '1px solid #374151',
+            position: 'fixed',
+            transform: 'none',
+            WebkitTransform: 'none',
+            willChange: 'auto',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden'
+          }}
+        >
+          <div className="flex flex-col h-full">
+            {/* Drag Handle - Always visible and centered */}
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-8 h-1 rounded-full bg-gray-600 transition-colors group-hover:bg-gray-500"></div>
+            </div>
+            <h2 className="text-lg font-semibold text-white mb-2 px-6">Add to Collection</h2>
+            <p className="text-sm text-gray-400 leading-relaxed px-6 mb-4">
+                Add multiple items to your collection all at once.
+              </p>
+              
+            {/* Cart Items */}
+            <div className="flex-1 overflow-y-auto min-h-0 overflow-x-visible">
+            {/* Order Details Section */}
+            <div className="px-6 py-4 space-y-4 overflow-visible">
+              {/* Order Date and Location Row */}
+              <div className="flex gap-4 relative">
+                {/* Order Date - 40% */}
+                <div className="w-[40%]">
+                <label className="block text-sm font-medium text-gray-400 mb-2">Order Date</label>
+                  <div className="relative">
+                <input
+                      type="text"
+                      value={(() => {
+                        // Parse the date string safely to avoid timezone issues
+                        const [year, month, day] = orderDate.split('-').map(Number);
+                        const date = new Date(year, month - 1, day);
+                        return date.toLocaleDateString();
+                      })()}
+                      readOnly
+                      onClick={() => setShowCustomCalendar(!showCustomCalendar)}
+                      className={`w-full px-4 py-3 border rounded-lg text-gray-400 text-sm focus:outline-none transition-colors cursor-pointer ${
+                        showCustomCalendar 
+                          ? 'border-indigo-400/50' 
+                          : 'border-gray-700 focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50'
+                      }`}
+                      style={{ backgroundColor: '#111827' }}
+                    />
+                    <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+              </div>
+              
+                    {/* Purchase Location - 60% */}
+                <div className="w-[60%]">
+                      <label className="block text-sm font-medium text-gray-400 mb-2">Purchase Location</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                          value={purchaseLocation}
+                          onChange={(e) => setPurchaseLocation(e.target.value)}
+                          placeholder="e.g., Local Card Shop, eBay, etc."
+                      className="w-full px-4 py-3 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
+                      style={{ backgroundColor: '#111827' }}
+                    />
+                      </div>
+                </div>
+                </div>
+                
+                  {/* Cart Items List */}
+            <div className="px-6 py-4 space-y-3">
+              {cartItems.map((item) => {
+                return (
+                  <div key={item.id} className="relative rounded-lg border border-gray-700" style={{ backgroundColor: '#111827' }}>
+                    {/* Main item container */}
+                    <div className="rounded-lg p-3">
+                      {/* Item Info Row */}
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex items-start gap-3 flex-1 min-w-0">
+                                <img 
+                                  src={item.imageUrl} 
+                                  alt={item.name}
+                                  className="w-12 h-16 object-contain rounded flex-shrink-0"
+                                  style={{ imageRendering: 'crisp-edges' }}
+                                />
+                        <div className="flex-1 min-w-0">
+                                  <h3 className="text-sm font-medium text-white truncate">{item.name}</h3>
+                                  <div className="text-xs text-gray-400 mt-1">
+                            {(() => {
+                              if (isSealedProduct(item)) {
+                                const marketValue = item.marketValue || 0;
+                                return `Sealed • $${marketValue.toFixed(2)}`;
+                              }
+                              
+                              const company = getCurrentCompany(item);
+                              const grade = getCurrentGrade(item);
+                              const marketValue = getMarketValueForType(item, company, grade);
+                                      const cardTypeDisplay = company === 'raw' ? 'Raw' : `${company.toUpperCase()} ${grade}`;
+                              const usingRaw = isUsingRawPrice(item, company);
+                              const priceText = `$${marketValue.toFixed(2)}`;
+                              const rawIndicator = usingRaw ? ' (raw)' : '';
+                              
+                              return `${cardTypeDisplay} • ${priceText}${rawIndicator}`;
+                            })()}
+                          </div>
+                        </div>
+                        </div>
+                      </div>
+                      
+                      {/* Quantity and Price Controls Row */}
+                      <div className="flex items-center justify-center gap-6 w-full max-w-md mx-auto">
+                              {/* Quantity Controls */}
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
+                                  className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full flex items-center justify-center transition-colors"
+                                >
+                                  <Minus className="w-4 h-4 text-white" />
+                                </button>
+                                <span className="text-white font-medium min-w-[2rem] text-center">{item.quantity}</span>
+                                <button
+                                  onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                                  className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full flex items-center justify-center transition-colors"
+                                >
+                                  <Plus className="w-4 h-4 text-white" />
+                                </button>
+                          </div>
+                          
+                              {/* Total Price Display */}
+                              <div className="text-center">
+                                <div className="text-lg font-semibold text-white">
+                                  ${calculateItemTotal(item).toFixed(2)}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                  ${(calculateItemTotal(item) / item.quantity).toFixed(2)} each
+                                </div>
+                              </div>
+                            </div>
+                    </div>
+                          
+                          {/* Delete button */}
+                          <button
+                            onClick={() => onRemoveItem(item.id)}
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
+                          >
+                            <X className="w-4 h-4 text-white" />
+                          </button>
+                  </div>
+                );
+              })}
+                  </div>
+            </div>
+          </div>
+
+            {/* Footer - Bottom bar color */}
+            <div className="flex-shrink-0 border-t border-gray-800/50 bg-gray-950/95 backdrop-blur-xl">
+          {/* Action Buttons */}
+          <div className="p-4 pt-2">
+            {/* Total Summary */}
+            <div className="px-2 pb-3">
+              <div className="text-left">
+                <span className="text-xs text-gray-400">
+                  Total: <span className="font-semibold text-white">${totalValue.toFixed(2)}</span> 
+                  <span className="text-gray-400"> ({totalItems} items)</span>
+                </span>
+              </div>
+            </div>
+            {isMultiSelectMode ? (
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={onCancel}
+                  className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={onDone}
+                  className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create Order
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleCreateOrder}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-6 rounded-lg transition-colors text-base"
+              >
+                Create Order ({cartItems.length} items)
+              </button>
+            )}
+              </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Menu - Always visible at bottom */}
+      <div 
+        className="fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ease-out rounded-t-3xl"
+        data-menu="true"
+        style={{ 
+          backgroundColor: '#030712',
+          borderTop: '1px solid #374151',
+          position: 'fixed',
+          bottom: '-1px',
+          transform: 'none',
+          WebkitTransform: 'none',
+          willChange: 'auto',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden'
+        }}
+      >
+        <div className="flex flex-col px-6 pt-3 pb-2">
+          {/* Header with stats and actions */}
+          <div className="flex items-end justify-between w-full mb-1 min-w-0 py-1">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <span className="font-medium text-gray-400 truncate" style={{ fontSize: '13px' }}>
+                Value: ${totalValue.toFixed(2)} ({cartItems.length} {cartItems.length === 1 ? 'Item' : 'Items'})
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+              <button 
+                onClick={handleToggleExpanded}
+                className={`px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700`}
+              >
+                Actions
+                <svg className="w-3 h-3 flex-shrink-0 transition-transform duration-300 ease-out" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Border line break */}
+          <div className="w-full h-px bg-gray-700/50 mb-2"></div>
+
+          {/* Image previews */}
+          <div className="flex gap-2 overflow-x-auto pb-2 py-1">
+            {cartItems.slice(0, 6).map((item, index) => (
+              <div key={`${item.cardId}-${index}`} className="relative flex-shrink-0 group">
+                <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-800 border border-gray-700/50">
+                  <img
+                    src={item.imageUrl || '/placeholder-card.png'}
+                    alt={item.name}
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      e.target.src = '/placeholder-card.png';
+                    }}
+                  />
+                </div>
+                {item.quantity > 1 && (
+                  <div className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs font-medium rounded-full w-5 h-5 flex items-center justify-center border border-gray-900">
+                    {item.quantity}
+                  </div>
+                )}
+              </div>
+            ))}
+            {cartItems.length > 6 && (
+              <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-gray-800 border border-gray-700/50 flex items-center justify-center">
+                <span className="text-gray-400 text-xs font-medium">+{cartItems.length - 6}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+              {/* Header with stats and actions */}
+              <div className="flex items-end justify-between w-full mb-1 min-w-0 py-1">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="font-medium text-gray-400 truncate" style={{ fontSize: '13px' }}>
+                    Value: ${totalValue.toFixed(2)} ({cartItems.length} {cartItems.length === 1 ? 'Item' : 'Items'})
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                  <button 
+                    onClick={handleToggleExpanded}
+                    className={`px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700`}
+                  >
+                    Actions
+                    <svg className="w-3 h-3 flex-shrink-0 transition-transform duration-300 ease-out" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClose();
+                    }}
+                    className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors flex items-center justify-center flex-shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              
+              {/* Border separator */}
+              <div className="border-t border-gray-700/30 my-1" />
+              
+              {/* Image previews */}
+              <div className="flex items-center gap-3 overflow-x-auto py-1">
+                {cartItems.slice(0, 6).map((item) => (
+                  <div 
+                    key={item.id}
+                    className="relative group cursor-pointer flex-shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveItem(item.id);
+                    }}
+                  >
+                    <img 
+                      src={item.imageUrl} 
+                      alt={item.name}
+                      className="w-10 h-14 object-contain rounded transition-opacity group-hover:opacity-50"
+                      style={{ imageRendering: 'crisp-edges' }}
+                    />
+                    {/* Hover overlay with delete button */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {cartItems.length > 6 && (
+                  <div className="w-10 h-14 bg-gray-700/50 rounded flex items-center justify-center text-xs text-gray-300 flex-shrink-0">
+                    +{cartItems.length - 6}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default CartBottomMenu;

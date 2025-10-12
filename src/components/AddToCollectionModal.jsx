@@ -36,7 +36,19 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const [isRetailerFocused, setIsRetailerFocused] = useState(false);
   const [activePriceField, setActivePriceField] = useState('perItem'); // 'perItem' or 'total'
   const [isClosing, setIsClosing] = useState(false);
+  const [isModalAnimating, setIsModalAnimating] = useState(false);
   const modalRef = useRef(null);
+
+  // Handle modal animation timing
+  useEffect(() => {
+    if (isOpen) {
+      setIsModalAnimating(true);
+      const timer = setTimeout(() => {
+        setIsModalAnimating(false);
+      }, 300); // Match animation duration
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
 
   // Prevent body scroll when modal is open and update modal context
   useEffect(() => {
@@ -606,6 +618,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
           color: white;
         }
       `}</style>
+      {(isOpen || isModalAnimating) && (
       <div 
         className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]"
         onClick={handleClose}
@@ -614,7 +627,8 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         ref={modalRef}
         className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[95vh] overflow-y-auto"
         style={{
-          animation: isClosing ? 'slideDown 0.3s ease-out' : 'slideUp 0.3s ease-out',
+          transform: isOpen ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           pointerEvents: 'auto',
           touchAction: 'auto'
         }}
@@ -920,6 +934,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         )}
       </div>
     </div>
+    )}
     </>
   );
 };
