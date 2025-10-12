@@ -222,9 +222,12 @@ class SimpleSearchService {
   async searchSealedProducts(query, options = {}) {
     const { page, pageSize, sortBy, sortOrder } = options;
     
-    let supabaseQuery = supabase
-      .from('sealed_products')
-      .select('*', { count: 'exact' });
+    try {
+      console.log('🔍 SimpleSearchService: Searching sealed products with query:', query);
+      
+      let supabaseQuery = supabase
+        .from('sealed_products')
+        .select('*', { count: 'exact' });
 
     // Apply search filter
     if (query && query.trim()) {
@@ -250,9 +253,37 @@ class SimpleSearchService {
 
     const { data, error, count } = await supabaseQuery;
 
-    if (error) {
-      console.error('❌ Sealed products search error:', error);
-      // Return empty results instead of throwing to prevent breaking the entire search
+      if (error) {
+        console.error('❌ Sealed products search error:', error);
+        console.error('❌ Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        // Return empty results instead of throwing to prevent breaking the entire search
+        return {
+          data: [],
+          total: 0,
+          page,
+          pageSize
+        };
+      }
+
+      console.log('✅ Sealed products search successful:', {
+        found: data?.length || 0,
+        total: count || 0,
+        query
+      });
+
+      return {
+        data: data || [],
+        total: count || 0,
+        page,
+        pageSize
+      };
+    } catch (error) {
+      console.error('❌ Unexpected error in searchSealedProducts:', error);
       return {
         data: [],
         total: 0,
@@ -260,13 +291,6 @@ class SimpleSearchService {
         pageSize
       };
     }
-
-    return {
-      data: data || [],
-      total: count || 0,
-      page,
-      pageSize
-    };
   }
 
   /**
