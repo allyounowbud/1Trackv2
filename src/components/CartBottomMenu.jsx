@@ -316,7 +316,7 @@ const CartBottomMenu = ({
                       readOnly
                       className={`w-full px-3 py-2 pr-10 bg-gray-900 border rounded-lg text-white text-sm focus:outline-none cursor-pointer transition-colors ${
                         showCustomCalendar 
-                          ? 'border-indigo-400 ring-1 ring-indigo-400/50' 
+                          ? 'border-indigo-400 ring-0.5 ring-indigo-400/50' 
                           : 'border-gray-700 hover:border-gray-600'
                       }`}
                     />
@@ -335,7 +335,7 @@ const CartBottomMenu = ({
                     <div 
                       className={`w-full px-3 py-2 pr-10 bg-gray-900 border rounded-lg text-white text-sm transition-colors cursor-pointer flex items-center ${
                         showRetailerDropdown 
-                          ? 'border-indigo-400 ring-1 ring-indigo-400/50' 
+                          ? 'border-indigo-400 ring-0.5 ring-indigo-400/50' 
                           : 'border-gray-700 hover:border-gray-600'
                       }`}
                       style={{ backgroundColor: '#111827', color: 'white' }}
@@ -397,7 +397,7 @@ const CartBottomMenu = ({
                 
               {/* Custom Calendar - Full Width */}
               {showCustomCalendar && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-indigo-400 ring-1 ring-indigo-400/50 rounded-lg shadow-lg z-50">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-indigo-400 ring-0.5 ring-indigo-400/50 rounded-lg shadow-lg z-50">
                   <div className="p-4">
                     {/* Calendar Header */}
                     <div className="flex items-center justify-between mb-4">
