@@ -314,7 +314,11 @@ const CartBottomMenu = ({
                         });
                       })()}
                       readOnly
-                      className="w-full px-3 py-2 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                      className={`w-full px-3 py-2 pr-10 bg-gray-900 border rounded-lg text-white text-sm focus:outline-none cursor-pointer transition-colors ${
+                        showCustomCalendar 
+                          ? 'border-indigo-400 ring-1 ring-indigo-400/50' 
+                          : 'border-gray-700 hover:border-gray-600'
+                      }`}
                     />
                     <Calendar 
                       className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 cursor-pointer hover:text-white transition-colors" 
@@ -329,7 +333,11 @@ const CartBottomMenu = ({
                   <label className="block text-sm font-medium text-gray-400 mb-2">Purchase Location</label>
                   <div className="relative retailer-dropdown-container">
                     <div 
-                      className="w-full px-3 py-2 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center"
+                      className={`w-full px-3 py-2 pr-10 bg-gray-900 border rounded-lg text-white text-sm transition-colors cursor-pointer flex items-center ${
+                        showRetailerDropdown 
+                          ? 'border-indigo-400 ring-1 ring-indigo-400/50' 
+                          : 'border-gray-700 hover:border-gray-600'
+                      }`}
                       style={{ backgroundColor: '#111827', color: 'white' }}
                       onClick={() => setShowRetailerDropdown(!showRetailerDropdown)}
                     >
@@ -389,7 +397,7 @@ const CartBottomMenu = ({
                 
               {/* Custom Calendar - Full Width */}
               {showCustomCalendar && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-50">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-indigo-400 ring-1 ring-indigo-400/50 rounded-lg shadow-lg z-50">
                   <div className="p-4">
                     {/* Calendar Header */}
                     <div className="flex items-center justify-between mb-4">
@@ -408,7 +416,7 @@ const CartBottomMenu = ({
                       >
                         <ChevronRight className="w-5 h-5 text-gray-400" />
                       </button>
-                    </div>
+              </div>
 
                     {/* Calendar Grid */}
                     <div className="grid grid-cols-7 gap-1 mb-2">
@@ -418,8 +426,8 @@ const CartBottomMenu = ({
                           {day}
                         </div>
                       ))}
-                    </div>
-
+            </div>
+            
                     {/* Calendar Days */}
                     <div className="grid grid-cols-7 gap-1">
                       {/* Empty cells for days before month starts */}
@@ -433,7 +441,7 @@ const CartBottomMenu = ({
                         const isSelected = isSameDay(dayDate, selectedDate);
                         const isToday = isSameDay(dayDate, new Date());
                         
-                        return (
+                return (
                           <button
                             key={day}
                             onClick={() => handleDayClick(day)}
