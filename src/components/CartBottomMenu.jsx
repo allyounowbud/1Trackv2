@@ -280,13 +280,13 @@ const CartBottomMenu = ({
                       className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                     />
                     <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                  </div>
-                  
+              </div>
+              
                   {/* Custom Calendar */}
                   {showCustomCalendar && (
                     <div className="absolute top-full left-0 mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-50">
                       <div className="p-3">
-                        <input
+                  <input
                           type="date"
                           value={orderDate}
                           onChange={handleDateChange}
@@ -308,7 +308,7 @@ const CartBottomMenu = ({
                   <label className="block text-sm font-medium text-gray-400 mb-2">Purchase Location</label>
                   <div className="relative retailer-dropdown-container">
                     <div 
-                      className="w-full px-4 py-3 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center justify-between"
+                      className="w-full px-3 py-2 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center justify-between"
                       style={{ backgroundColor: '#111827', color: 'white' }}
                       onClick={() => setShowRetailerDropdown(!showRetailerDropdown)}
                     >
@@ -317,8 +317,8 @@ const CartBottomMenu = ({
                       </span>
                       <div className="flex items-center gap-2">
                         {purchaseLocation && (
-                          <button
-                            type="button"
+                    <button
+                      type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               setPurchaseLocation('');
@@ -329,7 +329,7 @@ const CartBottomMenu = ({
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
-                          </button>
+                    </button>
                         )}
                         <svg 
                           className={`w-4 h-4 text-gray-400 transition-transform ${showRetailerDropdown ? 'rotate-180' : ''}`} 
@@ -345,7 +345,7 @@ const CartBottomMenu = ({
                     {showRetailerDropdown && (
                       <div className="absolute z-10 w-full mt-1 bg-gray-900 border border-indigo-400/50 rounded-lg shadow-lg max-h-40 overflow-y-auto ring-0.5 ring-indigo-400/50" style={{ backgroundColor: '#111827' }}>
                         {['Amazon', 'TCGPlayer', 'eBay', 'Local Store', 'Other'].map(retailer => (
-                          <button
+                        <button
                             key={retailer}
                             type="button"
                             onClick={() => {
@@ -357,14 +357,14 @@ const CartBottomMenu = ({
                                 ? 'bg-indigo-600/20 text-indigo-400' 
                                 : 'text-white hover:bg-gray-700'
                             }`}
-                          >
-                            {retailer}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                        >
+                          {retailer}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+              </div>
             </div>
             
               {/* Cart Items List */}
