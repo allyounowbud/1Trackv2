@@ -120,9 +120,7 @@ class HybridSearchService {
         if (localResults && localResults.data) {
           singlesResults = localResults.data
           totalSingles = localResults.total || 0
-          console.log('🔍 HybridSearchService singles results:', singlesResults.length, 'total:', totalSingles);
         } else {
-          console.log('🔍 HybridSearchService no singles results');
         }
       } catch (localError) {
         // Silent fail

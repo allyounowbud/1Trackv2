@@ -22,8 +22,7 @@ const CartBottomMenu = ({
   const menuRef = useRef(null);
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
   const [purchaseLocation, setPurchaseLocation] = useState('');
-  const [retailerSearch, setRetailerSearch] = useState('');
-  const [isRetailerFocused, setIsRetailerFocused] = useState(false);
+  const [showRetailerDropdown, setShowRetailerDropdown] = useState(false);
   const [itemPrices, setItemPrices] = useState({});
   const [activePriceField, setActivePriceField] = useState({});
   const [showCustomCalendar, setShowCustomCalendar] = useState(false);
@@ -79,6 +78,17 @@ const CartBottomMenu = ({
       onClose();
     }
   }, [cartItems.length, isOpen, onClose]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showRetailerDropdown && !event.target.closest('.retailer-dropdown-container')) {
+        setShowRetailerDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showRetailerDropdown]);
 
   useEffect(() => {
     if (isOpen) {
@@ -296,35 +306,65 @@ const CartBottomMenu = ({
                 {/* Purchase Location - 60% */}
                 <div className="w-[60%]">
                   <label className="block text-sm font-medium text-gray-400 mb-2">Purchase Location</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={retailerSearch}
-                    onChange={(e) => setRetailerSearch(e.target.value)}
-                    onFocus={() => setIsRetailerFocused(true)}
-                      onBlur={() => setIsRetailerFocused(false)}
-                      placeholder="Search retailers..."
-                      className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    {isRetailerFocused && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-                        {['Amazon', 'TCGPlayer', 'eBay', 'Local Store', 'Other'].map((retailer) => (
-                        <button
+                  <div className="relative retailer-dropdown-container">
+                    <div 
+                      className="w-full px-4 py-3 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center justify-between"
+                      style={{ backgroundColor: '#111827', color: 'white' }}
+                      onClick={() => setShowRetailerDropdown(!showRetailerDropdown)}
+                    >
+                      <span className={purchaseLocation ? 'text-white' : 'text-gray-400'}>
+                        {purchaseLocation || 'Select retailer...'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {purchaseLocation && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPurchaseLocation('');
+                              setShowRetailerDropdown(false);
+                            }}
+                            className="text-gray-400 hover:text-white transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                        <svg 
+                          className={`w-4 h-4 text-gray-400 transition-transform ${showRetailerDropdown ? 'rotate-180' : ''}`} 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                    
+                    {showRetailerDropdown && (
+                      <div className="absolute z-10 w-full mt-1 bg-gray-900 border border-indigo-400/50 rounded-lg shadow-lg max-h-40 overflow-y-auto ring-0.5 ring-indigo-400/50" style={{ backgroundColor: '#111827' }}>
+                        {['Amazon', 'TCGPlayer', 'eBay', 'Local Store', 'Other'].map(retailer => (
+                          <button
                             key={retailer}
+                            type="button"
                             onClick={() => {
                               setPurchaseLocation(retailer);
-                              setRetailerSearch(retailer);
-                              setIsRetailerFocused(false);
+                              setShowRetailerDropdown(false);
                             }}
-                            className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 text-sm transition-colors"
-                        >
-                          {retailer}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                            className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                              purchaseLocation === retailer 
+                                ? 'bg-indigo-600/20 text-indigo-400' 
+                                : 'text-white hover:bg-gray-700'
+                            }`}
+                          >
+                            {retailer}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
             </div>
             
               {/* Cart Items List */}

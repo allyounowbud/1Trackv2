@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Search, Filter, Loader2, Star, X, ChevronDown, Plus, MoreVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import expansionDataService from '../services/expansionDataService';
 import simpleSearchService from '../services/simpleSearchService';
+import searchCacheService from '../services/searchCacheService';
 import SafeImage from '../components/SafeImage';
 import CardPreviewModal from '../components/CardPreviewModal';
 import CustomItemModal from '../components/CustomItemModal';
@@ -608,7 +609,6 @@ const SearchApi = () => {
     
     // Define current view mode at the beginning
     const currentViewMode = expansionViewMode;
-    console.log('🔍 Current view mode:', currentViewMode);
     
     // Reset state for new search - only update loading states when necessary
     if (page === 1) {
@@ -650,25 +650,21 @@ const SearchApi = () => {
       };
 
       // Use simple search service - direct database queries only
-      console.log('🔍 Starting search for:', query);
       const results = await simpleSearchService.searchAll(query, {
           page,
           pageSize: 30,
           sortBy: sortBy,
         sortOrder: sortOrder
       });
-      console.log('🔍 Search results:', results);
       
       // Results are already formatted by simpleSearchService
       const allResults = results.data || [];
 
       // Skip image enhancement for performance - use results directly
       const enhancedResults = allResults;
-      console.log('🔍 Enhanced results:', enhancedResults.length, 'items');
 
       // No filtering needed - simpleSearchService returns all results
       const finalResults = enhancedResults;
-      console.log('🔍 Final results after filtering:', finalResults.length, 'items');
 
       if (append) {
         setSearchResults(prev => [...prev, ...finalResults]);
@@ -684,13 +680,6 @@ const SearchApi = () => {
       setHasMore(currentResultsCount < totalFromResults);
       setCurrentPage(page);
       
-      console.log('🔍 Pagination debug:', {
-        currentResultsCount,
-        totalFromResults,
-        hasMore: currentResultsCount < totalFromResults,
-        page,
-        append
-      });
 
     } catch (error) {
       console.error('Search error:', error);
@@ -1023,6 +1012,40 @@ const SearchApi = () => {
     };
   }, [hasMore, isLoading, isLoadingMore]);
 
+  // Ensure page starts at top when component mounts
+  useEffect(() => {
+    const scrollToTop = () => {
+      // Reset any body styles that might interfere with scrolling
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.classList.remove('modal-open');
+      
+      // Force scroll to top
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      
+      // Target the actual scrollable containers
+      const mainContent = document.querySelector('.main-content');
+      const desktopMainContent = document.querySelector('.desktop-main-content');
+      
+      if (mainContent) {
+        mainContent.scrollTop = 0;
+      }
+      
+      if (desktopMainContent) {
+        desktopMainContent.scrollTop = 0;
+      }
+    };
+
+    // Run immediately and after a delay
+    scrollToTop();
+    setTimeout(scrollToTop, 0);
+    setTimeout(scrollToTop, 100);
+  }, []);
+
   // Back to top button scroll listener
   useEffect(() => {
     const handleScroll = () => {
@@ -1282,11 +1305,9 @@ const SearchApi = () => {
 
   // Hold-to-select functionality
   const handleCardPressStart = (card) => {
-    console.log('🎯 handleCardPressStart called for:', card.name, 'MultiSelectMode:', contextMultiSelectMode);
     if (contextMultiSelectMode) return;
     
     const timeout = setTimeout(() => {
-      console.log('🎯 Hold timeout triggered for:', card.name);
       // Set flag to prevent click from interfering
       setJustCompletedHoldSelect(true);
       
@@ -1355,11 +1376,9 @@ const SearchApi = () => {
   };
 
   const handleCardClick = (card) => {
-    console.log('🎯 handleCardClick called for:', card.name, 'JustCompletedHoldSelect:', justCompletedHoldSelect);
     
     // If we just completed a hold-to-select, ignore this click
     if (justCompletedHoldSelect) {
-      console.log('🎯 Ignoring click - just completed hold-to-select');
       setJustCompletedHoldSelect(false);
       return;
     }
@@ -1423,13 +1442,6 @@ const SearchApi = () => {
         marketValue = card.market_value_cents / 100;
       }
       
-      console.log('🔍 Card market data:', {
-        name: card.name,
-        raw_price: card.raw_price,
-        graded_price: card.graded_price,
-        market_value_cents: card.market_value_cents,
-        calculated_market_value: marketValue
-      });
       
     const cardData = {
       name: card.name,
@@ -2806,17 +2818,14 @@ const SearchApi = () => {
                       : 'border-gray-700 hover:bg-gray-800/50 hover:border-gray-600'
                   }`}
                   onClick={(e) => {
-                    console.log('🎯 Card clicked:', card.name);
                     handleCardClick(card);
                   }}
                   onMouseDown={(e) => {
-                    console.log('🎯 Mouse down on card:', card.name, 'target:', e.target);
                     handleCardPressStart(card);
                   }}
                   onMouseUp={handleCardPressEnd}
                   onMouseLeave={handleCardPressEnd}
                   onTouchStart={(e) => {
-                    console.log('🎯 Touch start on card:', card.name, 'target:', e.target);
                     handleCardPressStart(card);
                   }}
                   onTouchEnd={handleCardPressEnd}

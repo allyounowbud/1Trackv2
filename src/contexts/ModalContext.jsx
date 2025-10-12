@@ -24,7 +24,6 @@ export const ModalProvider = ({ children }) => {
   const [customBottomButtons, setCustomBottomButtons] = useState(null);
 
   const openModal = useCallback((buttons = null) => {
-    console.log('✅ ModalContext openModal called with buttons:', buttons);
     setIsModalOpen(true);
     setCustomBottomButtons(buttons);
     
@@ -33,7 +32,6 @@ export const ModalProvider = ({ children }) => {
   }, []);
   
   const closeModal = useCallback(() => {
-    console.log('🔒 ModalContext closeModal called');
     setIsModalOpen(false);
     setCustomBottomButtons(null);
     

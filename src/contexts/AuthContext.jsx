@@ -51,7 +51,6 @@ export const AuthProvider = ({ children }) => {
           (event, session) => {
             if (!isMounted) return;
 
-            console.log('Auth state change:', event, session?.user?.email || 'No user');
             
             setUser(session?.user ?? null);
             

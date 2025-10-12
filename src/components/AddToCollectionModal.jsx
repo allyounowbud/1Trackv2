@@ -6,17 +6,10 @@ import { useModal } from '../contexts/ModalContext';
 import { createSingleOrder } from '../utils/orderNumbering';
 import DesktopSideMenu from './DesktopSideMenu';
 
-// Cache bust: Updated theme colors - v3 - Fixed JSX structure
+// Cache bust: Updated theme colors - v3 - Fixed JSX structure - Fixed retailer dropdown - v4
 const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const { openModal, closeModal } = useModal();
   
-  // Debug: Log the product data being passed to the modal
-  console.log('🎯 AddToCollectionModal received product:', {
-    name: product?.name,
-    marketValue: product?.marketValue,
-    source: product?.source,
-    api_id: product?.api_id
-  });
   const [formData, setFormData] = useState({
     // Purchase details
     buyDate: new Date().toISOString().split('T')[0], // Today's date
@@ -34,6 +27,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const [retailers, setRetailers] = useState([]);
   const [retailerSearchQuery, setRetailerSearchQuery] = useState('');
   const [isRetailerFocused, setIsRetailerFocused] = useState(false);
+  const [showRetailerDropdown, setShowRetailerDropdown] = useState(false);
   const [activePriceField, setActivePriceField] = useState('perItem'); // 'perItem' or 'total'
   const [isClosing, setIsClosing] = useState(false);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
@@ -96,6 +90,18 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
 
     loadRetailers();
   }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showRetailerDropdown && !event.target.closest('.retailer-dropdown-container')) {
+        setShowRetailerDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showRetailerDropdown]);
 
   // Initialize form data when product changes
   useEffect(() => {
@@ -190,12 +196,6 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         } else {
           // Create new item with market value from Pokemon card data
           const marketValueCents = Math.round((product.marketValue || 0) * 100);
-          console.log('💾 Creating item with Pokemon card market value:', {
-            name: product.name,
-            pokemon_card_id: product.api_id,
-            marketValue: product.marketValue,
-            marketValueCents: marketValueCents
-          });
           
           // Determine proper item type classification
           const itemType = getItemTypeClassification(product, 'raw', 'api');
@@ -378,87 +378,66 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Purchase Location
                     </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        name="buyLocation"
-                        value={formData.buyLocation}
-                        onChange={(e) => {
-                          handleInputChange(e);
-                          setRetailerSearchQuery(e.target.value);
-                        }}
-                        onFocus={() => {
-                          setIsRetailerFocused(true);
-                          setRetailerSearchQuery(formData.buyLocation || '');
-                        }}
-                        onBlur={() => {
-                          setTimeout(() => setIsRetailerFocused(false), 150);
-                        }}
-                        placeholder="Type to search retailers..."
-                        className="w-full px-4 py-3 pr-8 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
+                    <div className="relative retailer-dropdown-container">
+                      <div 
+                        className="w-full px-4 py-3 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center justify-between"
                         style={{ backgroundColor: '#111827', color: 'white' }}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        autoCapitalize="off"
-                        spellCheck="false"
-                      />
-                      {formData.buyLocation && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData(prev => ({ ...prev, buyLocation: '' }));
-                            setRetailerSearchQuery('');
-                            setIsRetailerFocused(false);
-                          }}
-                          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        onClick={() => setShowRetailerDropdown(!showRetailerDropdown)}
+                      >
+                        <span className={formData.buyLocation ? 'text-white' : 'text-gray-400'}>
+                          {formData.buyLocation || 'Select retailer...'}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {formData.buyLocation && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFormData(prev => ({ ...prev, buyLocation: '' }));
+                                setShowRetailerDropdown(false);
+                              }}
+                              className="text-gray-400 hover:text-white transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          )}
+                          <svg 
+                            className={`w-4 h-4 text-gray-400 transition-transform ${showRetailerDropdown ? 'rotate-180' : ''}`} 
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
-                        </button>
-                      )}
-                      {(isRetailerFocused || retailerSearchQuery !== '') && (
+                        </div>
+                      </div>
+                      
+                      {showRetailerDropdown && (
                         <div className="absolute z-10 w-full mt-1 bg-gray-900 border border-indigo-400/50 rounded-lg shadow-lg max-h-40 overflow-y-auto ring-0.5 ring-indigo-400/50" style={{ backgroundColor: '#111827' }}>
-                          {(() => {
-                            const filteredRetailers = retailers.filter(retailer => 
-                              retailerSearchQuery === '' || retailer.display_name.toLowerCase().includes(retailerSearchQuery.toLowerCase())
-                            );
-                            const exactMatch = filteredRetailers.find(retailer => 
-                              retailer.display_name.toLowerCase() === retailerSearchQuery.toLowerCase()
-                            );
-                            
-                            return (
-                              <>
-                                {filteredRetailers.slice(0, 4).map(retailer => (
-                                  <button
-                                    key={retailer.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setFormData(prev => ({ ...prev, buyLocation: retailer.display_name }));
-                                      setRetailerSearchQuery('');
-                                      setIsRetailerFocused(false);
-                                    }}
-                                    className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 text-sm"
-                                  >
-                                    {retailer.display_name}
-                                  </button>
-                                ))}
-                                {!exactMatch && retailerSearchQuery !== '' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setFormData(prev => ({ ...prev, buyLocation: retailerSearchQuery }));
-                                      setRetailerSearchQuery('');
-                                      setIsRetailerFocused(false);
-                                    }}
-                                    className="w-full px-3 py-2 text-left text-indigo-400 hover:bg-gray-700 text-sm border-t border-gray-700"
-                                  >
-                                    Add "{retailerSearchQuery}"
-                                  </button>
-                                )}
-                              </>
-                            );
-                          })()}
+                          {retailers.map(retailer => (
+                            <button
+                              key={retailer.id}
+                              type="button"
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, buyLocation: retailer.display_name }));
+                                setShowRetailerDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                                formData.buyLocation === retailer.display_name 
+                                  ? 'bg-indigo-600/20 text-indigo-400' 
+                                  : 'text-white hover:bg-gray-700'
+                              }`}
+                            >
+                              {retailer.display_name}
+                            </button>
+                          ))}
+                          {retailers.length === 0 && (
+                            <div className="px-3 py-2 text-gray-400 text-sm">
+                              No retailers available
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -736,87 +715,66 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Purchase Location
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    name="buyLocation"
-                    value={formData.buyLocation}
-                    onChange={(e) => {
-                      handleInputChange(e);
-                      setRetailerSearchQuery(e.target.value);
-                    }}
-                    onFocus={() => {
-                      setIsRetailerFocused(true);
-                      setRetailerSearchQuery(formData.buyLocation || '');
-                    }}
-                    onBlur={() => {
-                      setTimeout(() => setIsRetailerFocused(false), 150);
-                    }}
-                    placeholder="Type to search retailers..."
-                    className="w-full px-4 py-3 pr-8 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
+                <div className="relative retailer-dropdown-container">
+                  <div 
+                    className="w-full px-4 py-3 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center justify-between"
                     style={{ backgroundColor: '#111827', color: 'white' }}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck="false"
-                  />
-                  {formData.buyLocation && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, buyLocation: '' }));
-                        setRetailerSearchQuery('');
-                        setIsRetailerFocused(false);
-                      }}
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    onClick={() => setShowRetailerDropdown(!showRetailerDropdown)}
+                  >
+                    <span className={formData.buyLocation ? 'text-white' : 'text-gray-400'}>
+                      {formData.buyLocation || 'Select retailer...'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {formData.buyLocation && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFormData(prev => ({ ...prev, buyLocation: '' }));
+                            setShowRetailerDropdown(false);
+                          }}
+                          className="text-gray-400 hover:text-white transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                      <svg 
+                        className={`w-4 h-4 text-gray-400 transition-transform ${showRetailerDropdown ? 'rotate-180' : ''}`} 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
-                    </button>
-                  )}
-                  {(isRetailerFocused || retailerSearchQuery !== '') && (
+                    </div>
+                  </div>
+                  
+                  {showRetailerDropdown && (
                     <div className="absolute z-10 w-full mt-1 bg-gray-900 border border-indigo-400/50 rounded-lg shadow-lg max-h-40 overflow-y-auto ring-0.5 ring-indigo-400/50" style={{ backgroundColor: '#111827' }}>
-                      {(() => {
-                        const filteredRetailers = retailers.filter(retailer => 
-                          retailerSearchQuery === '' || retailer.display_name.toLowerCase().includes(retailerSearchQuery.toLowerCase())
-                        );
-                        const exactMatch = filteredRetailers.find(retailer => 
-                          retailer.display_name.toLowerCase() === retailerSearchQuery.toLowerCase()
-                        );
-                        
-                        return (
-                          <>
-                            {filteredRetailers.slice(0, 4).map(retailer => (
-                              <button
-                                key={retailer.id}
-                                type="button"
-                                onClick={() => {
-                                  setFormData(prev => ({ ...prev, buyLocation: retailer.display_name }));
-                                  setRetailerSearchQuery('');
-                                  setIsRetailerFocused(false);
-                                }}
-                                className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 text-sm"
-                              >
-                                {retailer.display_name}
-                              </button>
-                            ))}
-                            {!exactMatch && retailerSearchQuery !== '' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setFormData(prev => ({ ...prev, buyLocation: retailerSearchQuery }));
-                                  setRetailerSearchQuery('');
-                                  setIsRetailerFocused(false);
-                                }}
-                                className="w-full px-3 py-2 text-left text-indigo-400 hover:bg-gray-700 text-sm border-t border-gray-700"
-                              >
-                                Add "{retailerSearchQuery}"
-                              </button>
-                            )}
-                          </>
-                        );
-                      })()}
+                      {retailers.map(retailer => (
+                        <button
+                          key={retailer.id}
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, buyLocation: retailer.display_name }));
+                            setShowRetailerDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                            formData.buyLocation === retailer.display_name 
+                              ? 'bg-indigo-600/20 text-indigo-400' 
+                              : 'text-white hover:bg-gray-700'
+                          }`}
+                        >
+                          {retailer.display_name}
+                        </button>
+                      ))}
+                      {retailers.length === 0 && (
+                        <div className="px-3 py-2 text-gray-400 text-sm">
+                          No retailers available
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

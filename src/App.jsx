@@ -6,6 +6,7 @@ import { ModalProvider } from './contexts/ModalContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { CartProvider } from './contexts/CartContext';
 import ResponsiveLayout from './components/layout/ResponsiveLayout';
+import ScrollToTop from './components/ScrollToTop';
 import Collection from './pages/Collection';
 import SearchApi from './pages/SearchApi';
 import Shipments from './pages/Shipments';
@@ -40,6 +41,7 @@ function App() {
           <ModalProvider>
             <CartProvider>
               <Router>
+              <ScrollToTop />
               <div className="min-h-screen transition-colors duration-200">
                 <Routes>
                   <Route path="/login" element={<Login />} />

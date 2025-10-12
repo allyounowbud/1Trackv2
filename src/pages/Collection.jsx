@@ -77,6 +77,40 @@ const Collection = () => {
   const [isLocationFocused, setIsLocationFocused] = useState(false);
   const [isLocationDropdownClicked, setIsLocationDropdownClicked] = useState(false);
 
+  // Ensure page starts at top when component mounts
+  useEffect(() => {
+    const scrollToTop = () => {
+      // Reset any body styles that might interfere with scrolling
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.classList.remove('modal-open');
+      
+      // Force scroll to top
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      
+      // Target the actual scrollable containers
+      const mainContent = document.querySelector('.main-content');
+      const desktopMainContent = document.querySelector('.desktop-main-content');
+      
+      if (mainContent) {
+        mainContent.scrollTop = 0;
+      }
+      
+      if (desktopMainContent) {
+        desktopMainContent.scrollTop = 0;
+      }
+    };
+
+    // Run immediately and after a delay
+    scrollToTop();
+    setTimeout(scrollToTop, 0);
+    setTimeout(scrollToTop, 100);
+  }, []);
+
   // Load market value overrides from localStorage on component mount
   useEffect(() => {
     const savedOverrides = localStorage.getItem('marketValueOverrides');
@@ -115,14 +149,6 @@ const Collection = () => {
     localStorage.setItem('marketValueOverrides', JSON.stringify(marketValueOverrides));
   }, [marketValueOverrides]);
 
-  // Debug: Monitor override modal state changes
-  useEffect(() => {
-    console.log('🔍 Modal state changed:', {
-      showOverridePriceModal,
-      overridePriceData: overridePriceData !== null ? 'object exists' : 'null',
-      shouldRender: showOverridePriceModal && overridePriceData !== null
-    });
-  }, [showOverridePriceModal, overridePriceData]);
 
   // Create a stable reference for overrides to prevent infinite re-renders
   const overridesString = JSON.stringify(marketValueOverrides);
@@ -264,6 +290,12 @@ const Collection = () => {
   };
 
   const handleLongPress = (itemId) => {
+    // If already in bulk selection mode, just toggle the item selection
+    if (isBulkSelectionMode) {
+      handleItemSelect(itemId);
+      return;
+    }
+    
     const totalItems = (collectionData.items || []).filter(item => {
       if (selectedFilter === 'All') return true;
       if (selectedFilter === 'Graded') {
@@ -273,7 +305,7 @@ const Collection = () => {
       return item.status === selectedFilter;
     }).length;
     
-    // If there's only 1 item, show the normal menu instead of entering selection mode
+    // If there's only 1 item and not in bulk mode, show the normal menu
     if (totalItems === 1) {
       setSelectedItemId(itemId);
       setShowItemMenu(true);
@@ -325,23 +357,25 @@ const Collection = () => {
   }, []);
 
 
-  // Fetch data with cache-busting for PWA
+  // Fetch data with optimized caching
   const { data: orders = [], isLoading: ordersLoading, isFetching: ordersFetching, refetch: refetchOrders } = useQuery({
     queryKey: queryKeys.orders,
     queryFn: getOrders,
-    staleTime: 0, // Always consider data stale
-    cacheTime: 0, // Don't cache data
-    refetchOnMount: true, // Always refetch on mount
-    refetchOnWindowFocus: true, // Refetch when window gains focus
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    cacheTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    refetchOnMount: false, // Don't refetch if data is fresh
+    refetchOnWindowFocus: false, // Don't refetch on window focus
+    refetchOnReconnect: true, // Only refetch on network reconnect
   });
 
   const { data: collectionSummary = [], isLoading: summaryLoading, isFetching: summaryFetching, refetch: refetchSummary } = useQuery({
     queryKey: queryKeys.collectionSummary,
     queryFn: getCollectionSummary,
-    staleTime: 0, // Always consider data stale
-    cacheTime: 0, // Don't cache data
-    refetchOnMount: true, // Always refetch on mount
-    refetchOnWindowFocus: true, // Refetch when window gains focus
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    cacheTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    refetchOnMount: false, // Don't refetch if data is fresh
+    refetchOnWindowFocus: false, // Don't refetch on window focus
+    refetchOnReconnect: true, // Only refetch on network reconnect
   });
 
   // State for prefilled add item form
@@ -351,26 +385,17 @@ const Collection = () => {
 
   // Update modal context when prefilled data changes
   useEffect(() => {
-    console.log('🔍 Prefilled data changed:', {
-      hasPrefilledData: !!prefilledCardData,
-      prefilledCardData: prefilledCardData,
-      isModalOpen
-    });
     if (prefilledCardData) {
-      console.log('🚀 Opening modal for prefilled data...');
       openModal();
     } else {
-      console.log('🔒 Closing modal (no prefilled data)');
       closeModal();
     }
   }, [prefilledCardData, openModal, closeModal, isModalOpen]);
 
   // Check for prefilled card data from search page
   useEffect(() => {
-    console.log('📍 Navigation state:', location.state);
     // Check for navigation state first (instant)
     if (location.state?.showAddModal && location.state?.prefilledData) {
-      console.log('✅ Found prefilled data in navigation state:', location.state.prefilledData);
       setPrefilledCardData(location.state.prefilledData);
       // Clear the navigation state to prevent re-triggering
       window.history.replaceState({}, document.title);
@@ -547,17 +572,22 @@ const Collection = () => {
     return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  // Calculate collection statistics
-  const collectionData = useMemo(() => {
-    const totalValueCents = orders.reduce((sum, order) => {
-      if (!order.is_sold) {
-        // Check if there's a custom override for this item
-        const overrideKey = `${order.item_id}`;
-        const overrideValue = marketValueOverrides[overrideKey];
-        const marketValue = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
-        return sum + (marketValue * order.buy_quantity);
-      }
-      return sum;
+  // Memoize filtered orders for better performance
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => !order.is_sold);
+  }, [orders]);
+
+  const soldOrders = useMemo(() => {
+    return orders.filter(order => order.is_sold);
+  }, [orders]);
+
+  // Calculate collection statistics with optimized processing
+  const collectionStats = useMemo(() => {
+    const totalValueCents = filteredOrders.reduce((sum, order) => {
+      const overrideKey = `${order.item_id}`;
+      const overrideValue = marketValueOverrides[overrideKey];
+      const marketValue = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
+      return sum + (marketValue * order.buy_quantity);
     }, 0);
 
     const totalPaidCents = orders.reduce((sum, order) => {
@@ -566,10 +596,8 @@ const Collection = () => {
 
     const totalProfitCents = orders.reduce((sum, order) => {
       if (order.is_sold) {
-        // For sold items, use the actual net profit
         return sum + (order.net_profit_cents || 0);
       } else {
-        // For unsold items, calculate unrealized profit (market value - cost)
         const overrideKey = `${order.item_id}`;
         const overrideValue = marketValueOverrides[overrideKey];
         const marketValueCents = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
@@ -579,77 +607,49 @@ const Collection = () => {
       }
     }, 0);
 
-    // Convert cents to dollars
-    const totalValue = totalValueCents / 100;
-    const totalPaid = totalPaidCents / 100;
-    const totalProfit = totalProfitCents / 100;
-    const profitPercentage = totalPaid > 0 ? (totalProfit / totalPaid) * 100 : 0;
+    return {
+      totalValue: totalValueCents / 100,
+      totalPaid: totalPaidCents / 100,
+      totalProfit: totalProfitCents / 100,
+      profitPercentage: totalPaidCents > 0 ? (totalProfitCents / totalPaidCents) * 100 : 0
+    };
+  }, [filteredOrders, orders, marketValueOverrides]);
+
+  // Calculate collection data with optimized processing
+  const collectionData = useMemo(() => {
+    const { totalValue, totalPaid, totalProfit, profitPercentage } = collectionStats;
 
 
     
-    // Debug: Log filtered orders for each category
-    const ungradedOrders = orders.filter(order => 
-      !order.is_sold && 
-      order.item_type !== 'Sealed Product' && 
-      !order.item_type?.toLowerCase().includes('graded') &&
-      !order.item_name?.toLowerCase().includes('box') &&
-      !order.item_name?.toLowerCase().includes('bundle') &&
-      !order.item_name?.toLowerCase().includes('collection') &&
-      !order.item_name?.toLowerCase().includes('tin')
-    );
-    const sealedOrders = orders.filter(order => 
-      !order.is_sold && (
-        order.item_type === 'Sealed Product' ||
-        order.item_name?.toLowerCase().includes('box') ||
-        order.item_name?.toLowerCase().includes('bundle') ||
-        order.item_name?.toLowerCase().includes('collection') ||
-        order.item_name?.toLowerCase().includes('tin')
-      )
-    );
-    
-
-    // Count items by type - sum quantities for top cards
-    const ungradedCount = orders
-      .filter(order => 
-        !order.is_sold && 
-        (order.card_type === 'raw' || !order.card_type) && // Raw cards or legacy orders without card_type
-        order.item_type !== 'Sealed Product' && 
-        !order.item_name?.toLowerCase().includes('box') &&
-        !order.item_name?.toLowerCase().includes('bundle') &&
-        !order.item_name?.toLowerCase().includes('collection') &&
-        !order.item_name?.toLowerCase().includes('tin')
-      )
-      .reduce((sum, order) => sum + (order.buy_quantity || 1), 0);
-
-    const gradedCount = orders
-      .filter(order => 
-        !order.is_sold && order.card_type === 'graded'
-      )
-      .reduce((sum, order) => sum + (order.buy_quantity || 1), 0);
-
-    const sealedCount = orders
-      .filter(order => 
-        !order.is_sold && (
-          order.item_type === 'Sealed Product' ||
-          order.item_name?.toLowerCase().includes('box') ||
-          order.item_name?.toLowerCase().includes('bundle') ||
-          order.item_name?.toLowerCase().includes('collection') ||
-          order.item_name?.toLowerCase().includes('tin')
-        )
-      )
-      .reduce((sum, order) => sum + (order.buy_quantity || 1), 0);
-
-    const customCount = orders
-      .filter(order => 
-        !order.is_sold && order.source === 'manual'
-      )
-      .reduce((sum, order) => sum + (order.buy_quantity || 1), 0);
-
-    // Debug: Log the filtered results (removed to prevent infinite re-renders)
+    // Optimized category filtering and counting
+    const categoryCounts = filteredOrders.reduce((acc, order) => {
+      const quantity = order.buy_quantity || 1;
+      const itemName = order.item_name?.toLowerCase() || '';
+      const itemType = order.item_type?.toLowerCase() || '';
+      
+      // Helper function to check if item is sealed
+      const isSealed = itemType === 'sealed product' || 
+                      itemName.includes('box') ||
+                      itemName.includes('bundle') ||
+                      itemName.includes('collection') ||
+                      itemName.includes('tin');
+      
+      if (order.source === 'manual') {
+        acc.custom += quantity;
+      } else if (order.card_type === 'graded') {
+        acc.graded += quantity;
+      } else if (isSealed) {
+        acc.sealed += quantity;
+      } else {
+        acc.ungraded += quantity;
+      }
+      
+      return acc;
+    }, { ungraded: 0, graded: 0, sealed: 0, custom: 0 });
 
     // Group orders by item name for display
     const itemGroups = {};
-    orders.forEach(order => {
+    filteredOrders.forEach(order => {
       if (!order.item_name) return;
       
       const itemName = order.item_name;
@@ -667,10 +667,8 @@ const Collection = () => {
         };
       }
       
-      if (!order.is_sold) {
-        itemGroups[itemName].quantity += order.buy_quantity || 1;
-        itemGroups[itemName].totalPaid += (order.total_cost_cents || 0);
-      }
+      itemGroups[itemName].quantity += order.buy_quantity || 1;
+      itemGroups[itemName].totalPaid += (order.total_cost_cents || 0);
       itemGroups[itemName].orders.push(order);
     });
 
@@ -800,10 +798,10 @@ const Collection = () => {
       totalPaid,
       totalProfit,
       profitPercentage,
-      ungradedCount,
-      gradedCount,
-      sealedCount,
-      customCount,
+      ungradedCount: categoryCounts.ungraded,
+      gradedCount: categoryCounts.graded,
+      sealedCount: categoryCounts.sealed,
+      customCount: categoryCounts.custom,
       items,
       // Filtered data for display
       filteredValue: selectedFilter === 'All' ? totalValue : filteredData.value,
@@ -811,24 +809,25 @@ const Collection = () => {
       filteredProfit: selectedFilter === 'All' ? totalProfit : filteredData.profit,
       filteredProfitPercentage: selectedFilter === 'All' ? profitPercentage : filteredData.profitPercentage
     };
-  }, [orders, selectedFilter, overridesString]);
+  }, [orders, selectedFilter, overridesString, filteredOrders, collectionStats]);
 
-  // Exit selection mode if there's only 1 item
+  // Exit selection mode only if selected items no longer exist in the database
   useEffect(() => {
-    const totalItems = (collectionData.items || []).filter(item => {
-      if (selectedFilter === 'All') return true;
-      if (selectedFilter === 'Graded') {
-        return item.status.includes('PSA') || item.status.includes('BGS') || 
-               item.status.includes('CGC') || item.status.includes('SGC');
+    if (isBulkSelectionMode && selectedItems.size > 0) {
+      // Check if any of the selected items still exist in the database
+      const existingSelectedItems = Array.from(selectedItems).filter(itemId => {
+        const item = collectionData.items?.find(i => i.id === itemId);
+        return !!item; // Only check if item exists, not if it matches current filter
+      });
+      
+      // Only exit if none of the selected items exist in the database anymore
+      if (existingSelectedItems.length === 0) {
+        setIsSelectionMode(false);
+        exitBulkSelectionMode();
+        setSelectedItems(new Set());
       }
-      return item.status === selectedFilter;
-    }).length;
-    if (totalItems <= 1 && isBulkSelectionMode) {
-      setIsSelectionMode(false);
-      exitBulkSelectionMode();
-      setSelectedItems(new Set());
     }
-  }, [collectionData.items, selectedFilter, isBulkSelectionMode]);
+  }, [collectionData.items, isBulkSelectionMode, selectedItems]);
 
   // Generate real chart data based on actual order history
   const generateChartData = () => {
@@ -985,8 +984,50 @@ const Collection = () => {
 
   if (ordersLoading || summaryLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white">Loading collection...</div>
+      <div className="min-h-screen bg-gray-900">
+        {/* Header Skeleton */}
+        <div className="bg-gray-800 border-b border-gray-700 p-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="h-8 bg-gray-700 rounded w-48 mb-4 animate-pulse"></div>
+            <div className="h-4 bg-gray-700 rounded w-32 animate-pulse"></div>
+          </div>
+        </div>
+
+        {/* Stats Cards Skeleton */}
+        <div className="p-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+                  <div className="h-4 bg-gray-700 rounded w-16 mb-2 animate-pulse"></div>
+                  <div className="h-6 bg-gray-700 rounded w-12 animate-pulse"></div>
+                </div>
+              ))}
+            </div>
+            
+            {/* Category Buttons Skeleton */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="bg-gray-800 border border-gray-700 rounded-xl p-3 md:p-6 animate-pulse">
+                  <div className="h-3 bg-gray-700 rounded w-16 mb-2"></div>
+                  <div className="h-5 bg-gray-700 rounded w-8"></div>
+                </div>
+              ))}
+            </div>
+
+            {/* Items Grid Skeleton */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="bg-gray-800 border border-gray-700 rounded-xl p-3 animate-pulse">
+                  <div className="aspect-[3/4] bg-gray-700 rounded-lg mb-3"></div>
+                  <div className="h-4 bg-gray-700 rounded w-full mb-2"></div>
+                  <div className="h-3 bg-gray-700 rounded w-3/4 mb-2"></div>
+                  <div className="h-3 bg-gray-700 rounded w-1/2"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1386,7 +1427,7 @@ const Collection = () => {
                    <div 
                      key={item.id} 
                      className={`relative bg-gray-900 border border-gray-800 rounded-xl overflow-hidden transition-all duration-200 ${
-                       isSelected && isBulkSelectionMode && (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length > 1
+                       isSelected && isBulkSelectionMode
                          ? 'border-indigo-400 bg-indigo-900/20 shadow-indigo-400/25' 
                          : 'hover:bg-gray-800/50 hover:border-gray-600'
                      }`}
@@ -1399,7 +1440,7 @@ const Collection = () => {
       }
       return item.status === selectedFilter;
     }).length;
-                       if (totalItems > 1) {
+                       if (totalItems > 1 || isBulkSelectionMode) {
                          longPressTriggeredRef.current = false;
                          longPressRef.current = setTimeout(() => {
                            handleLongPress(item.id);
@@ -1423,7 +1464,7 @@ const Collection = () => {
       }
       return item.status === selectedFilter;
     }).length;
-                       if (e.button === 0 && totalItems > 1) { // Left click and multiple items
+                       if (e.button === 0 && (totalItems > 1 || isBulkSelectionMode)) { // Left click and multiple items or already in bulk mode
                          longPressTriggeredRef.current = false;
                          longPressRef.current = setTimeout(() => {
                            handleLongPress(item.id);
@@ -1456,7 +1497,7 @@ const Collection = () => {
       }
       return item.status === selectedFilter;
     }).length;
-                       if (isSelectionMode && totalItems > 1) {
+                       if (isSelectionMode && (totalItems > 1 || isBulkSelectionMode)) {
                          e.preventDefault();
                          handleItemSelect(item.id);
                        }
@@ -1522,7 +1563,7 @@ const Collection = () => {
                     </div>
                     
                     {/* Menu Button / Check Icon - Bottom Right */}
-                    {isSelected && isBulkSelectionMode && (collectionData.items || []).filter(item => selectedFilter === 'All' || item.status === selectedFilter).length > 1 ? (
+                    {isSelected && isBulkSelectionMode ? (
                       <div className="text-blue-400">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -3069,7 +3110,6 @@ const Collection = () => {
       {/* iPhone-style Add to Collection Modal */}
       {(() => {
         const shouldRender = isModalOpen && prefilledCardData;
-        console.log('🎬 Modal render check:', { isModalOpen, hasPrefilledData: !!prefilledCardData, shouldRender });
         return shouldRender;
       })() && (
         <AddToCollectionModal
@@ -3287,7 +3327,6 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
                   const newPriceCents = Math.round(newPrice * 100);
                   
                   // TODO: Implement actual price update functionality
-                  console.log('Update price for item:', editPriceData.itemId, 'to:', newPriceCents, 'cents');
                   
                   // Add haptic feedback
                   if (navigator.vibrate) {

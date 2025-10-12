@@ -157,7 +157,6 @@ export const initializePWA = async () => {
       for (let registration of registrations) {
         await registration.unregister();
       }
-      console.log('🔴 ALL SERVICE WORKERS UNREGISTERED FOR DEBUGGING');
     }
     
     // Setup install prompt

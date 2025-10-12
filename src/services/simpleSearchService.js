@@ -24,7 +24,6 @@ class SimpleSearchService {
     } = options;
 
     try {
-      console.log('🔍 SimpleSearchService searching for:', query);
       
       // Search all three tables in parallel
       const [pokemonResults, sealedResults, customResults] = await Promise.all([
@@ -151,13 +150,6 @@ class SimpleSearchService {
 
       const totalResults = pokemonResults.total + sealedResults.total + customResults.total;
 
-      console.log('🔍 SimpleSearchService results:', {
-        pokemon: pokemonResults.data.length,
-        sealed: sealedResults.data.length,
-        custom: customResults.data.length,
-        total: allResults.length,
-        totalInDB: totalResults
-      });
 
       return {
         data: allResults,

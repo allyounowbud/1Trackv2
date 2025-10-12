@@ -36,7 +36,6 @@ class ScrydexApiService {
       // Test the connection
       await this.testConnection()
       this.isInitialized = true
-      console.log('✅ Scrydex API Service initialized')
       return true
     } catch (error) {
       console.error('❌ Failed to initialize Scrydex API Service:', error)
@@ -65,7 +64,6 @@ class ScrydexApiService {
       }
       
       const data = await response.json()
-      console.log('✅ API connection test successful:', data)
       return true
     } catch (error) {
       console.error('❌ Connection test failed:', error)
@@ -101,12 +99,10 @@ class ScrydexApiService {
     const cachedData = apiCacheService.get(cacheKey)
     
     if (cachedData) {
-      console.log('📦 Using cached search results for:', searchQuery)
       return cachedData
     }
 
     try {
-      console.log('🔍 Fetching fresh search results for:', searchQuery)
       const response = await fetch(`${this.baseUrl}/search/cards?${params}`, {
         headers: this.getAuthHeaders()
       })
@@ -118,10 +114,6 @@ class ScrydexApiService {
       const data = await response.json()
       const cards = data.data || []
       
-      // Debug logging
-      console.log('Raw API response:', data)
-      console.log('Raw total_count:', data.total_count)
-      console.log('Raw count:', data.count)
       
       // Format response
       const result = {
@@ -171,14 +163,10 @@ class ScrydexApiService {
     const cachedData = apiCacheService.get(cacheKey)
     
     if (cachedData) {
-      console.log('📦 Using cached expansions data')
       return cachedData
     }
 
     try {
-      console.log('🔍 Fetching fresh expansions data')
-      console.log('🔍 API URL:', `${this.baseUrl}/expansions?${params}`)
-      console.log('📋 API Params:', params.toString())
       
       const response = await fetch(`${this.baseUrl}/expansions?${params}`, {
         headers: this.getAuthHeaders()
@@ -199,14 +187,10 @@ class ScrydexApiService {
       const data = await response.json()
       let expansions = data.data || []
       
-      console.log('📦 API Response:', expansions.length, 'expansions')
-      console.log('🎯 Sample expansions:', expansions.slice(0, 3).map(exp => `${exp.name} (${exp.series})`))
       
       // Client-side filter to exclude online-only expansions
       expansions = expansions.filter(expansion => !expansion.is_online_only)
       
-      console.log('🚫 Filtered out online-only:', data.data.length - expansions.length, 'expansions')
-      console.log('✅ Final count:', expansions.length, 'physical expansions')
       
       // Cache the result
       apiCacheService.set(cacheKey, expansions, 'expansion')
@@ -226,12 +210,10 @@ class ScrydexApiService {
     const cachedData = apiCacheService.get(cacheKey)
     
     if (cachedData) {
-      console.log('📦 Using cached card data for:', cardId)
       return cachedData
     }
 
     try {
-      console.log('🔍 Fetching fresh card data for:', cardId)
       const response = await fetch(`${this.baseUrl}/cards/${cardId}`, {
         headers: this.getAuthHeaders()
       })
@@ -260,12 +242,10 @@ class ScrydexApiService {
     const cachedData = apiCacheService.get(cacheKey)
     
     if (cachedData) {
-      console.log('📦 Using cached expansion data for:', expansionId)
       return cachedData
     }
 
     try {
-      console.log('🔍 Fetching fresh expansion data for:', expansionId)
       const response = await fetch(`${this.baseUrl}/expansions/${expansionId}`, {
         headers: this.getAuthHeaders()
       })
@@ -294,12 +274,10 @@ class ScrydexApiService {
     const cachedData = apiCacheService.get(cacheKey)
     
     if (cachedData) {
-      console.log('📦 Using cached pricing data for:', cardId)
       return cachedData
     }
 
     try {
-      console.log('🔍 Fetching fresh pricing data for:', cardId)
       const response = await fetch(`${this.baseUrl}/cards/${cardId}/pricing`, {
         headers: this.getAuthHeaders()
       })
@@ -435,7 +413,6 @@ class ScrydexApiService {
       const { page = 1, pageSize = 100 } = options
       const searchQuery = encodeURIComponent(query)
       
-      console.log('🔍 Scrydex sealed search:', `${this.baseUrl}/sealed?q=${searchQuery}&page=${page}&pageSize=${pageSize}`)
       
       const response = await fetch(`${this.baseUrl}/sealed?q=${searchQuery}&page=${page}&pageSize=${pageSize}`, {
         headers: this.getAuthHeaders()
@@ -448,7 +425,6 @@ class ScrydexApiService {
       }
 
       const data = await response.json()
-      console.log('📦 Scrydex sealed search response:', data)
 
       return {
         data: data.data || data.products || [],
@@ -472,7 +448,6 @@ class ScrydexApiService {
     try {
       const { page = 1, pageSize = 100 } = options
       
-      console.log('🔍 Scrydex expansion sealed:', `${this.baseUrl}/expansions/${expansionId}/sealed?page=${page}&pageSize=${pageSize}`)
       
       const response = await fetch(`${this.baseUrl}/expansions/${expansionId}/sealed?page=${page}&pageSize=${pageSize}`, {
         headers: this.getAuthHeaders()
@@ -485,7 +460,6 @@ class ScrydexApiService {
       }
 
       const data = await response.json()
-      console.log('📦 Scrydex expansion sealed response:', data)
 
       return {
         data: data.data || data.products || [],

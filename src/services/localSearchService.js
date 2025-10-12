@@ -39,7 +39,6 @@ class LocalSearchService {
     } = options;
 
     try {
-      console.log('🔍 LocalSearchService searching for:', query);
       // Build the query
       let supabaseQuery = supabase
         .from('pokemon_cards')
@@ -49,7 +48,6 @@ class LocalSearchService {
       if (query && query.trim()) {
         const searchTerm = query.trim();
         const searchQuery = `name.ilike.%${searchTerm}%,number.ilike.%${searchTerm}%,artist.ilike.%${searchTerm}%`;
-        console.log('🔍 LocalSearchService search query:', searchQuery);
         
         // Search in name, number, and artist fields
         supabaseQuery = supabaseQuery.or(searchQuery);
@@ -116,12 +114,10 @@ class LocalSearchService {
       const to = from + pageSize - 1;
       supabaseQuery = supabaseQuery.range(from, to);
 
-      console.log('🔍 LocalSearchService executing query with pagination:', { from, to, pageSize });
 
       // Execute query
       const { data: cards, error, count } = await supabaseQuery;
 
-      console.log('🔍 LocalSearchService query result:', { cards: cards?.length, count, error });
 
       if (error) {
         console.error('Local search error:', error);
@@ -402,7 +398,6 @@ class LocalSearchService {
       if (query && query.trim()) {
         const searchTerm = query.trim();
         const searchQuery = `name.ilike.%${searchTerm}%,set_name.ilike.%${searchTerm}%,item_type.ilike.%${searchTerm}%`;
-        console.log('🔍 LocalSearchService custom items search query:', searchQuery);
         
         // Search in name, set_name, and item_type fields
         supabaseQuery = supabaseQuery.or(searchQuery);

@@ -51,10 +51,8 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
 
   // Prevent body scroll when modal is open and update modal context
   React.useEffect(() => {
-    console.log('CustomItemModal useEffect triggered - isOpen:', isOpen, 'isModalInitialized:', isModalInitializedRef.current);
     
     if (isOpen && !isModalInitializedRef.current) {
-      console.log('Initializing modal for first time');
       isModalInitializedRef.current = true;
       
       // Get current scroll position
@@ -73,11 +71,8 @@ const CustomItemModal = ({ isOpen, onClose, onSuccess, editingItem = null }) => 
       // Store scroll position for restoration
       document.body.setAttribute('data-scroll-y', scrollY.toString());
       
-      console.log('Calling openModal with button handlers');
-      console.log('Button handlers:', createCustomButtonHandlers());
       openModal(createCustomButtonHandlers());
     } else if (!isOpen && isModalInitializedRef.current) {
-      console.log('Modal closing, calling closeModal');
       isModalInitializedRef.current = false;
       
       // Restore scroll position and styles
