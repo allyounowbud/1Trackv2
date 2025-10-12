@@ -308,14 +308,14 @@ const CartBottomMenu = ({
                   <label className="block text-sm font-medium text-gray-400 mb-2">Purchase Location</label>
                   <div className="relative retailer-dropdown-container">
                     <div 
-                      className="w-full px-3 py-2 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center justify-between"
+                      className="w-full px-3 py-2 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center"
                       style={{ backgroundColor: '#111827', color: 'white' }}
                       onClick={() => setShowRetailerDropdown(!showRetailerDropdown)}
                     >
-                      <span className={purchaseLocation ? 'text-white' : 'text-gray-400'}>
+                      <span className={purchaseLocation ? 'text-white' : 'text-gray-400'} style={{ flex: 1 }}>
                         {purchaseLocation || 'Select retailer...'}
                       </span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 absolute right-3 top-1/2 transform -translate-y-1/2">
                         {purchaseLocation && (
                     <button
                       type="button"
