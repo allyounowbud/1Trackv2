@@ -12,7 +12,8 @@ const CartBottomMenu = ({
   onCreateOrder,
   onCancel,
   onDone,
-  isMultiSelectMode = false
+  isMultiSelectMode = false,
+  hasOtherModalsActive = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -576,7 +577,7 @@ const CartBottomMenu = ({
           <div className="flex items-end justify-between w-full mb-1 min-w-0 py-1">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <span className="font-medium text-gray-400 truncate" style={{ fontSize: '13px' }}>
-                Value: ${totalValue.toFixed(2)} ({cartItems.length} {cartItems.length === 1 ? 'Item' : 'Items'})
+                Multi-Select Mode
                 </span>
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
@@ -606,8 +607,8 @@ const CartBottomMenu = ({
               </button>
                 </>
               )}
-              {/* X Close Button - Only show when modal is NOT expanded */}
-              {!isExpanded && (
+              {/* X Close Button - Only show when modal is NOT expanded AND no other modals are active */}
+              {!isExpanded && !hasOtherModalsActive && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -639,7 +640,7 @@ const CartBottomMenu = ({
                 <img
                   src={item.imageUrl || '/placeholder-card.png'}
                   alt={item.name}
-                  className="w-10 h-14 object-cover"
+                  className="w-10 h-14 object-contain"
                   onError={(e) => {
                     e.target.src = '/placeholder-card.png';
                   }}
@@ -650,8 +651,10 @@ const CartBottomMenu = ({
                   </div>
                 )}
                 {/* Remove button overlay */}
-                <div className="absolute inset-0 bg-red-500 rounded opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <X className="w-4 h-4 text-white" />
+                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <div className="bg-red-500 rounded-full w-6 h-6 flex items-center justify-center">
+                    <X className="w-4 h-4 text-white" />
+                  </div>
                 </div>
               </div>
             ))}

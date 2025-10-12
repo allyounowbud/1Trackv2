@@ -2647,15 +2647,21 @@ const SearchApi = () => {
 
 
         {/* Results Header with Toggle */}
-        {searchResults.length > 0 && (
+        {(searchResults.length > 0 || (selectedExpansion && isLoading)) && (
           <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-400">
-                {selectedExpansion ? totalResults : searchResults.length} {selectedExpansion && expansionViewMode === 'sealed' ? 'products' : 'cards'} found
+                {isLoading && selectedExpansion ? (
+                  `Loading ${expansionViewMode === 'sealed' ? 'products' : 'cards'}...`
+                ) : (
+                  `${selectedExpansion ? totalResults : searchResults.length} ${selectedExpansion && expansionViewMode === 'sealed' ? 'products' : 'cards'} found`
+                )}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Scroll down to see more...
-              </p>
+              {!isLoading && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Scroll down to see more...
+                </p>
+              )}
             </div>
             
             
@@ -2779,28 +2785,6 @@ const SearchApi = () => {
           </div>
         )}
 
-        {/* Multi-Select Mode Indicator */}
-        {contextMultiSelectMode && (
-          <div className="my-3 bg-indigo-900/20 border border-indigo-400/50 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-bold">!</span>
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-white">Multi-Select Mode</h3>
-                  <p className="text-xs text-gray-300">Tap cards to select</p>
-                </div>
-              </div>
-              <button
-                onClick={cancelMultiSelect}
-                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
 
 
         {/* Search Results */}
@@ -3465,6 +3449,7 @@ const SearchApi = () => {
         onCancel={cancelMultiSelect}
         onDone={exitMultiSelectMode}
         isMultiSelectMode={contextMultiSelectMode}
+        hasOtherModalsActive={isCardModalOpen || isAddToCollectionModalOpen || isCustomItemModalOpen || showCustomItemMenu || showCustomBulkMenu}
       />
 
       {/* Custom Item Modal */}
