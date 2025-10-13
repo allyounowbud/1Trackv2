@@ -725,12 +725,9 @@ const CartBottomMenu = ({
               {!isExpanded ? (
                 <button
                   onClick={handleToggleExpanded}
-                  className={`px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700`}
+                  className={`px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out whitespace-nowrap bg-indigo-600 hover:bg-indigo-700`}
                 >
                   Add to Collection
-                  <svg className="w-3 h-3 flex-shrink-0 transition-transform duration-300 ease-out" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
                 </button>
               ) : (
                 <>
@@ -793,9 +790,15 @@ const CartBottomMenu = ({
                 )}
                 {/* Remove button overlay */}
                 <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <div className="bg-red-500 rounded-full w-6 h-6 flex items-center justify-center">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveItem(item.id);
+                    }}
+                    className="bg-red-500 hover:bg-red-600 rounded-full w-6 h-6 flex items-center justify-center transition-colors"
+                  >
                     <X className="w-4 h-4 text-white" />
-                  </div>
+                  </button>
                 </div>
               </div>
             ))}

@@ -30,35 +30,68 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const [showRetailerDropdown, setShowRetailerDropdown] = useState(false);
   const [activePriceField, setActivePriceField] = useState('perItem'); // 'perItem' or 'total'
   const [isClosing, setIsClosing] = useState(false);
+  const [isOpening, setIsOpening] = useState(false);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
   const modalRef = useRef(null);
 
   // Handle modal animation timing
   useEffect(() => {
     if (isOpen) {
+      setIsOpening(true);
       setIsModalAnimating(true);
-      const timer = setTimeout(() => {
+      
+      // Use requestAnimationFrame to ensure the modal renders in closed position first
+      const animationFrame = requestAnimationFrame(() => {
+        // Then trigger the slide-up animation on the next frame
+        requestAnimationFrame(() => {
+          setIsOpening(false);
+        });
+      });
+      
+      // Clean up animation state
+      const closeTimer = setTimeout(() => {
         setIsModalAnimating(false);
-      }, 300); // Match animation duration
-      return () => clearTimeout(timer);
+      }, 400); // Slightly longer to ensure smooth animation
+      
+      return () => {
+        cancelAnimationFrame(animationFrame);
+        clearTimeout(closeTimer);
+      };
+    } else {
+      setIsOpening(false);
+      setIsModalAnimating(false);
     }
   }, [isOpen]);
 
   // Prevent body scroll when modal is open and update modal context
   useEffect(() => {
     if (isOpen) {
-      // Strong scroll locking like CartBottomMenu
+      // Strong scroll locking - prevent all scrolling and interactions
       document.body.classList.add('modal-open');
       document.body.style.position = 'fixed';
+      document.body.style.top = '0';
+      document.body.style.left = '0';
+      document.body.style.right = '0';
       document.body.style.width = '100%';
+      document.body.style.height = '100%';
       document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+      document.documentElement.style.overflow = 'hidden';
+      document.documentElement.classList.add('modal-open');
       openModal();
     } else {
       // Remove scroll locking
       document.body.classList.remove('modal-open');
       document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
       document.body.style.width = '';
-      document.body.style.overflow = 'unset';
+      document.body.style.height = '';
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.classList.remove('modal-open');
       closeModal();
     }
 
@@ -66,8 +99,15 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
     return () => {
       document.body.classList.remove('modal-open');
       document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
       document.body.style.width = '';
-      document.body.style.overflow = 'unset';
+      document.body.style.height = '';
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.classList.remove('modal-open');
       closeModal();
     };
   }, [isOpen, openModal, closeModal]);
@@ -164,7 +204,7 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       setTimeout(() => {
         onClose();
         setIsClosing(false);
-      }, 300);
+      }, 400); // Match the animation duration
     }
   };
 
@@ -597,21 +637,29 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
           color: white;
         }
       `}</style>
-      {(isOpen || isModalAnimating) && (
+      {(isOpen || isModalAnimating || isClosing || isOpening) && (
       <div 
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end transition-opacity duration-200 z-[9999]"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end z-[9999]"
+        style={{
+          opacity: (isOpen && !isClosing && !isOpening) ? 1 : 0,
+          transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+          pointerEvents: 'auto',
+          touchAction: 'none'
+        }}
         onClick={handleClose}
+        onTouchMove={(e) => e.preventDefault()}
       >
       <div 
         ref={modalRef}
-        className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[95vh] overflow-y-auto"
+        className={`w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[95vh] overflow-y-auto transition-transform duration-400 ease-out ${
+          (isOpen && !isClosing && !isOpening) ? 'translate-y-0' : 'translate-y-full'
+        }`}
         style={{
-          transform: isOpen ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           pointerEvents: 'auto',
-          touchAction: 'auto'
+          touchAction: 'pan-y'
         }}
         onClick={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-2">

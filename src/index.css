@@ -9,6 +9,22 @@
     transform: scale(1.02);
   }
   
+  /* Modal scroll locking */
+  body.modal-open {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
+    touch-action: none !important;
+  }
+  
+  html.modal-open {
+    overflow: hidden !important;
+  }
+  
   /* iPhone-style slide-up animation */
   @keyframes slideUp {
     from {

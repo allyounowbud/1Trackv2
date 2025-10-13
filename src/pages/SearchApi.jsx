@@ -4,6 +4,8 @@ import { Search, Filter, Loader2, Star, X, ChevronDown, Plus, MoreVertical, Arro
 import expansionDataService from '../services/expansionDataService';
 import simpleSearchService from '../services/simpleSearchService';
 import searchCacheService from '../services/searchCacheService';
+import { getGameService, hasGameService } from '../services/games/gameServiceFactory';
+import { getGameById } from '../config/gamesConfig';
 import SafeImage from '../components/SafeImage';
 import CardPreviewModal from '../components/CardPreviewModal';
 import CustomItemModal from '../components/CustomItemModal';
@@ -13,6 +15,7 @@ import { createBulkOrders } from '../utils/orderNumbering';
 import { supabase } from '../lib/supabaseClient';
 import { useModal } from '../contexts/ModalContext';
 import { useCart } from '../contexts/CartContext';
+import { useGlobalHeader } from '../contexts/GlobalHeaderContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/queryClient';
 import { getItemTypeClassification, getGradeFromCardType, getCompanyFromCardType } from '../utils/itemTypeUtils';
@@ -23,6 +26,7 @@ const SearchApi = () => {
   const location = useLocation();
   const { openModal, closeModal } = useModal();
   const { isCartMenuOpen, isMultiSelectMode: contextMultiSelectMode, openCartMenu, closeCartMenu: contextCloseCartMenu, enterMultiSelectMode, exitMultiSelectMode: contextExitMultiSelectMode } = useCart();
+  const { setOnSearch, setSelectedGame: setGlobalSelectedGame, setSearchQuery: setGlobalSearchQuery } = useGlobalHeader();
   const queryClient = useQueryClient();
   
   // Available games with icons
@@ -1482,20 +1486,18 @@ const SearchApi = () => {
       setSelectedGame(game);
       setCurrentView('games');
     } else if (game.id === 'pokemon') {
-      // For Pokémon, show expansions view
-      setSelectedGame(game);
-      setCurrentView('expansions');
-      // Load Pokémon expansions and show them
-      loadExpansions();
+      // For Pokémon, navigate to Pokemon-specific page
+      navigate(`/pokemon`);
     } else if (game.id === 'other') {
       // For Other, show manual item addition view
       setSelectedGame(game);
       setCurrentView('manual');
+    } else if (hasGameService(game.id)) {
+      // For games with dedicated services, navigate to game-specific page
+      navigate(`/${game.id}`);
     } else {
-      // For other games, show expansions view
-      setSelectedGame(game);
-      setCurrentView('expansions');
-      navigate(`/search/${game.id}`);
+      // For games not yet implemented, show coming soon
+      setError(`${game.name} is coming soon!`);
     }
   };
 
@@ -2079,108 +2081,33 @@ const SearchApi = () => {
   };
 
 
+  // Handle search from global header
+  const handleGlobalSearch = (query) => {
+    setSearchQuery(query);
+    if (query.trim() && servicesInitialized) {
+      setCurrentView('search');
+      // Clear expansion selection when using global search
+      if (selectedExpansion) {
+        setSelectedExpansion(null);
+        setExpansionViewMode('singles');
+      }
+      performSearch(query, 1, false);
+    } else if (!query.trim()) {
+      clearSearch();
+    }
+  };
+
+  // Set up global header when component mounts
+  useEffect(() => {
+    setOnSearch(() => handleGlobalSearch);
+    setGlobalSelectedGame(selectedGame);
+    setGlobalSearchQuery(searchQuery);
+  }, [selectedGame, searchQuery, setOnSearch, setGlobalSelectedGame, setGlobalSearchQuery]);
+
   return (
     <div className="min-h-screen bg-gray-900 text-white" data-no-cornhusk="true">
-      {/* Fixed Header - Scrydex Style */}
-      <div className="fixed top-0 left-0 right-0 z-40 bg-gray-950 border-b border-gray-800">
-        <div className="w-full pl-4 pr-0 h-[50px] flex items-center gap-1">
-          {/* Game Selector - Outside search bar */}
-          <div className="relative game-dropdown">
-            <button
-              type="button"
-              onClick={() => setShowGameDropdown(!showGameDropdown)}
-              className="flex items-center gap-2 px-3 py-2 bg-transparent rounded-lg border border-gray-600 hover:border-gray-500 transition-colors"
-            >
-              {renderGameIcon(selectedGame?.icon, "w-4 h-4")}
-              <ChevronDown className="text-gray-400" size={14} />
-            </button>
-          </div>
-          
-          {/* Search Bar - No border */}
-          <form onSubmit={handleSearch} className="flex items-center flex-1 h-full bg-gray-950 rounded-lg mr-0">
-            {/* Search Input */}
-            <div className="flex-1 relative h-full">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  
-                  // Clear any existing timeouts
-                  if (searchTimeoutRef.current) {
-                    clearTimeout(searchTimeoutRef.current);
-                  }
-                  
-                  // Auto-search when user types (with debounce) - only if services are ready
-                  if (e.target.value.trim() && servicesInitialized) {
-                    setCurrentView('search');
-                    // Clear expansion selection when typing in search bar
-                    if (selectedExpansion) {
-                      setSelectedExpansion(null);
-                      setExpansionViewMode('singles');
-                    }
-                    // Debounce the search to avoid too many API calls
-                    searchTimeoutRef.current = setTimeout(() => {
-                      performSearch(e.target.value, 1, false);
-                    }, 500); // 500ms debounce
-                  } else if (!servicesInitialized) {
-                    setError('Search services are still initializing. Please wait a moment and try again.');
-                  } else if (!e.target.value.trim()) {
-                    // Clear search when input is empty
-                    clearSearch();
-                  }
-                }}
-                placeholder={getSearchPlaceholder()}
-                className="w-full h-full px-4 bg-transparent text-white placeholder-gray-400 focus:outline-none"
-              />
-              {/* Clear button inside search bar */}
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={clearSearch}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-            
-            {/* Search Icon */}
-            <button
-              type="submit"
-              className="p-3 h-full text-gray-400 hover:text-white transition-colors rounded-r-lg"
-            >
-              <Search size={18} />
-            </button>
-          </form>
-        </div>
-        
-        {/* Game Dropdown - Full Width with Outline Borders */}
-        {showGameDropdown && (
-          <div className="game-dropdown absolute top-[50px] left-0 right-0 bg-gray-950 border-b border-gray-600 shadow-lg z-50">
-            <div className="px-4 py-3 text-[11px] text-gray-400 border-b border-gray-600 font-medium">TCGs</div>
-            {games.filter(game => game.id !== 'coming-soon').map((game) => (
-                <button
-                  key={game.id}
-                  type="button"
-                  onClick={() => {
-                    handleGameSelect(game);
-                    setShowGameDropdown(false);
-                  }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-600 transition-colors border-b border-gray-600 last:border-b-0 ${
-                    selectedGame?.id === game.id ? 'bg-indigo-900/30 border-l-4 border-l-indigo-400' : ''
-                  }`}
-                >
-                  {renderGameIcon(game.icon, "w-5 h-5")}
-                  <span className="text-white text-[11px] font-medium">{game.name}</span>
-                </button>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-6 pt-[66px]">
+      <div className="container mx-auto px-4 py-6">
         
         {/* Game Selection View */}
         {currentView === 'games' && (

@@ -29,6 +29,12 @@ export function useAdmin() {
       // Method 1: Check if user email is in admin list
       const userEmail = user.email?.toLowerCase();
       const isEmailAdmin = ADMIN_EMAILS.map(email => email.toLowerCase()).includes(userEmail);
+      
+      console.log('🔍 Admin check:', {
+        userEmail,
+        isEmailAdmin,
+        adminEmails: ADMIN_EMAILS
+      });
 
       // Method 2: Check user metadata for admin role
       const userMetadata = user.user_metadata || {};

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import BottomNavigation from './BottomNavigation';
 import DesktopSidebar from './DesktopSidebar';
+import GlobalHeader from './GlobalHeader';
 import { useModal } from '../../contexts/ModalContext';
 import { useCart } from '../../contexts/CartContext';
 
@@ -12,6 +13,9 @@ const ResponsiveLayout = ({ children }) => {
   const [isDesktop, setIsDesktop] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [isMobileSafari, setIsMobileSafari] = useState(false);
+
+  // Check if we should show the global header (exclude settings and admin pages)
+  const shouldShowGlobalHeader = !location.pathname.startsWith('/settings') && !location.pathname.startsWith('/admin');
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -41,22 +45,24 @@ const ResponsiveLayout = ({ children }) => {
     // Desktop layout with sidebar
     return (
       <div className="desktop-app-container">
+        {shouldShowGlobalHeader && <GlobalHeader />}
         <DesktopSidebar 
           currentPath={location.pathname} 
           onExpandedChange={setSidebarExpanded}
         />
-        <div className={`desktop-main-content ${sidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
+        <div className={`desktop-main-content ${sidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'} ${shouldShowGlobalHeader ? 'pt-[50px]' : ''}`}>
           {children}
         </div>
       </div>
     );
   }
 
-  // Mobile layout with bottom navigation (unchanged)
+  // Mobile layout with bottom navigation
   return (
     <div className="app-container">
-      {/* Main Content Area - with proper spacing for bottom nav */}
-      <div className="main-content">
+      {shouldShowGlobalHeader && <GlobalHeader />}
+      {/* Main Content Area - with proper spacing for bottom nav and header */}
+      <div className={`main-content ${shouldShowGlobalHeader ? 'pt-[50px]' : ''}`}>
         {children}
       </div>
       

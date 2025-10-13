@@ -8,6 +8,7 @@ export const ADMIN_EMAILS = [
   // Add your admin emails here
   'admin@1track.com',
   'allyounowbud@gmail.com',
+  'cjbal@example.com', // Add your email here if different
   // Add more admin emails as needed
 ];
 

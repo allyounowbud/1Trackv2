@@ -5,14 +5,17 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ModalProvider } from './contexts/ModalContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { CartProvider } from './contexts/CartContext';
+import { GlobalHeaderProvider } from './contexts/GlobalHeaderContext';
 import ResponsiveLayout from './components/layout/ResponsiveLayout';
 import ScrollToTop from './components/ScrollToTop';
 import Collection from './pages/Collection';
 import SearchApi from './pages/SearchApi';
+import PokemonPage from './pages/PokemonPage';
 import Shipments from './pages/Shipments';
 import Analytics from './pages/Analytics';
 import Orders from './pages/Orders';
 import Settings from './pages/Settings';
+import AdminDashboard from './pages/AdminDashboard';
 import Login from './pages/Login';
 import LoadingScreen from './components/LoadingScreen';
 import './index.css';
@@ -40,7 +43,8 @@ function App() {
         <LanguageProvider>
           <ModalProvider>
             <CartProvider>
-              <Router>
+              <GlobalHeaderProvider>
+                <Router>
               <ScrollToTop />
               <div className="min-h-screen transition-colors duration-200">
                 <Routes>
@@ -53,10 +57,19 @@ function App() {
                           <Route path="/search" element={<SearchApi />} />
                           <Route path="/search/:game" element={<SearchApi />} />
                           <Route path="/search/:game/expansions/:expansionId" element={<SearchApi />} />
+                          
+                          {/* Game-specific routes */}
+                          <Route path="/pokemon" element={<PokemonPage />} />
+                          <Route path="/pokemon/expansions/:expansionId" element={<PokemonPage />} />
+                          
+                          {/* Other routes */}
                           <Route path="/shipments" element={<Shipments />} />
                           <Route path="/analytics" element={<Analytics />} />
                           <Route path="/orders" element={<Orders />} />
                           <Route path="/settings" element={<Settings />} />
+                          
+                          {/* Admin routes */}
+                          <Route path="/admin" element={<AdminDashboard />} />
                         </Routes>
                       </ResponsiveLayout>
                     </AuthGuard>
@@ -64,6 +77,7 @@ function App() {
                 </Routes>
               </div>
             </Router>
+              </GlobalHeaderProvider>
             </CartProvider>
           </ModalProvider>
         </LanguageProvider>

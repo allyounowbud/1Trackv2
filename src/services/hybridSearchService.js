@@ -7,6 +7,7 @@
 
 import localSearchService from './localSearchService'
 import searchCacheService from './searchCacheService'
+import tcgcsvService from './tcgcsvService.js'
 
 class HybridSearchService {
   constructor() {
@@ -177,6 +178,31 @@ class HybridSearchService {
           pageSize: pageSize,
           source: 'local',
           cached: false
+        }
+      }
+
+      // If no results from local database and we have a query, try TCGCSV as fallback
+      if (query && query.trim()) {
+        try {
+          console.log(`🎴 No local results found, trying TCGCSV for "${query}"`)
+          await tcgcsvService.initialize()
+          const tcgcsvResults = await tcgcsvService.searchCards(query, { limit: pageSize })
+          
+          if (tcgcsvResults && tcgcsvResults.data && tcgcsvResults.data.length > 0) {
+            return {
+              singles: tcgcsvResults.data,
+              sealed: [],
+              custom: [],
+              total: tcgcsvResults.total,
+              page: page,
+              pageSize: pageSize,
+              source: 'tcgcsv',
+              cached: false
+            }
+          }
+        } catch (tcgcsvError) {
+          console.error('❌ TCGCSV fallback error:', tcgcsvError)
+          // Continue to cache check
         }
       }
       

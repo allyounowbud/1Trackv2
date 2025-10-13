@@ -3,9 +3,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../contexts/ModalContext';
 import { useAdmin } from '../hooks/useAdmin';
+import { Shield } from 'lucide-react';
 import ThemeSettings from '../components/ThemeSettings';
 import ScrydexSyncSettings from '../components/ScrydexSyncSettings';
-import AdminSettings from '../components/AdminSettings';
 import AccountDeletionModal from '../components/AccountDeletionModal';
 
 const Settings = () => {
@@ -133,8 +133,28 @@ const Settings = () => {
               {/* Theme Settings */}
               <ThemeSettings />
               
-              {/* Admin Settings - Only show to admins */}
-              {isAdmin && <AdminSettings />}
+              {/* Admin Dashboard Button - Only show to admins */}
+              {isAdmin && (
+                <div className="pt-4 border-t border-gray-800">
+                  <button
+                    onClick={() => navigate('/admin')}
+                    className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded-lg transition-all group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white/10 rounded-lg">
+                        <Shield className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="text-left">
+                        <div className="text-white font-semibold">Admin Dashboard</div>
+                        <div className="text-indigo-100 text-xs">System monitoring & API management</div>
+                      </div>
+                    </div>
+                    <svg className="w-5 h-5 text-white group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               
               {/* Regular sync settings - Only show to non-admins */}
               {!isAdmin && <ScrydexSyncSettings />}

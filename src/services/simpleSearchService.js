@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseClient';
+import tcgcsvService from './tcgcsvService.js';
 
 class SimpleSearchService {
   constructor() {
@@ -20,7 +21,8 @@ class SimpleSearchService {
       page = 1,
       pageSize = 30,
       sortBy = 'name',
-      sortOrder = 'asc'
+      sortOrder = 'asc',
+      useTcgcsvFallback = true
     } = options;
 
     try {
@@ -31,6 +33,17 @@ class SimpleSearchService {
         this.searchSealedProducts(query, { page, pageSize, sortBy, sortOrder }),
         this.searchCustomItems(query, { page, pageSize, sortBy, sortOrder })
       ]);
+
+      // If database search yields no results and TCGCSV fallback is enabled, try TCGCSV
+      const totalDbResults = pokemonResults.total + sealedResults.total + customResults.total;
+      if (totalDbResults === 0 && useTcgcsvFallback && query && query.trim()) {
+        console.log(`🎴 No database results found, trying TCGCSV for "${query}"`);
+        const tcgcsvResults = await this.searchTcgcsv(query, { page, pageSize });
+        
+        if (tcgcsvResults.total > 0) {
+          return tcgcsvResults;
+        }
+      }
 
       // Format Pokemon cards with proper image, pricing, rarity, and trend
       const formattedPokemonCards = pokemonResults.data.map(card => ({
@@ -345,6 +358,55 @@ class SimpleSearchService {
       page,
       pageSize
     };
+  }
+
+  /**
+   * Search TCGCSV as fallback when database has no results
+   * @param {string} query - Search query
+   * @param {Object} options - Search options
+   * @returns {Promise<Object>} Search results from TCGCSV
+   */
+  async searchTcgcsv(query, options = {}) {
+    const { page = 1, pageSize = 30 } = options;
+
+    try {
+      await tcgcsvService.initialize();
+      const tcgcsvResults = await tcgcsvService.searchCards(query, { limit: pageSize });
+
+      if (!tcgcsvResults || !tcgcsvResults.data) {
+        return {
+          data: [],
+          total: 0,
+          page,
+          pageSize,
+          totalPages: 0,
+          hasMore: false,
+          source: 'tcgcsv'
+        };
+      }
+
+      return {
+        data: tcgcsvResults.data,
+        total: tcgcsvResults.total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(tcgcsvResults.total / pageSize),
+        hasMore: tcgcsvResults.total > (page * pageSize),
+        source: 'tcgcsv'
+      };
+    } catch (error) {
+      console.error('❌ TCGCSV search error:', error);
+      return {
+        data: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+        hasMore: false,
+        source: 'tcgcsv',
+        error: error.message
+      };
+    }
   }
 }
 

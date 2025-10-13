@@ -9,6 +9,7 @@
 import databasePricingService from './databasePricingService.js';
 import pricingSyncService from './pricingSyncService.js';
 import realTimePricingService from './realTimePricingService.js';
+import tcgcsvService from './tcgcsvService.js';
 
 class SmartPricingService {
   constructor() {
@@ -82,7 +83,7 @@ class SmartPricingService {
    * @returns {Object|null} Pricing data
    */
   async fetchPricingData(apiId, options = {}) {
-    const { forceRefresh = false, fallbackToApi = true } = options;
+    const { forceRefresh = false, fallbackToApi = true, cardName = null, setName = null } = options;
 
     try {
       // First, try database
@@ -103,11 +104,23 @@ class SmartPricingService {
 
       // No database data or fallback requested
       if (fallbackToApi) {
+        // Try Scrydex API first
         const apiPricing = await this.fetchFromApi(apiId);
         
         if (apiPricing) {
           this.cachePricing(apiId, apiPricing);
           return apiPricing;
+        }
+
+        // If Scrydex fails and we have card name, try TCGCSV
+        if (cardName) {
+          console.log(`🎴 Scrydex pricing not available, trying TCGCSV for "${cardName}"`);
+          const tcgcsvPricing = await this.fetchFromTcgcsv(cardName, setName);
+          
+          if (tcgcsvPricing) {
+            this.cachePricing(apiId, tcgcsvPricing);
+            return tcgcsvPricing;
+          }
         }
       }
 
@@ -188,6 +201,46 @@ class SmartPricingService {
       return await realTimePricingService.fetchRealTimePricing(apiId);
     } catch (error) {
       console.error(`❌ API fetch failed for ${apiId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch pricing from TCGCSV as fallback
+   * @param {string} cardName - Card name
+   * @param {string} setName - Set name (optional)
+   * @returns {Object|null} Pricing data
+   */
+  async fetchFromTcgcsv(cardName, setName = null) {
+    try {
+      await tcgcsvService.initialize();
+      const tcgcsvData = await tcgcsvService.getPricingByName(cardName, setName);
+      
+      if (!tcgcsvData) {
+        return null;
+      }
+
+      // Format TCGCSV data to match our internal structure
+      return {
+        raw: {
+          market: tcgcsvData.marketPrice,
+          low: tcgcsvData.lowPrice,
+          mid: tcgcsvData.midPrice,
+          high: tcgcsvData.highPrice,
+          currency: 'USD',
+          trends: {
+            days_7: { percent_change: 0 },
+            days_30: { percent_change: 0 },
+            days_90: { percent_change: 0 },
+            days_365: { percent_change: 0 }
+          }
+        },
+        graded: null,
+        source: 'tcgcsv',
+        lastUpdated: tcgcsvData.lastUpdated || new Date().toISOString()
+      };
+    } catch (error) {
+      console.error(`❌ TCGCSV fetch failed for ${cardName}:`, error);
       return null;
     }
   }
