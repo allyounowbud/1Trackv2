@@ -699,6 +699,30 @@ const SearchApi = () => {
     }
   };
 
+  // Handle URL search parameters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const queryParam = urlParams.get('q');
+    const gameParam = urlParams.get('game');
+    
+    if (queryParam) {
+      setSearchQuery(queryParam);
+      setCurrentView('search');
+      
+      // Find and set the selected game if specified
+      if (gameParam) {
+        const game = games.find(g => g.id === gameParam);
+        if (game) {
+          setSelectedGame(game);
+          setGlobalSelectedGame(game);
+        }
+      }
+      
+      // Perform the search
+      performSearch(queryParam);
+    }
+  }, [location.search]);
+
   // Handle search input with debouncing
   const handleSearch = (e) => {
     e.preventDefault();
@@ -2164,27 +2188,57 @@ const SearchApi = () => {
             {/* Mobile Header with Pokémon Logo */}
             {isMobile && (
               <div className="mb-6">
-                {/* Pokémon Logo and Title Row */}
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="font-bold text-white mb-0" style={{ fontSize: '17px' }}>
+                {/* Pokémon Logo and Title Row with Toggle */}
+                <div className="flex items-end justify-between mb-6">
+                  {/* Title and Count - Bottom aligned with toggle */}
+                  <div className="flex flex-col">
+                    <h2 className="font-semibold text-white leading-tight" style={{ fontSize: '14px' }}>
                       {languageFilter === 'english' ? 'English Expansions' : 'Japanese Expansions'}
                     </h2>
-                    <p className="text-sm text-gray-500">
-                      {getFilteredExpansions().length} expansions
-                    </p>
+                    <span className="text-xs text-gray-400 leading-tight mt-0.5">
+                      {getFilteredExpansions().length} expansions found
+                    </span>
                   </div>
-                  <img 
-                    src="https://scrydex.com/assets/tcgs/logo_pokemon-8a159e17ae61d5720bfe605ab12acde3a8d7e5ff986e9979c353f66396b500f2.png"
-                    alt="Pokémon"
-                    className="h-10 w-auto"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
+
+                  {/* Logo and Toggle Container */}
+                  <div className="flex flex-col items-end space-y-2">
+                    {/* Pokémon Logo - Same width as toggle */}
+                    <img 
+                      src="https://scrydex.com/assets/tcgs/logo_pokemon-8a159e17ae61d5720bfe605ab12acde3a8d7e5ff986e9979c353f66396b500f2.png"
+                      alt="Pokémon"
+                      className="h-8 w-36 object-contain"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                    
+                    {/* Language Toggle */}
+                    <div className="relative inline-flex rounded-lg bg-gray-800 p-1">
+                      <button
+                        onClick={() => setLanguageFilter('english')}
+                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                          languageFilter === 'english'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-transparent text-white hover:bg-gray-700'
+                        }`}
+                      >
+                        ENG
+                      </button>
+                      <button
+                        onClick={() => setLanguageFilter('japanese')}
+                        className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                          languageFilter === 'japanese'
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-transparent text-white hover:bg-gray-700'
+                        }`}
+                      >
+                        JPN
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 
-                {/* Controls Row - Above Grid */}
+                {/* Filter Button Row - Above Grid */}
                 <div className="flex items-center justify-between">
                   {/* Left Side - Filter Button */}
                   <div className="bg-gray-700 rounded-lg p-1">
@@ -2201,30 +2255,6 @@ const SearchApi = () => {
                           {selectedSeries.length}
                         </span>
                       )}
-                    </button>
-                  </div>
-                  
-                  {/* Right Side - Language Toggle */}
-                  <div className="flex bg-gray-700 rounded-lg p-1">
-                    <button
-                      onClick={() => setLanguageFilter('english')}
-                      className={`px-3 py-1 text-xs rounded transition-colors ${
-                        languageFilter === 'english'
-                          ? 'bg-blue-600 text-white'
-                          : 'text-gray-300 hover:text-white'
-                      }`}
-                    >
-                      ENG
-                    </button>
-                    <button
-                      onClick={() => setLanguageFilter('japanese')}
-                      className={`px-3 py-1 text-xs rounded transition-colors ${
-                        languageFilter === 'japanese'
-                          ? 'bg-blue-600 text-white'
-                          : 'text-gray-300 hover:text-white'
-                      }`}
-                    >
-                      JPN
                     </button>
                   </div>
                 </div>
@@ -2329,39 +2359,52 @@ const SearchApi = () => {
                 {/* Expansions Grid */}
                 <div className="flex-1">
                   <div className="mb-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-lg font-bold text-white mb-0">
+                    <div className="flex items-end justify-between">
+                      {/* Title and Count - Bottom aligned with toggle */}
+                      <div className="flex flex-col">
+                        <h2 className="font-semibold text-white leading-tight" style={{ fontSize: '14px' }}>
                           {languageFilter === 'english' ? 'English Expansions' : 'Japanese Expansions'}
                         </h2>
-                        <p className="text-sm text-gray-500">
-                          {getFilteredExpansions().length} expansions
+                        <span className="text-xs text-gray-400 leading-tight mt-0.5">
+                          {getFilteredExpansions().length} expansions found
                           {selectedSeries.length > 0 && (
                             <span className="text-indigo-400 ml-1">
                               (filtered by {selectedSeries.length} series)
                             </span>
                           )}
-                        </p>
+                        </span>
                       </div>
-                      {/* Language Toggle */}
-                      <div className="flex items-center">
-                        <div className="flex bg-gray-700 rounded-lg p-1">
+
+                      {/* Logo and Toggle Container */}
+                      <div className="flex flex-col items-end space-y-2">
+                        {/* Pokémon Logo - Same width as toggle */}
+                        <img 
+                          src="https://scrydex.com/assets/tcgs/logo_pokemon-8a159e17ae61d5720bfe605ab12acde3a8d7e5ff986e9979c353f66396b500f2.png"
+                          alt="Pokémon"
+                          className="h-8 w-36 object-contain"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                        
+                        {/* Language Toggle */}
+                        <div className="relative inline-flex rounded-lg bg-gray-800 p-1">
                           <button
                             onClick={() => setLanguageFilter('english')}
-                            className={`px-3 py-1 text-xs rounded transition-colors ${
+                            className={`px-3 py-1 text-sm rounded-md transition-colors ${
                               languageFilter === 'english'
-                                ? 'bg-blue-600 text-white'
-                                : 'text-gray-300 hover:text-white'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-transparent text-white hover:bg-gray-700'
                             }`}
                           >
                             ENG
                           </button>
                           <button
                             onClick={() => setLanguageFilter('japanese')}
-                            className={`px-3 py-1 text-xs rounded transition-colors ${
+                            className={`px-3 py-1 text-sm rounded-md transition-colors ${
                               languageFilter === 'japanese'
-                                ? 'bg-blue-600 text-white'
-                                : 'text-gray-300 hover:text-white'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-transparent text-white hover:bg-gray-700'
                             }`}
                           >
                             JPN
@@ -2532,6 +2575,32 @@ const SearchApi = () => {
         {/* Search View */}
         {currentView === 'search' && (
           <>
+            {/* Search Header with Logo and Results Count */}
+            {!selectedExpansion && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-bold text-white mb-0" style={{ fontSize: '17px' }}>
+                      Search Results
+                    </h2>
+                    {searchResults.length > 0 && (
+                      <p className="text-gray-500" style={{ fontSize: '12px' }}>
+                        {totalResults} results found
+                      </p>
+                    )}
+                  </div>
+                  <img 
+                    src={selectedGame?.logo || "https://scrydex.com/assets/tcgs/logo_pokemon-8a159e17ae61d5720bfe605ab12acde3a8d7e5ff986e9979c353f66396b500f2.png"}
+                    alt={selectedGame?.name || "Pokémon"}
+                    className="h-10 w-auto"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Breadcrumb Navigation */}
             {selectedExpansion && (
               <div className="mb-4">
@@ -2589,11 +2658,11 @@ const SearchApi = () => {
         {(searchResults.length > 0 || (selectedExpansion && isLoading)) && (
           <div className="mb-2 flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-400">
+              <p className="text-xs text-gray-500">
                 {isLoading && selectedExpansion ? (
                   `Loading ${expansionViewMode === 'sealed' ? 'products' : 'cards'}...`
                 ) : (
-                  `${selectedExpansion ? totalResults : searchResults.length} ${selectedExpansion && expansionViewMode === 'sealed' ? 'products' : 'cards'} found`
+                  `${selectedExpansion ? totalResults : totalResults} ${selectedExpansion && expansionViewMode === 'sealed' ? 'products' : 'cards'} found`
                 )}
               </p>
               {!isLoading && (
@@ -2780,18 +2849,18 @@ const SearchApi = () => {
                   {/* Card Info Group - Name, Set, Type */}
                   <div className="space-y-0.5 mb-2 pointer-events-none">
                     {/* Card Name */}
-                    <h3 className="font-semibold text-white text-xs">{card.name}</h3>
+                    <h3 className="font-semibold text-white" style={{ fontSize: '12px' }}>{card.name}</h3>
                     
                     {/* Set Name */}
-                    <p className="text-gray-400 text-xs">{card.expansion_name || card.set_name || 'Unknown Set'}</p>
+                    <p className="text-gray-400" style={{ fontSize: '12px' }}>{card.expansion_name || card.set_name || 'Unknown Set'}</p>
                     
                     {/* Rarity */}
-                    <p className="text-blue-400 text-xs">{card.rarity || card.item_type || 'No Rarity'}</p>
+                    <p className="text-blue-400" style={{ fontSize: '12px' }}>{card.rarity || card.item_type || 'No Rarity'}</p>
                   </div>
                   
                   {/* Pricing and Add Button */}
                   <div className="flex items-center justify-between pointer-events-none">
-                    <div className="font-semibold text-white text-xs pointer-events-none">
+                    <div className="font-semibold text-white pointer-events-none" style={{ fontSize: '12px' }}>
                       {card.raw_price && (
                         <>
                           {formatPrice(card.raw_price)}
@@ -3098,18 +3167,18 @@ const SearchApi = () => {
                         {/* Item Info Group - Name, Set, Type */}
                         <div className="space-y-0.5 mb-2">
                           {/* Item Name */}
-                          <h3 className="font-semibold text-white text-xs">{item.name}</h3>
+                          <h3 className="font-semibold text-white" style={{ fontSize: '12px' }}>{item.name}</h3>
                           
                           {/* Set Name */}
-                          <p className="text-gray-400 text-xs">{item.set_name || 'Unknown Set'}</p>
+                          <p className="text-gray-400" style={{ fontSize: '12px' }}>{item.set_name || 'Unknown Set'}</p>
                           
                           {/* Type */}
-                          <p className="text-blue-400 text-xs">{item.item_type || 'Item'}</p>
+                          <p className="text-blue-400" style={{ fontSize: '12px' }}>{item.item_type || 'Item'}</p>
                         </div>
                         
                         {/* Market Value and Menu Button */}
                         <div className="flex items-center justify-between">
-                          <div className="font-semibold text-white text-xs">
+                          <div className="font-semibold text-white" style={{ fontSize: '12px' }}>
                             {item.market_value_cents && formatPrice(item.market_value_cents / 100)}
                           </div>
                           <div className="relative">

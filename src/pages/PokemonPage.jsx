@@ -229,22 +229,39 @@ const PokemonPage = () => {
   };
 
   /**
-   * Handle search
+   * Handle search - searches both cards and sealed products
    */
   const handleSearch = async (query = searchQuery, pageNum = 1) => {
     if (!query || !query.trim()) return;
 
     setLoading(true);
     try {
-      const result = await pokemonGameService.searchCards(query.trim(), {
-        page: pageNum,
-        pageSize: 30
-      });
+      // Search both cards and sealed products in parallel
+      const [cardsResult, sealedResult] = await Promise.all([
+        pokemonGameService.searchCards(query.trim(), {
+          page: pageNum,
+          pageSize: 15 // Half the page size for cards
+        }),
+        pokemonGameService.searchSealedProducts(query.trim(), {
+          page: pageNum,
+          pageSize: 15 // Half the page size for sealed products
+        })
+      ]);
 
-      setSearchResults(result.data || []);
+      // Combine results from both searches
+      const combinedResults = [
+        ...(cardsResult.data || []),
+        ...(sealedResult.data || [])
+      ];
+
+      // Calculate combined totals
+      const combinedTotal = (cardsResult.total || 0) + (sealedResult.total || 0);
+      const combinedTotalPages = Math.ceil(combinedTotal / 30);
+
+      setSearchResults(combinedResults);
       setPage(pageNum);
-      setTotalPages(result.totalPages || 1);
-      setTotalCards(result.total || 0);
+      setTotalPages(combinedTotalPages);
+      setTotalCards(combinedTotal);
       setSearchParams({ q: query });
     } catch (error) {
       console.error('Error searching:', error);
@@ -623,8 +640,57 @@ const PokemonPage = () => {
             ))}
           </nav>
 
-          {/* Logo - Only show game logo when not in expansion detail */}
-          {view !== 'expansion-detail' && (
+          {/* Logo and Expansions Header - Only show when in expansions view */}
+          {view === 'expansions' && (
+            <div className="flex items-end justify-between mb-1">
+              {/* Title and Count - Bottom aligned with toggle */}
+              <div className="flex flex-col">
+                <h2 className="font-semibold text-white leading-tight" style={{ fontSize: '14px' }}>
+                  {languageFilter === 'english' ? 'English Expansions' : 'Japanese Expansions'}
+                </h2>
+                <span className="text-xs text-gray-400 leading-tight mt-0.5">
+                  {totalExpansions} expansion{totalExpansions !== 1 ? 's' : ''} found
+                </span>
+              </div>
+
+              {/* Logo and Toggle Container */}
+              <div className="flex flex-col items-center space-y-1">
+                {/* Pokémon Logo - Centered above toggle */}
+                <img 
+                  src={gameConfig.logo}
+                  alt={gameConfig.name}
+                  className="h-8 w-36 object-contain"
+                />
+                
+                {/* Language Toggle */}
+                <div className="relative inline-flex rounded-lg bg-gray-800 p-1">
+                  <button
+                    onClick={() => setLanguageFilter('english')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      languageFilter === 'english'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-transparent text-white hover:bg-gray-700'
+                    }`}
+                  >
+                    ENG
+                  </button>
+                  <button
+                    onClick={() => setLanguageFilter('japanese')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      languageFilter === 'japanese'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-transparent text-white hover:bg-gray-700'
+                    }`}
+                  >
+                    JPN
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Logo - Only show game logo when not in expansion detail and not in expansions view */}
+          {view !== 'expansion-detail' && view !== 'expansions' && (
             <div className="flex items-center mb-4">
               {gameConfig.logo && (
                 <img
@@ -702,52 +768,6 @@ const PokemonPage = () => {
             {/* Expansions View */}
             {view === 'expansions' && (
               <div>
-                {/* Language Filter Toggle */}
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex flex-col">
-                    <h2 className="font-semibold text-white leading-tight" style={{ fontSize: '14px' }}>
-                      {languageFilter === 'english' ? 'English Expansions' : 'Japanese Expansions'}
-                    </h2>
-                    <span className="text-xs text-gray-400 leading-tight mt-0.5">
-                      {totalExpansions} expansion{totalExpansions !== 1 ? 's' : ''} found
-                    </span>
-                  </div>
-                  
-                  {/* Language Toggle */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setLanguageFilter(languageFilter === 'english' ? 'japanese' : 'english')}
-                      className="relative inline-flex h-8 w-28 items-center rounded-lg bg-gray-700 transition-all duration-200 ease-in-out focus:outline-none p-1"
-                    >
-                      {/* Sliding Toggle */}
-                      <div
-                        className={`absolute top-1 bottom-1 bg-indigo-500 rounded-md transition-all duration-200 ease-in-out ${
-                          languageFilter === 'japanese' ? 'left-1/2' : 'left-1'
-                        }`}
-                        style={{ 
-                          width: 'calc(50% - 8px)',
-                          transform: languageFilter === 'japanese' ? 'translateX(4px)' : 'translateX(0)'
-                        }}
-                      />
-                      
-                      {/* Text Labels */}
-                      <div className="relative flex w-full items-center justify-center text-xs font-medium">
-                        <div className="flex w-full justify-between px-3">
-                          <span className={`transition-colors duration-200 ${
-                            languageFilter === 'english' ? 'text-white' : 'text-gray-400'
-                          }`}>
-                            ENG
-                          </span>
-                          <span className={`transition-colors duration-200 ${
-                            languageFilter === 'japanese' ? 'text-white' : 'text-gray-400'
-                          }`}>
-                            JPN
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-                </div>
 
                 {/* Expansions Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -828,7 +848,7 @@ const PokemonPage = () => {
                         <SafeImage
                           src={item.image_url}
                           alt={item.name}
-                          className={`w-full object-contain bg-white rounded ${
+                          className={`w-full object-contain bg-transparent rounded ${
                             productTypeFilter === 'singles' ? 'aspect-[5/7]' : 'aspect-[4/3]'
                           }`}
                         />
@@ -837,12 +857,12 @@ const PokemonPage = () => {
                       {/* Text Details Section - Bottom 1/3 */}
                       <div className="flex-1 flex flex-col justify-between">
                         {/* Name */}
-                        <h3 className="text-sm font-bold text-white truncate mb-1">
+                        <h3 className="font-semibold text-white truncate mb-1" style={{ fontSize: '12px' }}>
                           {item.name}
                         </h3>
                         
                         {/* Set */}
-                        <p className="text-xs text-gray-300 truncate mb-1">
+                        <p className="text-gray-300 truncate mb-1" style={{ fontSize: '12px' }}>
                           {productTypeFilter === 'singles' 
                             ? (item.set_name || item.expansion_name || 'Unknown Set')
                             : (item.expansion_name || 'Unknown Set')
@@ -850,7 +870,7 @@ const PokemonPage = () => {
                         </p>
                         
                         {/* Card # • Type */}
-                        <div className="text-xs text-blue-400 mb-3">
+                        <div className="text-blue-400 mb-3" style={{ fontSize: '12px' }}>
                           {productTypeFilter === 'singles' && item.number && (
                             <span>#{item.number}</span>
                           )}
@@ -869,7 +889,7 @@ const PokemonPage = () => {
                         <div className="flex justify-between items-center">
                           {/* Market Value */}
                           {item.marketValue > 0 && (
-                            <div className="text-sm font-bold text-white">
+                            <div className="font-semibold text-white" style={{ fontSize: '12px' }}>
                               ${item.marketValue.toFixed(2)}
                             </div>
                           )}
@@ -960,24 +980,24 @@ const PokemonPage = () => {
                         <SafeImage
                           src={card.image_url}
                           alt={card.name}
-                          className="w-full object-contain bg-white rounded aspect-[5/7]"
+                          className="w-full object-contain bg-transparent rounded aspect-[5/7]"
                         />
                       </div>
                       
                       {/* Text Details Section - Bottom 1/3 */}
                       <div className="flex-1 flex flex-col justify-between">
                         {/* Name */}
-                        <h3 className="text-sm font-bold text-white truncate mb-1">
+                        <h3 className="font-semibold text-white truncate mb-1" style={{ fontSize: '12px' }}>
                           {card.name}
                         </h3>
                         
                         {/* Set */}
-                        <p className="text-xs text-gray-300 truncate mb-1">
+                        <p className="text-gray-300 truncate mb-1" style={{ fontSize: '12px' }}>
                           {card.set_name || 'Unknown Set'}
                         </p>
                         
                         {/* Card # • Type */}
-                        <div className="text-xs text-blue-400 mb-3">
+                        <div className="text-blue-400 mb-3" style={{ fontSize: '12px' }}>
                           {card.number && (
                             <span>#{card.number}</span>
                           )}
@@ -993,7 +1013,7 @@ const PokemonPage = () => {
                         <div className="flex justify-between items-center">
                           {/* Market Value */}
                           {card.marketValue > 0 && (
-                            <div className="text-sm font-bold text-white">
+                            <div className="font-semibold text-white" style={{ fontSize: '12px' }}>
                               ${card.marketValue.toFixed(2)}
                             </div>
                           )}
