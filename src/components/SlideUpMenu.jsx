@@ -167,7 +167,7 @@ const SlideUpMenu = ({
       {/* Menu */}
       <div 
         ref={menuRef}
-        className={`w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[${maxHeight}] overflow-y-auto z-50 ${className}`}
+        className={`w-full bg-gray-900 border-t border-gray-600 rounded-t-3xl max-h-[${maxHeight}] overflow-y-auto z-50 ${className}`}
         style={{ 
           animation: isClosing ? 'slideDown 0.3s ease-out' : 'slideUp 0.3s ease-out',
           transform: getTransform(),

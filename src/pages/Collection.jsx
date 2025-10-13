@@ -6,9 +6,10 @@ import { getItemDisplayName, getItemSetName } from '../utils/nameUtils';
 import { useModal } from '../contexts/ModalContext';
 import { useCart } from '../contexts/CartContext';
 import { updateOrder } from '../utils/orderNumbering';
-import { queryKeys } from '../lib/queryClient';
+import { queryKeys, queryClient } from '../lib/queryClient';
 import SafeImage from '../components/SafeImage';
 import AddToCollectionModal from '../components/AddToCollectionModal';
+import ConfirmationModal from '../components/ConfirmationModal';
 
 
 // Simple data fetching - just one table!
@@ -67,6 +68,41 @@ const Collection = () => {
   const [overridePriceData, setOverridePriceData] = useState(null);
   const [marketValueOverrides, setMarketValueOverrides] = useState({});
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  
+  // Confirmation modal states
+  const [confirmationModal, setConfirmationModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null,
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    confirmVariant: 'danger'
+  });
+
+  // Helper functions for confirmation modal
+  const openConfirmationModal = (config) => {
+    setConfirmationModal({
+      isOpen: true,
+      title: config.title || 'Confirm Action',
+      message: config.message || 'Are you sure you want to proceed?',
+      onConfirm: config.onConfirm,
+      confirmText: config.confirmText || 'Confirm',
+      cancelText: config.cancelText || 'Cancel',
+      confirmVariant: config.confirmVariant || 'danger'
+    });
+  };
+
+  const closeConfirmationModal = () => {
+    setConfirmationModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const handleConfirmAction = () => {
+    if (confirmationModal.onConfirm) {
+      confirmationModal.onConfirm();
+    }
+    closeConfirmationModal();
+  };
   
   // Bulk order book states
   const [showBulkOrderBook, setShowBulkOrderBook] = useState(false);
@@ -449,13 +485,46 @@ const Collection = () => {
     }
   }, [refetchOrders, refetchSummary]);
 
-  // Delete order - SIMPLE!
+  // Delete order and associated item if no other orders exist
   const deleteOrder = async (orderId) => {
     try {
-      const { error } = await supabase.rpc('delete_order_clean', {
-        p_order_id: orderId
-      });
-      if (error) throw error;
+      // First, get the order details to find the item_id
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .select('item_id')
+        .eq('id', orderId)
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Delete the order
+      const { error: deleteOrderError } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', orderId);
+
+      if (deleteOrderError) throw deleteOrderError;
+
+      // Check if there are any other orders for this item
+      const { data: remainingOrders, error: checkError } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('item_id', order.item_id);
+
+      if (checkError) throw checkError;
+
+      // If no other orders exist for this item, delete the item too
+      if (remainingOrders.length === 0) {
+        const { error: deleteItemError } = await supabase
+          .from('items')
+          .delete()
+          .eq('id', order.item_id);
+
+        if (deleteItemError) {
+          console.warn('Could not delete item:', deleteItemError);
+          // Don't throw here as the order was already deleted successfully
+        }
+      }
       
       await refetchOrders();
       await refetchSummary();
@@ -501,11 +570,48 @@ const Collection = () => {
   // Delete selected orders
   const deleteSelectedOrders = async (orderIds) => {
     try {
-      for (const orderId of orderIds) {
-        const { error } = await supabase.rpc('delete_order_clean', {
-          p_order_id: orderId
-        });
-        if (error) throw error;
+      // Get all orders to find their item_ids
+      const { data: ordersToDelete, error: ordersError } = await supabase
+        .from('orders')
+        .select('id, item_id')
+        .in('id', orderIds);
+
+      if (ordersError) throw ordersError;
+
+      // Delete all orders
+      const { error: deleteOrdersError } = await supabase
+        .from('orders')
+        .delete()
+        .in('id', orderIds);
+
+      if (deleteOrdersError) throw deleteOrdersError;
+
+      // Get unique item_ids from deleted orders
+      const itemIds = [...new Set(ordersToDelete.map(order => order.item_id))];
+
+      // For each item, check if there are any remaining orders
+      for (const itemId of itemIds) {
+        const { data: remainingOrders, error: checkError } = await supabase
+          .from('orders')
+          .select('id')
+          .eq('item_id', itemId);
+
+        if (checkError) {
+          console.warn('Could not check remaining orders for item:', itemId, checkError);
+          continue;
+        }
+
+        // If no other orders exist for this item, delete the item too
+        if (remainingOrders.length === 0) {
+          const { error: deleteItemError } = await supabase
+            .from('items')
+            .delete()
+            .eq('id', itemId);
+
+          if (deleteItemError) {
+            console.warn('Could not delete item:', itemId, deleteItemError);
+          }
+        }
       }
       
       await refetchOrders();
@@ -1841,23 +1947,61 @@ const Collection = () => {
                                               </svg>
                                             </button>
                                             <button
-                                              onClick={async () => {
-                                                if (!window.confirm('Delete this order?')) return;
-                                                
-                                                try {
-                                                  const { error } = await supabase.rpc('delete_order_clean', {
-                                                    p_order_id: order.id
-                                                  });
+                                              onClick={() => {
+                                                openConfirmationModal({
+                                                  title: 'Delete Order',
+                                                  message: `Are you sure you want to delete this order? This action cannot be undone.`,
+                                                  confirmText: 'Delete',
+                                                  cancelText: 'Cancel',
+                                                  confirmVariant: 'danger',
+                                                  onConfirm: async () => {
+                                                    try {
+                                                      // First, get the order details to find the item_id
+                                                      const { data: orderData, error: orderError } = await supabase
+                                                        .from('orders')
+                                                        .select('item_id')
+                                                        .eq('id', order.id)
+                                                        .single();
 
-                                                  if (error) throw error;
+                                                      if (orderError) throw orderError;
 
-                                                  await Promise.all([
-                                                    queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
-                                                    queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary })
-                                                  ]);
-                                                } catch (error) {
-                                                  console.error('Error deleting order:', error);
-                                                }
+                                                      // Delete the order
+                                                      const { error: deleteOrderError } = await supabase
+                                                        .from('orders')
+                                                        .delete()
+                                                        .eq('id', order.id);
+
+                                                      if (deleteOrderError) throw deleteOrderError;
+
+                                                      // Check if there are any other orders for this item
+                                                      const { data: remainingOrders, error: checkError } = await supabase
+                                                        .from('orders')
+                                                        .select('id')
+                                                        .eq('item_id', orderData.item_id);
+
+                                                      if (checkError) throw checkError;
+
+                                                      // If no other orders exist for this item, delete the item too
+                                                      if (remainingOrders.length === 0) {
+                                                        const { error: deleteItemError } = await supabase
+                                                          .from('items')
+                                                          .delete()
+                                                          .eq('id', orderData.item_id);
+
+                                                        if (deleteItemError) {
+                                                          console.warn('Could not delete item:', deleteItemError);
+                                                        }
+                                                      }
+
+                                                      await Promise.all([
+                                                        queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
+                                                        queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary })
+                                                      ]);
+                                                    } catch (error) {
+                                                      console.error('Error deleting order:', error);
+                                                    }
+                                                  }
+                                                });
                                               }}
                                               className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition-colors"
                                             >
@@ -3138,6 +3282,18 @@ const Collection = () => {
           }}
         />
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmationModal.isOpen}
+        onClose={closeConfirmationModal}
+        onConfirm={handleConfirmAction}
+        title={confirmationModal.title}
+        message={confirmationModal.message}
+        confirmText={confirmationModal.confirmText}
+        cancelText={confirmationModal.cancelText}
+        confirmVariant={confirmationModal.confirmVariant}
+      />
 
       </div>
     </div>

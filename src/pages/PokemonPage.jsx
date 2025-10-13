@@ -467,7 +467,7 @@ const PokemonPage = () => {
     try {
       // Set success data for popup
       const totalValue = cartItems.reduce((sum, item) => {
-        const itemPrice = orderData.itemPrices[item.id] || item.marketValue || 0;
+        const itemPrice = item.price || item.marketValue || 0;
         return sum + (itemPrice * item.quantity);
       }, 0);
 
@@ -477,7 +477,7 @@ const PokemonPage = () => {
         items: cartItems.map(item => ({
           name: item.name,
           quantity: item.quantity,
-          price: orderData.itemPrices[item.id] || item.marketValue || 0
+          price: item.price || item.marketValue || 0
         }))
       });
 
@@ -485,72 +485,113 @@ const PokemonPage = () => {
       setShowMultiOrderProcessing(true);
 
       // Create or find items and prepare order data
-      const orderPromises = cartItems.map(async (item) => {
-        const itemPrice = orderData.itemPrices[item.id] || item.marketValue || 0;
+      const itemPromises = cartItems.map(async (item) => {
+        const itemPrice = item.price || item.marketValue || 0;
         
-        // Create or find the item in the database
-        const { data: existingItem, error: findError } = await supabase
-          .from('pokemon_cards')
+        // Find or create item
+        let itemId;
+        
+        // First, try to find existing item by name and set (more precise matching)
+        const { data: existingItem } = await supabase
+          .from('items')
           .select('id')
-          .eq('id', item.id)
+          .eq('name', item.name)
+          .eq('set_name', item.set || '')
           .single();
 
-        if (findError && findError.code !== 'PGRST116') {
-          throw findError;
-        }
-
-        if (!existingItem) {
-          // Create new item
-          const { data: newItem, error: createError } = await supabase
-            .from('pokemon_cards')
-            .insert([{
-              id: item.id,
-              name: item.name,
-              set_name: item.set,
-              market_value: itemPrice,
-              image_url: item.imageUrl
-            }])
-            .select()
+        if (existingItem) {
+          itemId = existingItem.id;
+        } else {
+          // Check if this card exists in cached_cards (from search cache)
+          const { data: cachedCard } = await supabase
+            .from('cached_cards')
+            .select('id, api_id, name, expansion_name, image_url, market_price')
+            .eq('name', item.name)
+            .eq('expansion_name', item.set || '')
             .single();
 
-          if (createError) throw createError;
+          if (cachedCard) {
+            // Use the cached card data to create a more accurate item
+            const { data: newItem, error: itemError } = await supabase
+              .from('items')
+              .insert({
+                name: cachedCard.name,
+                set_name: cachedCard.expansion_name || '',
+                image_url: cachedCard.image_url || item.imageUrl,
+                item_type: 'Card',
+                source: 'api',
+                api_id: cachedCard.api_id,
+                market_value_cents: Math.round((cachedCard.market_price || item.marketValue || 0) * 100)
+              })
+              .select('id')
+              .single();
+
+            if (itemError) throw itemError;
+            itemId = newItem.id;
+          } else {
+            // Fallback: create item with provided data
+            const { data: newItem, error: itemError } = await supabase
+              .from('items')
+              .insert({
+                name: item.name,
+                set_name: item.set || '',
+                image_url: item.imageUrl,
+                item_type: 'Card',
+                source: 'api',
+                market_value_cents: Math.round((item.marketValue || 0) * 100)
+              })
+              .select('id')
+              .single();
+
+            if (itemError) throw itemError;
+            itemId = newItem.id;
+          }
         }
 
+        // Create order with order group ID
+        const buyPriceCents = Math.round(itemPrice * 100);
+        const totalCostCents = Math.round(itemPrice * item.quantity * 100);
+
         return {
-          item_id: item.id,
+          item_id: itemId,
           quantity: item.quantity,
           price_per_item: itemPrice,
-          total_price: itemPrice * item.quantity
+          total_price: itemPrice * item.quantity,
+          buy_price_cents: buyPriceCents,
+          total_cost_cents: totalCostCents
         };
       });
 
-      const orderItems = await Promise.all(orderPromises);
+      // Get the item data
+      const itemData = await Promise.all(itemPromises);
 
-      // Create the order
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
-          order_date: orderData.orderDate,
-          total_value: totalValue,
-          item_count: cartItems.length,
-          source: 'pokemon'
-        }])
-        .select()
-        .single();
+      // Generate a single order group ID for all items in this multi-order
+      const orderGroupId = crypto.randomUUID();
 
-      if (orderError) throw orderError;
+      // Create individual orders for each item
+      const orderPromises = itemData.map(async (itemData) => {
+        const { data: order, error: orderError } = await supabase
+          .from('orders')
+          .insert({
+            item_id: itemData.item_id,
+            order_type: 'buy',
+            buy_date: orderData.date || new Date().toISOString().split('T')[0],
+            buy_price_cents: itemData.buy_price_cents,
+            buy_quantity: itemData.quantity,
+            buy_location: orderData.location || '',
+            total_cost_cents: itemData.total_cost_cents,
+            card_type: 'raw',
+            order_group_id: orderGroupId,
+            order_group_name: `Pokemon Cards Order - ${new Date().toLocaleDateString()}`
+          })
+          .select()
+          .single();
 
-      // Create order items
-      const orderItemsWithOrderId = orderItems.map(item => ({
-        ...item,
-        order_id: order.id
-      }));
+        if (orderError) throw orderError;
+        return order;
+      });
 
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItemsWithOrderId);
-
-      if (itemsError) throw itemsError;
+      const orders = await Promise.all(orderPromises);
 
       // Show success popup
       setShowMultiOrderProcessing(false);
@@ -590,7 +631,7 @@ const PokemonPage = () => {
   // Generate breadcrumbs based on current view
   const generateBreadcrumbs = () => {
     const breadcrumbs = [
-      { name: 'Games', path: '/search' }
+      { name: 'Categories', path: '/categories' }
     ];
 
     if (view === 'expansion-detail' && selectedExpansion) {
@@ -1107,6 +1148,7 @@ const PokemonPage = () => {
         onUpdateQuantity={updateCartQuantity}
         onRemoveItem={removeFromCart}
         onClearCart={clearCart}
+        onCreateOrder={createOrderDirectly}
         onCancel={cancelMultiSelect}
         onDone={exitMultiSelectMode}
         isMultiSelectMode={contextMultiSelectMode}

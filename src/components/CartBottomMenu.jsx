@@ -9,7 +9,7 @@ const CartBottomMenu = ({
   onUpdateQuantity, 
   onRemoveItem, 
   onClearCart, 
-  onCreateOrder,
+  onCreateOrder = () => {},
   onCancel,
   onDone,
   isMultiSelectMode = false,
@@ -191,6 +191,11 @@ const CartBottomMenu = ({
   };
 
   const handleCreateOrder = () => {
+    if (!onCreateOrder || typeof onCreateOrder !== 'function') {
+      console.error('onCreateOrder is not defined or not a function');
+      return;
+    }
+    
     const orderData = {
       date: orderDate,
       location: purchaseLocation,

@@ -11,6 +11,7 @@ import ScrollToTop from './components/ScrollToTop';
 import Collection from './pages/Collection';
 import SearchApi from './pages/SearchApi';
 import PokemonPage from './pages/PokemonPage';
+import OtherPage from './pages/OtherPage';
 import Shipments from './pages/Shipments';
 import Analytics from './pages/Analytics';
 import Orders from './pages/Orders';
@@ -54,6 +55,11 @@ function App() {
                       <ResponsiveLayout>
                         <Routes>
                           <Route path="/" element={<Collection />} />
+                          <Route path="/categories" element={<SearchApi />} />
+                          <Route path="/categories/:game" element={<SearchApi />} />
+                          <Route path="/categories/:game/expansions/:expansionId" element={<SearchApi />} />
+                          
+                          {/* Legacy route redirect */}
                           <Route path="/search" element={<SearchApi />} />
                           <Route path="/search/:game" element={<SearchApi />} />
                           <Route path="/search/:game/expansions/:expansionId" element={<SearchApi />} />
@@ -61,6 +67,7 @@ function App() {
                           {/* Game-specific routes */}
                           <Route path="/pokemon" element={<PokemonPage />} />
                           <Route path="/pokemon/expansions/:expansionId" element={<PokemonPage />} />
+                          <Route path="/other" element={<OtherPage />} />
                           
                           {/* Other routes */}
                           <Route path="/shipments" element={<Shipments />} />

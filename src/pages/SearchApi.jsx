@@ -1212,7 +1212,7 @@ const SearchApi = () => {
     try {
       // Set success data for popup
       const totalValue = cartItems.reduce((sum, item) => {
-        const itemPrice = orderData.itemPrices[item.id] || item.marketValue || 0;
+        const itemPrice = item.price || item.marketValue || 0;
         return sum + (itemPrice * item.quantity);
       }, 0);
 
@@ -1222,7 +1222,7 @@ const SearchApi = () => {
         items: cartItems.map(item => ({
           name: item.name,
           quantity: item.quantity,
-          price: orderData.itemPrices[item.id] || item.marketValue || 0
+          price: item.price || item.marketValue || 0
         }))
       });
 
@@ -1237,10 +1237,12 @@ const SearchApi = () => {
 
       // Create or find items and prepare order data
       const orderPromises = cartItems.map(async (item) => {
-        const itemPrice = orderData.itemPrices[item.id] || item.marketValue || 0;
+        const itemPrice = item.price || item.marketValue || 0;
         
         // Find or create item
         let itemId;
+        
+        // First, try to find existing item by name and set (more precise matching)
         const { data: existingItem } = await supabase
           .from('items')
           .select('id')
@@ -1251,24 +1253,56 @@ const SearchApi = () => {
         if (existingItem) {
           itemId = existingItem.id;
         } else {
-          // Get the card type for this item
-          const cardType = orderData.itemCardTypes?.[item.id] || 'raw';
-          const itemType = getItemTypeClassification(item, cardType, 'api');
-          
-          const { data: newItem, error: itemError } = await supabase
-            .from('items')
-            .insert({
-              name: item.name,
-              set_name: item.set || '',
-              image_url: item.imageUrl,
-              item_type: itemType, // Use proper type classification
-              market_value_cents: Math.round((item.marketValue || 0) * 100)
-            })
-            .select('id')
+          // Check if this card exists in cached_cards (from search cache)
+          const { data: cachedCard } = await supabase
+            .from('cached_cards')
+            .select('id, api_id, name, expansion_name, image_url, market_price')
+            .eq('name', item.name)
+            .eq('expansion_name', item.set || '')
             .single();
 
-          if (itemError) throw itemError;
-          itemId = newItem.id;
+          if (cachedCard) {
+            // Use the cached card data to create a more accurate item
+            const cardType = orderData.itemCardTypes?.[item.id] || 'raw';
+            const itemType = getItemTypeClassification(item, cardType, 'api');
+            
+            const { data: newItem, error: itemError } = await supabase
+              .from('items')
+              .insert({
+                name: cachedCard.name,
+                set_name: cachedCard.expansion_name || '',
+                image_url: cachedCard.image_url || item.imageUrl,
+                item_type: itemType,
+                source: 'api',
+                api_id: cachedCard.api_id,
+                market_value_cents: Math.round((cachedCard.market_price || item.marketValue || 0) * 100)
+              })
+              .select('id')
+              .single();
+
+            if (itemError) throw itemError;
+            itemId = newItem.id;
+          } else {
+            // Fallback: create item with provided data
+            const cardType = orderData.itemCardTypes?.[item.id] || 'raw';
+            const itemType = getItemTypeClassification(item, cardType, 'api');
+            
+            const { data: newItem, error: itemError } = await supabase
+              .from('items')
+              .insert({
+                name: item.name,
+                set_name: item.set || '',
+                image_url: item.imageUrl,
+                item_type: itemType,
+                source: 'api',
+                market_value_cents: Math.round((item.marketValue || 0) * 100)
+              })
+              .select('id')
+              .single();
+
+            if (itemError) throw itemError;
+            itemId = newItem.id;
+          }
         }
 
         // Create order with order group ID
@@ -1513,9 +1547,8 @@ const SearchApi = () => {
       // For Pokémon, navigate to Pokemon-specific page
       navigate(`/pokemon`);
     } else if (game.id === 'other') {
-      // For Other, show manual item addition view
-      setSelectedGame(game);
-      setCurrentView('manual');
+      // For Other, navigate to Other page
+      navigate(`/other`);
     } else if (hasGameService(game.id)) {
       // For games with dedicated services, navigate to game-specific page
       navigate(`/${game.id}`);
@@ -3099,10 +3132,10 @@ const SearchApi = () => {
                     return (
                     <div
                       key={item.id}
-                      className={`bg-gray-800 rounded-lg border border-gray-700 transition-colors ${
+                      className={`bg-gray-800/50 backdrop-blur-sm rounded-xl border transition-all ${
                         isSelected 
-                          ? 'border-indigo-400 bg-indigo-900/20 shadow-indigo-400/25' 
-                          : 'hover:bg-gray-700 hover:border-gray-600'
+                          ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/20' 
+                          : 'border-gray-700/50 hover:border-gray-600 hover:bg-gray-800/70'
                       }`}
                       onTouchStart={(e) => {
                         if (isCustomSelectionMode) {
@@ -3138,52 +3171,53 @@ const SearchApi = () => {
                       }}
                     >
                       {/* Item Image */}
-                      <div className="aspect-[488/680] bg-transparent rounded-t-lg overflow-hidden p-2">
-                        <div 
-                          className="w-full h-full flex items-center justify-center rounded-lg"
-                          style={{ backgroundColor: item.background_color || '#f3f4f6' }}
-                        >
+                      <div className="aspect-[488/680] bg-gray-900/50 rounded-t-xl overflow-hidden relative">
+                        {item.image_url ? (
                           <SafeImage
                             src={item.image_url}
                             alt={item.name}
-                            className="w-full h-full object-contain"
+                            className="w-full h-full object-contain p-2"
                             onLoad={() => {}}
                             onError={(e) => {
                               e.target.style.display = 'none';
                             }}
-                            fallback={
-                              <div className="w-full h-full flex items-center justify-center">
-                                <span className="text-gray-400 text-xs font-medium">
-                                  {item.name.charAt(0)}
-                                </span>
-                              </div>
-                            }
                           />
+                        ) : null}
+                        <div className={`w-full h-full flex items-center justify-center ${item.image_url ? 'hidden' : 'flex'}`}>
+                          <div className="text-center">
+                            <div className="text-2xl mb-1">📦</div>
+                            <div className="text-gray-400 text-xs">No Image</div>
+                          </div>
                         </div>
                       </div>
 
                       {/* Item Info - Bottom Section */}
-                      <div className="px-4 pb-3 pt-2">
-                        {/* Item Info Group - Name, Set, Type */}
-                        <div className="space-y-0.5 mb-2">
-                          {/* Item Name */}
-                          <h3 className="font-semibold text-white" style={{ fontSize: '12px' }}>{item.name}</h3>
-                          
-                          {/* Set Name */}
-                          <p className="text-gray-400" style={{ fontSize: '12px' }}>{item.set_name || 'Unknown Set'}</p>
-                          
-                          {/* Type */}
-                          <p className="text-blue-400" style={{ fontSize: '12px' }}>{item.item_type || 'Item'}</p>
+                      <div className="p-3 space-y-1">
+                        {/* Item Name - First Line */}
+                        <div>
+                          <h3 className="text-white leading-tight line-clamp-2 font-bold text-[11px] md:text-xs">
+                            {item.name}
+                          </h3>
+                        </div>
+                        
+                        {/* Set Name - Ghost Text */}
+                        <div className="text-[11px] md:text-xs text-gray-400 truncate">
+                          {item.set_name || 'Custom Item'}
+                        </div>
+                        
+                        {/* Status Text */}
+                        <div className="text-[11px] md:text-xs text-blue-400 font-medium">
+                          {item.item_type || 'Collectible'}
                         </div>
                         
                         {/* Market Value and Menu Button */}
-                        <div className="flex items-center justify-between">
-                          <div className="font-semibold text-white" style={{ fontSize: '12px' }}>
-                            {item.market_value_cents && formatPrice(item.market_value_cents / 100)}
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="font-bold text-white text-[11px] md:text-xs">
+                            {item.market_value_cents ? formatPrice(item.market_value_cents / 100) : 'No Value'}
                           </div>
                           <div className="relative">
                             {isSelected ? (
-                              <div className="text-blue-400">
+                              <div className="text-indigo-400">
                                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                                 </svg>
@@ -3195,7 +3229,7 @@ const SearchApi = () => {
                                   setSelectedCustomItem(item);
                                   setShowCustomItemMenu(!showCustomItemMenu);
                                 }}
-                                className="bg-gray-600 hover:bg-gray-500 text-white rounded-full w-6 h-6 flex items-center justify-center transition-colors"
+                                className="bg-gray-700/50 hover:bg-gray-600/70 text-white rounded-full w-6 h-6 flex items-center justify-center transition-colors"
                                 title="Item Options"
                               >
                                 <MoreVertical size={14} />
@@ -3292,41 +3326,96 @@ const SearchApi = () => {
           </div>
         )}
 
-        {/* Custom Items Bulk Actions Bar - Fixed at bottom */}
+        {/* Custom Items Bulk Preview Bar - Fixed at bottom */}
         {isCustomSelectionMode && (
           <div className="fixed bottom-16 left-0 right-0 modal-overlay" style={{ zIndex: 10002 }}>
-            <div className="bg-blue-500 border-t border-blue-400 px-4 py-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-white font-medium">
-                    {selectedCustomItems.size}/{customItems.length} Selected
-                  </span>
+            <div className="bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 shadow-lg">
+              <div className="px-4 py-2">
+                {/* Top section with selection info and actions */}
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-indigo-400">
+                      {selectedCustomItems.size} Selected
+                    </span>
+                    <button
+                      onClick={selectAllCustomItems}
+                      className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors"
+                    >
+                      Select All
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => {
+                        setShowCustomBulkMenu(true);
+                        openModal();
+                      }}
+                      className={`px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap ${
+                        showCustomBulkMenu ? 'bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                      }`}
+                    >
+                      Actions
+                      <svg className={`w-3 h-3 flex-shrink-0 transition-transform duration-300 ease-out ${showCustomBulkMenu ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={clearCustomSelection}
+                      className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors flex items-center justify-center flex-shrink-0"
+                    >
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={selectAllCustomItems}
-                    className="px-3 py-1 bg-blue-400 hover:bg-blue-300 rounded-md text-xs text-white transition-colors"
-                  >
-                    Select All
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setShowCustomBulkMenu(true);
-                      openModal();
-                    }}
-                    className="px-3 py-1 bg-blue-400 hover:bg-blue-300 rounded-md text-xs text-white transition-colors flex items-center gap-1"
-                  >
-                    Bulk Actions
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={clearCustomSelection}
-                    className="px-3 py-1 bg-blue-400 hover:bg-blue-300 rounded-md text-xs text-white transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
+                
+                {/* Border separator */}
+                <div className="border-t border-gray-700/30 mx-0 my-1" />
+                
+                {/* Image previews */}
+                <div className="flex items-center gap-3 overflow-x-auto py-2">
+                  {customItems
+                    .filter(item => selectedCustomItems.has(item.id))
+                    .slice(0, 6)
+                    .map((item) => (
+                      <div 
+                        key={item.id}
+                        className="relative group cursor-pointer flex-shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCustomItemSelect(item.id);
+                        }}
+                      >
+                        {item.image_url ? (
+                          <img 
+                            src={item.image_url} 
+                            alt={item.name}
+                            className="w-10 h-14 object-contain rounded transition-opacity group-hover:opacity-50"
+                            style={{ imageRendering: 'crisp-edges' }}
+                          />
+                        ) : (
+                          <div className="w-10 h-14 bg-gray-800 rounded flex items-center justify-center">
+                            <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd"/>
+                            </svg>
+                          </div>
+                        )}
+                        {/* Hover overlay with remove button */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  {selectedCustomItems.size > 6 && (
+                    <div className="flex-shrink-0 w-10 h-14 bg-gray-800 rounded flex items-center justify-center">
+                      <span className="text-xs font-medium text-gray-400">+{selectedCustomItems.size - 6}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
