@@ -17,7 +17,9 @@ const Pagination = ({
   showPageInfo = true,
   pageSize = 30,
   totalItems = 0,
-  className = ""
+  className = "",
+  hasBottomMenu = false,
+  bottomMenuHeight = 0
 }) => {
   const [pageInput, setPageInput] = useState(null);
 
@@ -48,8 +50,14 @@ const Pagination = ({
     return null;
   }
 
+  // Calculate bottom padding based on menu state
+  const bottomPadding = hasBottomMenu ? Math.max(96, bottomMenuHeight + 16) : 16;
+  
   return (
-    <div className={`flex flex-col items-center gap-4 ${className}`}>
+    <div 
+      className={`flex flex-col items-center gap-4 ${className}`}
+      style={{ paddingBottom: `${bottomPadding}px` }}
+    >
       {/* Pagination Controls */}
       <div className="flex items-center justify-center gap-2">
         {/* Skip to Start */}

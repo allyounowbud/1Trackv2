@@ -7,7 +7,14 @@ import { createSingleOrder } from '../utils/orderNumbering';
 import DesktopSideMenu from './DesktopSideMenu';
 
 // Cache bust: Updated theme colors - v3 - Fixed JSX structure - Fixed retailer dropdown - v4
-const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
+const AddToCollectionModal = ({ 
+  product, 
+  isOpen, 
+  onClose, 
+  onSuccess,
+  hasCartMenuActive = false,
+  cartMenuHeight = 0
+}) => {
   const { openModal, closeModal } = useModal();
   
   const [formData, setFormData] = useState({
@@ -33,6 +40,11 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
   const [isOpening, setIsOpening] = useState(false);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
   const modalRef = useRef(null);
+  
+  // Card type selection state
+  const [selectedGradingCompany, setSelectedGradingCompany] = useState('Raw');
+  const [selectedGradingGrade, setSelectedGradingGrade] = useState(null);
+  const [showGradingOptions, setShowGradingOptions] = useState(false);
 
   // Handle modal animation timing
   useEffect(() => {
@@ -200,12 +212,35 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         buyLocation: '',
         buyNotes: ''
       });
+      // Reset grading state
+      setSelectedGradingCompany('Raw');
+      setSelectedGradingGrade(null);
+      setShowGradingOptions(false);
       setIsClosing(true);
       setTimeout(() => {
         onClose();
         setIsClosing(false);
       }, 400); // Match the animation duration
     }
+  };
+
+  // Grading company selection handler
+  const handleGradingCompanySelect = (company) => {
+    setSelectedGradingCompany(company);
+    // Clear grade selection when company changes
+    if (company === 'Raw') {
+      setSelectedGradingGrade(null);
+    }
+  };
+
+  // Grading grade selection handler
+  const handleGradingGradeSelect = (grade) => {
+    setSelectedGradingGrade(grade);
+  };
+
+  // Toggle grading options visibility
+  const toggleGradingOptions = () => {
+    setShowGradingOptions(!showGradingOptions);
   };
 
 
@@ -292,6 +327,19 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       const buyPriceCents = Math.round(parseFloat(formData.pricePerItem) * 100); // Price per item in cents
       const totalCostCents = Math.round(parseFloat(formData.buyPrice) * 100); // Total cost in cents
       
+      // Determine card type based on grading selection
+      let cardType = 'raw';
+      let gradedCompany = null;
+      let gradedGrade = null;
+      
+      if (selectedGradingCompany === 'Raw') {
+        cardType = 'raw';
+      } else {
+        cardType = 'graded';
+        gradedCompany = selectedGradingCompany;
+        gradedGrade = selectedGradingGrade;
+      }
+
       const baseOrderData = {
         item_id: itemId,
         order_type: 'buy',
@@ -301,7 +349,10 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
         total_cost_cents: totalCostCents, // Total cost for all items
         buy_location: formData.buyLocation || null,
         buy_notes: formData.buyNotes || null,
-        status: 'ordered'
+        status: 'ordered',
+        card_type: cardType,
+        graded_company: gradedCompany,
+        graded_grade: gradedGrade
       };
 
       // Create order with proper numbering
@@ -375,6 +426,171 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Card Type Selection */}
+          <div className="p-4 border-b border-gray-700 bg-gray-900">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <h4 className="text-white font-medium text-sm">Card Type</h4>
+                
+                {/* Current Selection Display - Compact Badge Style */}
+                <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors ${
+                  selectedGradingCompany === 'Raw' 
+                    ? 'bg-gray-700 text-gray-300' 
+                    : 'bg-indigo-600 text-white'
+                }`}>
+                  {selectedGradingCompany === 'Raw' ? (
+                    <>
+                      <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                      </svg>
+                      Raw
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-3 h-3 mr-1 rounded-full bg-white/20"></div>
+                      {selectedGradingCompany} {selectedGradingGrade}
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              <button
+                type="button"
+                onClick={toggleGradingOptions}
+                className="text-indigo-400 text-xs hover:text-indigo-300 transition-colors px-2 py-1 rounded"
+              >
+                {showGradingOptions ? 'Hide' : 'Edit'}
+              </button>
+            </div>
+
+            {/* Grading Options */}
+            {showGradingOptions && (
+              <div className="space-y-4">
+                {/* Grading Company Selection */}
+                <div>
+                  <label className="block text-gray-400 text-xs mb-2">Grading Company</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {/* Raw Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleGradingCompanySelect('Raw')}
+                      className={`flex items-center justify-center rounded border transition-all p-2 ${
+                        selectedGradingCompany === 'Raw'
+                          ? 'border-indigo-400 bg-indigo-400/10'
+                          : 'border-gray-700 hover:border-gray-600'
+                      }`}
+                      style={{ backgroundColor: '#111827', height: '40px' }}
+                    >
+                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                    
+                    {/* PSA Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleGradingCompanySelect('PSA')}
+                      className={`flex items-center justify-center rounded border transition-all p-1 ${
+                        selectedGradingCompany === 'PSA'
+                          ? 'border-indigo-400 bg-indigo-400/10'
+                          : 'border-gray-700 hover:border-gray-600'
+                      }`}
+                      style={{ backgroundColor: '#111827', height: '40px' }}
+                    >
+                      <img 
+                        src="https://www.pngkey.com/png/full/231-2310791_psa-grading-standards-professional-sports-authenticator.png"
+                        alt="PSA"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextElementSibling.style.display = 'flex';
+                        }}
+                      />
+                      <div className="w-full h-full bg-gray-700 rounded flex items-center justify-center hidden">
+                        <span className="text-white text-xs font-bold">PSA</span>
+                      </div>
+                    </button>
+                    
+                    {/* BGS Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleGradingCompanySelect('BGS')}
+                      className={`flex items-center justify-center rounded border transition-all p-1 ${
+                        selectedGradingCompany === 'BGS'
+                          ? 'border-indigo-400 bg-indigo-400/10'
+                          : 'border-gray-700 hover:border-gray-600'
+                      }`}
+                      style={{ backgroundColor: '#111827', height: '40px' }}
+                    >
+                      <img 
+                        src="https://www.cherrycollectables.com.au/cdn/shop/products/HH02578_Cherry_BGS_Logo.png?v=1654747644&width=500"
+                        alt="BGS"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextElementSibling.style.display = 'flex';
+                        }}
+                      />
+                      <div className="w-full h-full bg-gray-700 rounded flex items-center justify-center hidden">
+                        <span className="text-white text-xs font-bold">BGS</span>
+                      </div>
+                    </button>
+                    
+                    {/* CGC Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleGradingCompanySelect('CGC')}
+                      className={`flex items-center justify-center rounded border transition-all p-1 ${
+                        selectedGradingCompany === 'CGC'
+                          ? 'border-indigo-400 bg-indigo-400/10'
+                          : 'border-gray-700 hover:border-gray-600'
+                      }`}
+                      style={{ backgroundColor: '#111827', height: '40px' }}
+                    >
+                      <img
+                        src="https://www.dustyatticcomics.com/cdn/shop/collections/CGC_LOGO.webp?v=1730621733"
+                        alt="CGC"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextElementSibling.style.display = 'flex';
+                        }}
+                      />
+                      <div className="w-full h-full bg-gray-700 rounded flex items-center justify-center hidden">
+                        <span className="text-white text-xs font-bold">CGC</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Grade Selection - Only show if a graded company is selected */}
+                {selectedGradingCompany && selectedGradingCompany !== 'Raw' && (
+                  <div>
+                    <label className="block text-gray-400 text-xs mb-2">
+                      Select Grade ({selectedGradingCompany})
+                    </label>
+                    <div className="grid grid-cols-10 gap-1">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((grade) => (
+                        <button
+                          type="button"
+                          key={grade}
+                          onClick={() => handleGradingGradeSelect(grade)}
+                          className={`aspect-square flex items-center justify-center rounded border transition-all text-xs font-medium ${
+                            selectedGradingGrade === grade
+                              ? 'border-indigo-400 bg-indigo-400/10 text-indigo-400'
+                              : 'border-gray-600 bg-gray-800/50 text-gray-300 hover:border-gray-500'
+                          }`}
+                        >
+                          {grade}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Form */}
@@ -639,24 +855,29 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
       `}</style>
       {(isOpen || isModalAnimating || isClosing || isOpening) && (
       <div 
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end z-[9999]"
+        className="fixed bg-black/60 backdrop-blur-sm flex items-end z-[9999]"
         style={{
           opacity: (isOpen && !isClosing && !isOpening) ? 1 : 0,
           transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
           pointerEvents: 'auto',
-          touchAction: 'none'
+          touchAction: 'none',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: hasCartMenuActive ? `${cartMenuHeight}px` : 0
         }}
         onClick={handleClose}
         onTouchMove={(e) => e.preventDefault()}
       >
       <div 
         ref={modalRef}
-        className={`w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[95vh] overflow-y-auto transition-transform duration-400 ease-out ${
+        className={`w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl overflow-y-auto transition-transform duration-400 ease-out ${
           (isOpen && !isClosing && !isOpening) ? 'translate-y-0' : 'translate-y-full'
         }`}
         style={{
           pointerEvents: 'auto',
-          touchAction: 'pan-y'
+          touchAction: 'pan-y',
+          maxHeight: hasCartMenuActive ? `calc(95vh - ${cartMenuHeight}px)` : '95vh'
         }}
         onClick={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
@@ -700,6 +921,171 @@ const AddToCollectionModal = ({ product, isOpen, onClose, onSuccess }) => {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Card Type Selection */}
+        <div className="px-6 py-4 border-b border-gray-700/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <h4 className="text-white font-medium text-sm">Card Type</h4>
+              
+              {/* Current Selection Display - Compact Badge Style */}
+              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors ${
+                selectedGradingCompany === 'Raw' 
+                  ? 'bg-gray-700 text-gray-300' 
+                  : 'bg-indigo-600 text-white'
+              }`}>
+                {selectedGradingCompany === 'Raw' ? (
+                  <>
+                    <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                    </svg>
+                    Raw
+                  </>
+                ) : (
+                  <>
+                    <div className="w-3 h-3 mr-1 rounded-full bg-white/20"></div>
+                    {selectedGradingCompany} {selectedGradingGrade}
+                  </>
+                )}
+              </div>
+            </div>
+            
+            <button
+              type="button"
+              onClick={toggleGradingOptions}
+              className="text-indigo-400 text-xs hover:text-indigo-300 transition-colors px-2 py-1 rounded"
+            >
+              {showGradingOptions ? 'Hide' : 'Edit'}
+            </button>
+          </div>
+
+          {/* Grading Options */}
+          {showGradingOptions && (
+            <div className="space-y-4">
+              {/* Grading Company Selection */}
+              <div>
+                <label className="block text-gray-400 text-xs mb-2">Grading Company</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {/* Raw Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleGradingCompanySelect('Raw')}
+                    className={`flex items-center justify-center rounded border transition-all p-2 ${
+                      selectedGradingCompany === 'Raw'
+                        ? 'border-indigo-400 bg-indigo-400/10'
+                        : 'border-gray-700 hover:border-gray-600'
+                    }`}
+                    style={{ backgroundColor: '#111827', height: '40px' }}
+                  >
+                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                  
+                  {/* PSA Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleGradingCompanySelect('PSA')}
+                    className={`flex items-center justify-center rounded border transition-all p-1 ${
+                      selectedGradingCompany === 'PSA'
+                        ? 'border-indigo-400 bg-indigo-400/10'
+                        : 'border-gray-700 hover:border-gray-600'
+                    }`}
+                    style={{ backgroundColor: '#111827', height: '40px' }}
+                  >
+                    <img 
+                      src="https://www.pngkey.com/png/full/231-2310791_psa-grading-standards-professional-sports-authenticator.png"
+                      alt="PSA"
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextElementSibling.style.display = 'flex';
+                      }}
+                    />
+                    <div className="w-full h-full bg-gray-700 rounded flex items-center justify-center hidden">
+                      <span className="text-white text-xs font-bold">PSA</span>
+                    </div>
+                  </button>
+                  
+                  {/* BGS Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleGradingCompanySelect('BGS')}
+                    className={`flex items-center justify-center rounded border transition-all p-1 ${
+                      selectedGradingCompany === 'BGS'
+                        ? 'border-indigo-400 bg-indigo-400/10'
+                        : 'border-gray-700 hover:border-gray-600'
+                    }`}
+                    style={{ backgroundColor: '#111827', height: '40px' }}
+                  >
+                    <img 
+                      src="https://www.cherrycollectables.com.au/cdn/shop/products/HH02578_Cherry_BGS_Logo.png?v=1654747644&width=500"
+                      alt="BGS"
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextElementSibling.style.display = 'flex';
+                      }}
+                    />
+                    <div className="w-full h-full bg-gray-700 rounded flex items-center justify-center hidden">
+                      <span className="text-white text-xs font-bold">BGS</span>
+                    </div>
+                  </button>
+                  
+                  {/* CGC Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleGradingCompanySelect('CGC')}
+                    className={`flex items-center justify-center rounded border transition-all p-1 ${
+                      selectedGradingCompany === 'CGC'
+                        ? 'border-indigo-400 bg-indigo-400/10'
+                        : 'border-gray-700 hover:border-gray-600'
+                    }`}
+                    style={{ backgroundColor: '#111827', height: '40px' }}
+                  >
+                    <img
+                      src="https://www.dustyatticcomics.com/cdn/shop/collections/CGC_LOGO.webp?v=1730621733"
+                      alt="CGC"
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextElementSibling.style.display = 'flex';
+                      }}
+                    />
+                    <div className="w-full h-full bg-gray-700 rounded flex items-center justify-center hidden">
+                      <span className="text-white text-xs font-bold">CGC</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+              
+              {/* Grade Selection - Only show if a graded company is selected */}
+              {selectedGradingCompany && selectedGradingCompany !== 'Raw' && (
+                <div>
+                  <label className="block text-gray-400 text-xs mb-2">
+                    Select Grade ({selectedGradingCompany})
+                  </label>
+                  <div className="grid grid-cols-10 gap-1">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((grade) => (
+                      <button
+                        type="button"
+                        key={grade}
+                        onClick={() => handleGradingGradeSelect(grade)}
+                        className={`aspect-square flex items-center justify-center rounded border transition-all text-xs font-medium ${
+                          selectedGradingGrade === grade
+                            ? 'border-indigo-400 bg-indigo-400/10 text-indigo-400'
+                            : 'border-gray-600 bg-gray-800/50 text-gray-300 hover:border-gray-500'
+                        }`}
+                      >
+                        {grade}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Form */}

@@ -802,6 +802,8 @@ const PokemonPage = () => {
                   pageSize={30}
                   totalItems={totalExpansions}
                   className="mt-8"
+                  hasBottomMenu={contextMultiSelectMode || isCartMenuOpen}
+                  bottomMenuHeight={133}
                 />
               </div>
             )}
@@ -936,6 +938,8 @@ const PokemonPage = () => {
                       pageSize={30}
                       totalItems={totalCards}
                       className="mt-6"
+                      hasBottomMenu={contextMultiSelectMode || isCartMenuOpen}
+                      bottomMenuHeight={133}
                     />
                   </>
                 )}
@@ -1060,6 +1064,8 @@ const PokemonPage = () => {
                   pageSize={30}
                   totalItems={totalCards}
                   className="mt-6"
+                  hasBottomMenu={contextMultiSelectMode || isCartMenuOpen}
+                  bottomMenuHeight={133}
                 />
               </div>
             )}
@@ -1088,6 +1094,8 @@ const PokemonPage = () => {
             setSelectedCardForCollection(null);
             closeModal();
           }}
+          hasCartMenuActive={contextMultiSelectMode || isCartMenuOpen}
+          cartMenuHeight={133}
         />
       )}
       
