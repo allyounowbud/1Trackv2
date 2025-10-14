@@ -322,9 +322,16 @@ const PokemonPage = () => {
       name: card.name,
       set: card.set_name || card.expansion_name,
       marketValue: parseFloat(card.marketValue || 0),
+      price: null, // User will enter their own price in the cart
       imageUrl: card.image_url,
-      source: 'pokemon'
+      source: 'pokemon',
+      itemType: card.itemType || (card.supertype === 'Sealed Product' ? 'Sealed' : 'Single'),
+      cardCondition: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : 'Raw',
+      gradingCompany: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : null,
+      gradingGrade: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : null,
+      api_id: card.id
     };
+
 
     // Check if item is already in cart
     const existingItem = cartItems.find(item => item.id === card.id);
@@ -411,8 +418,14 @@ const PokemonPage = () => {
             name: card.name,
             set: card.set_name || card.expansion_name,
             marketValue: parseFloat(card.marketValue || 0),
+            price: null, // User will enter their own price in the cart
             imageUrl: card.image_url,
-            source: 'pokemon'
+            source: 'pokemon',
+            itemType: card.itemType || (card.supertype === 'Sealed Product' ? 'Sealed' : 'Single'),
+            cardCondition: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : 'Raw',
+            gradingCompany: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : null,
+            gradingGrade: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : null,
+            api_id: card.id
           };
           newCart = [...prev, { ...cardData, quantity: 1 }];
         }
@@ -422,6 +435,11 @@ const PokemonPage = () => {
       
       // Open cart menu
       openCartMenu();
+      
+      // Reset the flag after a short delay to allow normal clicking
+      setTimeout(() => {
+        setJustCompletedHoldSelect(false);
+      }, 200);
     }, 500); // 500ms hold time
     
     setHoldTimeout(timeout);
@@ -462,9 +480,14 @@ const PokemonPage = () => {
 
   // Create order directly
   const createOrderDirectly = async (orderData) => {
-    if (cartItems.length === 0) return;
+    if (orderData.items.length === 0) return;
 
     try {
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
       // Set success data for popup
       const totalValue = cartItems.reduce((sum, item) => {
         const itemPrice = item.price || item.marketValue || 0;
@@ -484,106 +507,73 @@ const PokemonPage = () => {
       // Show processing popup
       setShowMultiOrderProcessing(true);
 
-      // Create or find items and prepare order data
-      const itemPromises = cartItems.map(async (item) => {
-        const itemPrice = item.price || item.marketValue || 0;
+
+      // Create orders directly without creating items in items table
+      const orderPromises = orderData.items.map(async (item) => {
+        const itemPrice = item.price || 0;
         
-        // Find or create item
-        let itemId;
         
-        // First, try to find existing item by name and set (more precise matching)
-        const { data: existingItem } = await supabase
-          .from('items')
-          .select('id')
-          .eq('name', item.name)
-          .eq('set_name', item.set || '')
-          .single();
-
-        if (existingItem) {
-          itemId = existingItem.id;
-        } else {
-          // Check if this card exists in cached_cards (from search cache)
-          const { data: cachedCard } = await supabase
-            .from('cached_cards')
-            .select('id, api_id, name, expansion_name, image_url, market_price')
-            .eq('name', item.name)
-            .eq('expansion_name', item.set || '')
-            .single();
-
-          if (cachedCard) {
-            // Use the cached card data to create a more accurate item
-            const { data: newItem, error: itemError } = await supabase
-              .from('items')
-              .insert({
-                name: cachedCard.name,
-                set_name: cachedCard.expansion_name || '',
-                image_url: cachedCard.image_url || item.imageUrl,
-                item_type: 'Card',
-                source: 'api',
-                api_id: cachedCard.api_id,
-                market_value_cents: Math.round((cachedCard.market_price || item.marketValue || 0) * 100)
-              })
-              .select('id')
-              .single();
-
-            if (itemError) throw itemError;
-            itemId = newItem.id;
-          } else {
-            // Fallback: create item with provided data
-            const { data: newItem, error: itemError } = await supabase
-              .from('items')
-              .insert({
-                name: item.name,
-                set_name: item.set || '',
-                image_url: item.imageUrl,
-                item_type: 'Card',
-                source: 'api',
-                market_value_cents: Math.round((item.marketValue || 0) * 100)
-              })
-              .select('id')
-              .single();
-
-            if (itemError) throw itemError;
-            itemId = newItem.id;
-          }
-        }
-
-        // Create order with order group ID
+        // For API-sourced cards, we don't create items in the items table
+        // Instead, we create orders that reference the API data directly
         const buyPriceCents = Math.round(itemPrice * 100);
         const totalCostCents = Math.round(itemPrice * item.quantity * 100);
 
+        // Use the item type and grading information from the cart item
+        const itemType = item.itemType || 'Single';
+        const cardCondition = item.cardCondition;
+        const gradingCompany = item.gradingCompany;
+        const gradingGrade = item.gradingGrade;
+
+        // Skip items without proper pokemon_card_id (they shouldn't be in the cart)
+        if (!item.api_id) {
+          console.error('Skipping order creation for item without api_id:', item.name);
+          return null;
+        }
+
         return {
-          item_id: itemId,
+          // User identification
+          user_id: user.id,
+          // Link directly to pokemon_cards table
+          pokemon_card_id: item.api_id || null,
+          item_id: null, // For custom items only
+          product_source: 'pokemon',
+          // Order details
+          purchase_date: orderData.date,
+          price_per_item_cents: buyPriceCents,
           quantity: item.quantity,
-          price_per_item: itemPrice,
-          total_price: itemPrice * item.quantity,
-          buy_price_cents: buyPriceCents,
-          total_cost_cents: totalCostCents
+          total_cost_cents: totalCostCents,
+          retailer_name: orderData.location || null,
+          notes: null,
+          order_group_id: orderData.orderGroupId,
+          
+          // Item classification fields
+          item_type: itemType,
+          card_condition: cardCondition,
+          grading_company: gradingCompany,
+          grading_grade: gradingGrade
         };
       });
 
-      // Get the item data
-      const itemData = await Promise.all(itemPromises);
+      // Get the order data and filter out null results
+      const ordersData = (await Promise.all(orderPromises)).filter(order => order !== null);
 
       // Generate a single order group ID for all items in this multi-order
       const orderGroupId = crypto.randomUUID();
 
+      // Update orders with the group ID
+      const ordersWithGroupId = ordersData.map(order => ({
+        ...order,
+        order_group_id: orderGroupId
+      }));
+
+      // Use the bulk orders utility to get proper order numbers
+      const ordersWithNumbers = await createBulkOrders(supabase, ordersWithGroupId);
+
       // Create individual orders for each item
-      const orderPromises = itemData.map(async (itemData) => {
+      const orderCreationPromises = ordersWithNumbers.map(async (orderData) => {
         const { data: order, error: orderError } = await supabase
           .from('orders')
-          .insert({
-            item_id: itemData.item_id,
-            order_type: 'buy',
-            buy_date: orderData.date || new Date().toISOString().split('T')[0],
-            buy_price_cents: itemData.buy_price_cents,
-            buy_quantity: itemData.quantity,
-            buy_location: orderData.location || '',
-            total_cost_cents: itemData.total_cost_cents,
-            card_type: 'raw',
-            order_group_id: orderGroupId,
-            order_group_name: `Pokemon Cards Order - ${new Date().toLocaleDateString()}`
-          })
+          .insert(orderData)
           .select()
           .single();
 
@@ -591,7 +581,7 @@ const PokemonPage = () => {
         return order;
       });
 
-      const orders = await Promise.all(orderPromises);
+      const orders = await Promise.all(orderCreationPromises);
 
       // Show success popup
       setShowMultiOrderProcessing(false);
@@ -874,7 +864,10 @@ const PokemonPage = () => {
                                 : 'border-gray-700 hover:border-gray-600'
                             }`}
                             onClick={(e) => {
-                              handleCardClick(item);
+                              // Only handle clicks in multi-select mode
+                              if (contextMultiSelectMode) {
+                                handleCardClick(item);
+                              }
                             }}
                             onMouseDown={(e) => {
                               handleCardPressStart(item);
@@ -1008,7 +1001,10 @@ const PokemonPage = () => {
                             : 'border-gray-700 hover:border-gray-600'
                         }`}
                         onClick={(e) => {
-                          handleCardClick(card);
+                          // Only handle clicks in multi-select mode
+                          if (contextMultiSelectMode) {
+                            handleCardClick(card);
+                          }
                         }}
                         onMouseDown={(e) => {
                           handleCardPressStart(card);
@@ -1120,9 +1116,11 @@ const PokemonPage = () => {
           product={{
             name: selectedCardForCollection.name,
             set: selectedCardForCollection.set_name || selectedCardForCollection.expansion_name,
-            marketValue: parseFloat(selectedCardForCollection.marketValue || 0),
+            marketValue: parseFloat(selectedCardForCollection.marketValue || selectedCardForCollection.market_value || 0),
             imageUrl: selectedCardForCollection.image_url,
-            source: 'pokemon'
+            source: 'api',
+            api_id: selectedCardForCollection.id,
+            itemType: selectedCardForCollection.itemType || (selectedCardForCollection.supertype === 'Sealed Product' ? 'Sealed' : 'Single')
           }}
           isOpen={isAddToCollectionModalOpen}
           onClose={() => {

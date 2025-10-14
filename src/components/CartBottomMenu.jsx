@@ -47,6 +47,7 @@ const CartBottomMenu = ({
     }
   }, [isExpanded]);
 
+
   // Prevent background scrolling only when menu is expanded
   useEffect(() => {
     if (isExpanded) {
@@ -76,6 +77,7 @@ const CartBottomMenu = ({
   // Auto-close menu when all items are manually deselected
   useEffect(() => {
     if (isOpen && cartItems.length === 0) {
+      resetFormState();
       onClose();
     }
   }, [cartItems.length, isOpen, onClose]);
@@ -118,8 +120,8 @@ const CartBottomMenu = ({
   };
 
   const totalValue = cartItems.reduce((sum, item) => {
-    const price = itemPrices[item.id] || item.price || item.marketValue || 0;
-    return sum + (price * item.quantity);
+    const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : (item.price || 0);
+    return sum + (price === '' ? 0 : parseFloat(price) * item.quantity);
   }, 0);
 
   const handleDateChange = (e) => {
@@ -172,7 +174,7 @@ const CartBottomMenu = ({
   const handlePriceChange = (itemId, newPrice) => {
     setItemPrices(prev => ({
       ...prev,
-      [itemId]: parseFloat(newPrice) || 0
+      [itemId]: newPrice === '' ? '' : parseFloat(newPrice) || 0
     }));
   };
 
@@ -201,7 +203,7 @@ const CartBottomMenu = ({
       location: purchaseLocation,
       items: cartItems.map(item => ({
         ...item,
-        price: itemPrices[item.id] || item.price || item.marketValue || 0
+        price: itemPrices[item.id] !== undefined ? itemPrices[item.id] : (item.price || 0)
       }))
     };
     onCreateOrder(orderData);
@@ -227,10 +229,26 @@ const CartBottomMenu = ({
   };
 
   const toggleGradingSection = (itemId) => {
-    setExpandedGradingSections(prev => ({
-      ...prev,
-      [itemId]: !prev[itemId]
-    }));
+    setExpandedGradingSections(prev => {
+      // If this section is already open, close it
+      if (prev[itemId]) {
+        return { [itemId]: false };
+      }
+      // Otherwise, close all other sections and open this one (accordion behavior)
+      return { [itemId]: true };
+    });
+  };
+
+  // Reset all form state when menu closes
+  const resetFormState = () => {
+    setItemPrices({});
+    setActivePriceField({});
+    setPurchaseLocation('');
+    setShowRetailerDropdown(false);
+    setExpandedGradingSections({});
+    setSelectedGradingCompany({});
+    setSelectedGradingGrade({});
+    setOrderDate(new Date().toISOString().split('T')[0]);
   };
 
   if (!isReady) return null;
@@ -252,7 +270,10 @@ const CartBottomMenu = ({
             position: 'fixed',
             zIndex: 45
           }}
-          onClick={() => setIsExpanded(false)}
+          onClick={() => {
+            setIsExpanded(false);
+            resetFormState();
+          }}
         />
       )}
       
@@ -262,8 +283,8 @@ const CartBottomMenu = ({
           className="fixed z-50 rounded-t-3xl"
         style={{ 
             width: '402px',
+            height: 'calc(85vh - 133px)', // Fixed height for proper flex scrolling
             maxHeight: 'calc(85vh - 133px)',
-            height: cartItems.length <= 2 ? 'auto' : 'calc(85vh - 133px)',
             bottom: '133px', // Position above the preview menu (133px is the height of the preview menu)
             left: '50%',
             transform: isExpanded ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(100%)',
@@ -283,7 +304,7 @@ const CartBottomMenu = ({
           data-menu="true"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full" style={{ minHeight: 0 }}>
             {/* Drag Handle - Always visible and centered */}
             <div className="flex justify-center pt-2 pb-1">
               <div className="w-8 h-1 rounded-full bg-gray-600 transition-colors group-hover:bg-gray-500"></div>
@@ -297,7 +318,7 @@ const CartBottomMenu = ({
             <div className="border-t border-gray-700/50 mx-6 mb-4"></div>
           
             {/* Cart Items */}
-            <div className="flex-1 overflow-y-auto min-h-0 overflow-x-visible" style={{ pointerEvents: 'auto', touchAction: 'auto' }}>
+            <div className="flex-1 overflow-y-auto overflow-x-visible pb-4" style={{ minHeight: 0 }}>
             {/* Order Details Section */}
             <div className="px-6 py-4 space-y-4 overflow-visible">
               {/* Order Date and Location Row */}
@@ -504,7 +525,7 @@ const CartBottomMenu = ({
                             })()}
                                 </span>
                           <span className="text-gray-400 text-xs">•</span>
-                          <span className="text-white text-xs">${(itemPrices[item.id] || item.price || item.marketValue || 0).toFixed(2)}</span>
+                          <span className="text-white text-xs">${(item.originalMarketValue || item.marketValue || 0).toFixed(2)}</span>
                           </div>
                         </div>
                       
@@ -554,7 +575,7 @@ const CartBottomMenu = ({
                             type="number"
                             step="0.01"
                           min="0"
-                          value={itemPrices[item.id] || item.price || item.marketValue || ''}
+                          value={itemPrices[item.id] !== undefined ? itemPrices[item.id] : (item.price || '')}
                             onChange={(e) => handlePriceChange(item.id, e.target.value)}
                           className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-indigo-500"
                           placeholder="0.00"
@@ -568,7 +589,10 @@ const CartBottomMenu = ({
                             type="number"
                             step="0.01"
                           min="0"
-                          value={((itemPrices[item.id] || item.price || item.marketValue || 0) * item.quantity).toFixed(2)}
+                          value={(() => {
+                            const price = itemPrices[item.id] !== undefined ? itemPrices[item.id] : (item.price || 0);
+                            return price === '' ? '' : (parseFloat(price) * item.quantity).toFixed(2);
+                          })()}
                           readOnly
                           className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none"
                           />
@@ -577,7 +601,7 @@ const CartBottomMenu = ({
                       
                     {/* Grading Buttons - Only show when expanded AND item is not a sealed product */}
                     {expandedGradingSections[item.id] && !isSealedProduct(item) && (
-                      <div className="px-4 pb-4">
+                      <div className="px-4 pb-6 relative z-30 border-t border-gray-700/30" style={{ backgroundColor: '#111827' }}>
                         <div className="grid grid-cols-4 gap-2">
                           {/* Raw Button */}
                           <button
@@ -669,7 +693,7 @@ const CartBottomMenu = ({
                           
                         {/* Grade Selection Row - Only show if a graded company is selected */}
                         {selectedGradingCompany[item.id] && selectedGradingCompany[item.id] !== 'Raw' && (
-                            <div className="mt-3">
+                            <div className="mt-3 mb-2">
                             <div className="text-xs text-gray-400 mb-2 px-1">
                               Select Grade ({selectedGradingCompany[item.id]})
                             </div>
@@ -704,7 +728,7 @@ const CartBottomMenu = ({
 
       {/* Preview Menu - Always visible at bottom */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ease-out ${isExpanded ? '' : 'rounded-t-3xl'}`}
+        className={`fixed bottom-0 left-0 right-0 z-50 transition-all duration-300 ease-out ${isExpanded ? '' : 'rounded-t-3xl'}`}
         data-menu="true"
         style={{ 
           backgroundColor: '#030712',
@@ -737,7 +761,10 @@ const CartBottomMenu = ({
               ) : (
                 <>
                 <button
-                    onClick={() => setIsExpanded(false)}
+                    onClick={() => {
+            setIsExpanded(false);
+            resetFormState();
+          }}
                     className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors flex items-center justify-center flex-shrink-0"
                 >
                   Cancel
@@ -755,6 +782,7 @@ const CartBottomMenu = ({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    resetFormState();
                     onClearCart(); // Deselect all items
                     onClose(); // Close the menu
                   }}

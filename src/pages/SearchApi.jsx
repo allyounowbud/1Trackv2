@@ -1139,10 +1139,15 @@ const SearchApi = () => {
       name: card.name,
       set: card.expansion_name || card.set_name,
       marketValue: marketValue,
+      price: null, // User will enter their own price in the cart
       imageUrl: card.image_url,
       rarity: card.rarity,
       source: 'api',
-      api_id: card.id
+      api_id: card.id,
+      itemType: card.itemType || (card.supertype === 'Sealed Product' ? 'Sealed' : 'Single'),
+      cardCondition: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : 'Raw',
+      gradingCompany: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : null,
+      gradingGrade: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : null
     };
     
     // Check if item is already in cart
@@ -1207,12 +1212,17 @@ const SearchApi = () => {
 
   // Direct order creation from cart menu
   const createOrderDirectly = async (orderData) => {
-    if (cartItems.length === 0) return;
+    if (orderData.items.length === 0) return;
 
     try {
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
       // Set success data for popup
       const totalValue = cartItems.reduce((sum, item) => {
-        const itemPrice = item.price || item.marketValue || 0;
+        const itemPrice = item.price || 0;
         return sum + (itemPrice * item.quantity);
       }, 0);
 
@@ -1235,93 +1245,42 @@ const SearchApi = () => {
       // Generate a single order group ID for all items in this multi-order
       const orderGroupId = crypto.randomUUID();
 
-      // Create or find items and prepare order data
-      const orderPromises = cartItems.map(async (item) => {
-        const itemPrice = item.price || item.marketValue || 0;
+      // Create orders directly without creating items in items table
+      const orderPromises = orderData.items.map(async (item) => {
+        const itemPrice = item.price || 0;
         
-        // Find or create item
-        let itemId;
-        
-        // First, try to find existing item by name and set (more precise matching)
-        const { data: existingItem } = await supabase
-          .from('items')
-          .select('id')
-          .eq('name', item.name)
-          .eq('set_name', item.set || '')
-          .single();
-
-        if (existingItem) {
-          itemId = existingItem.id;
-        } else {
-          // Check if this card exists in cached_cards (from search cache)
-          const { data: cachedCard } = await supabase
-            .from('cached_cards')
-            .select('id, api_id, name, expansion_name, image_url, market_price')
-            .eq('name', item.name)
-            .eq('expansion_name', item.set || '')
-            .single();
-
-          if (cachedCard) {
-            // Use the cached card data to create a more accurate item
-            const cardType = orderData.itemCardTypes?.[item.id] || 'raw';
-            const itemType = getItemTypeClassification(item, cardType, 'api');
-            
-            const { data: newItem, error: itemError } = await supabase
-              .from('items')
-              .insert({
-                name: cachedCard.name,
-                set_name: cachedCard.expansion_name || '',
-                image_url: cachedCard.image_url || item.imageUrl,
-                item_type: itemType,
-                source: 'api',
-                api_id: cachedCard.api_id,
-                market_value_cents: Math.round((cachedCard.market_price || item.marketValue || 0) * 100)
-              })
-              .select('id')
-              .single();
-
-            if (itemError) throw itemError;
-            itemId = newItem.id;
-          } else {
-            // Fallback: create item with provided data
-            const cardType = orderData.itemCardTypes?.[item.id] || 'raw';
-            const itemType = getItemTypeClassification(item, cardType, 'api');
-            
-            const { data: newItem, error: itemError } = await supabase
-              .from('items')
-              .insert({
-                name: item.name,
-                set_name: item.set || '',
-                image_url: item.imageUrl,
-                item_type: itemType,
-                source: 'api',
-                market_value_cents: Math.round((item.marketValue || 0) * 100)
-              })
-              .select('id')
-              .single();
-
-            if (itemError) throw itemError;
-            itemId = newItem.id;
-          }
-        }
-
-        // Create order with order group ID
+        // For API-sourced cards, we don't create items in the items table
+        // Instead, we create orders that reference the API data directly
         const buyPriceCents = Math.round(itemPrice * 100);
         const totalCostCents = Math.round(itemPrice * item.quantity * 100);
 
+        // Use the item type and grading information from the cart item
+        const itemType = item.itemType || 'Single';
+        const cardCondition = item.cardCondition;
+        const gradingCompany = item.gradingCompany;
+        const gradingGrade = item.gradingGrade;
+
         return {
-          item_id: itemId,
-          order_type: 'buy',
-          buy_date: orderData.orderDate,
-          buy_price_cents: buyPriceCents,
-          buy_quantity: item.quantity,
+          // User identification
+          user_id: user.id,
+          // Link directly to pokemon_cards table (SearchApi only handles pokemon for now)
+          pokemon_card_id: item.api_id || null,
+          item_id: null, // For custom items only
+          product_source: 'pokemon',
+          // Order details
+          purchase_date: orderData.date,
+          price_per_item_cents: buyPriceCents,
+          quantity: item.quantity,
           total_cost_cents: totalCostCents,
-          buy_location: orderData.purchaseLocation || null,
-          buy_notes: null,
-          status: 'ordered',
+          retailer_name: orderData.location || null,
+          notes: null,
           order_group_id: orderGroupId,
-          order_group_name: orderData.purchaseLocation ? `${orderData.purchaseLocation} Order` : 'Multi-Item Order',
-          order_group_notes: null
+          
+          // Item classification fields
+          item_type: itemType,
+          card_condition: cardCondition,
+          grading_company: gradingCompany,
+          grading_grade: gradingGrade
         };
       });
 
@@ -1407,10 +1366,15 @@ const SearchApi = () => {
             name: card.name,
             set: card.expansion_name || card.set_name,
             marketValue: marketValue,
+            price: null, // User will enter their own price in the cart
             imageUrl: card.image_url,
             rarity: card.rarity,
             source: 'api',
-            api_id: card.id
+            api_id: card.id,
+            itemType: card.itemType || (card.supertype === 'Sealed Product' ? 'Sealed' : 'Single'),
+            cardCondition: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : 'Raw',
+            gradingCompany: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : null,
+            gradingGrade: card.itemType === 'Sealed' || card.supertype === 'Sealed Product' ? null : null
           };
           
           // Add new item to cart
@@ -3509,9 +3473,11 @@ const SearchApi = () => {
           product={{
             name: selectedCardForCollection.name,
             set: selectedCardForCollection.set_name,
-            marketValue: parseFloat(selectedCardForCollection.market_value || 0),
+            marketValue: parseFloat(selectedCardForCollection.marketValue || selectedCardForCollection.market_value || 0),
             imageUrl: selectedCardForCollection.image_url,
-            source: 'api'
+            source: 'api',
+            api_id: selectedCardForCollection.api_id,
+            itemType: selectedCardForCollection.itemType || (selectedCardForCollection.supertype === 'Sealed Product' ? 'Sealed' : 'Single')
           }}
           isOpen={isAddToCollectionModalOpen}
           onClose={() => {

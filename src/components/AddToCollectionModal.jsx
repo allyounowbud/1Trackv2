@@ -5,6 +5,8 @@ import { getItemTypeClassification } from '../utils/itemTypeUtils';
 import { useModal } from '../contexts/ModalContext';
 import { createSingleOrder } from '../utils/orderNumbering';
 import DesktopSideMenu from './DesktopSideMenu';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryClient';
 
 // Cache bust: Updated theme colors - v3 - Fixed JSX structure - Fixed retailer dropdown - v4
 const AddToCollectionModal = ({ 
@@ -16,6 +18,7 @@ const AddToCollectionModal = ({
   cartMenuHeight = 0
 }) => {
   const { openModal, closeModal } = useModal();
+  const queryClient = useQueryClient();
   
   const [formData, setFormData] = useState({
     // Purchase details
@@ -258,38 +261,9 @@ const AddToCollectionModal = ({
       let itemId;
       
       if (product.source === 'api' && product.api_id) {
-        // For API-sourced cards, check if item already exists by name and set
-        const { data: existingItem } = await supabase
-          .from('items')
-          .select('id')
-          .eq('name', product.name)
-          .eq('set_name', product.set || '')
-          .single();
-
-        if (existingItem) {
-          itemId = existingItem.id;
-        } else {
-          // Create new item with market value from Pokemon card data
-          const marketValueCents = Math.round((product.marketValue || 0) * 100);
-          
-          // Determine proper item type classification
-          const itemType = getItemTypeClassification(product, 'raw', 'api');
-          
-          const { data: newItem, error: itemError } = await supabase
-            .from('items')
-            .insert({
-              name: product.name,
-              set_name: product.set || '',
-              image_url: product.imageUrl || '',
-              item_type: itemType, // Use proper type classification
-              market_value_cents: marketValueCents
-            })
-            .select('id')
-            .single();
-          
-          if (itemError) throw itemError;
-          itemId = newItem.id;
-        }
+        // For API-sourced cards, don't create items in items table
+        // We'll store the data directly in the order
+        itemId = null;
       } else {
         // For manual items, use the old logic
         const itemName = product.source === 'manual' ? product.name : getCleanItemName(product.name, product.set);
@@ -340,19 +314,40 @@ const AddToCollectionModal = ({
         gradedGrade = selectedGradingGrade;
       }
 
+      // Get current user for RLS
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Determine item type and grading information
+      const itemType = product.itemType === 'Sealed Product' || product.itemType === 'Sealed' ? 'Sealed' : 'Single';
+      
+      // For sealed products, always use NULL for card_condition
+      const isSealed = itemType === 'Sealed';
+      const cardCondition = isSealed ? null : (selectedGradingCompany === 'Raw' ? 'Raw' : `${selectedGradingCompany} ${selectedGradingGrade}`);
+      const gradingCompany = isSealed ? null : (selectedGradingCompany === 'Raw' ? null : selectedGradingCompany);
+      const gradingGrade = isSealed ? null : (selectedGradingCompany === 'Raw' ? null : selectedGradingGrade);
+
       const baseOrderData = {
-        item_id: itemId,
-        order_type: 'buy',
-        buy_date: formData.buyDate,
-        buy_price_cents: buyPriceCents, // Price per item
-        buy_quantity: parseInt(formData.quantity),
-        total_cost_cents: totalCostCents, // Total cost for all items
-        buy_location: formData.buyLocation || null,
-        buy_notes: formData.buyNotes || null,
-        status: 'ordered',
-        card_type: cardType,
-        graded_company: gradedCompany,
-        graded_grade: gradedGrade
+        user_id: user.id,
+        item_id: itemId, // For custom items
+        purchase_date: formData.buyDate,
+        price_per_item_cents: buyPriceCents, // Price per item
+        total_cost_cents: totalCostCents, // Total cost for this order
+        quantity: parseInt(formData.quantity),
+        notes: formData.buyNotes || null,
+        retailer_name: formData.buyLocation || null, // Store custom location name
+        
+        // Item classification fields
+        item_type: itemType,
+        card_condition: cardCondition,
+        grading_company: gradingCompany,
+        grading_grade: gradingGrade,
+        
+        // Link directly to pokemon_cards table
+        pokemon_card_id: product.source === 'pokemon' ? product.api_id : null,
+        product_source: product.source === 'pokemon' ? 'pokemon' : (itemId ? 'custom' : 'unknown')
       };
 
       // Create order with proper numbering
@@ -366,6 +361,10 @@ const AddToCollectionModal = ({
         .single();
 
       if (orderError) throw orderError;
+
+      // Invalidate queries to refresh collection data
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary });
 
       // Show success state
       setSuccessData({
@@ -421,14 +420,39 @@ const AddToCollectionModal = ({
                 )}
                 {product.marketValue !== undefined && product.marketValue !== null && (
                   <p className="text-emerald-400" style={{ fontSize: '12px' }}>
-                    Value: ${product.marketValue.toFixed(2)}
+                    {(() => {
+                      // Determine the label based on item type and grading
+                      const isSealed = product.itemType === 'Sealed' || 
+                                     product.itemType === 'Sealed Product' || 
+                                     product.supertype === 'Sealed Product' ||
+                                     product.name?.toLowerCase().includes('box') ||
+                                     product.name?.toLowerCase().includes('bundle') ||
+                                     product.name?.toLowerCase().includes('pack');
+                      
+                      if (isSealed) {
+                        return `Sealed: $${product.marketValue.toFixed(2)}`;
+                      } else {
+                        // For single cards, show grading info or default to "Raw"
+                        const gradingInfo = selectedGradingCompany === 'Raw' ? 'Raw' : `${selectedGradingCompany} ${selectedGradingGrade}`;
+                        return `${gradingInfo}: $${product.marketValue.toFixed(2)}`;
+                      }
+                    })()}
                   </p>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Card Type Selection */}
+          {/* Card Type Selection - Only show for non-sealed products */}
+          {(() => {
+            const isSealed = product.itemType === 'Sealed' || 
+                           product.itemType === 'Sealed Product' || 
+                           product.supertype === 'Sealed Product' ||
+                           product.name?.toLowerCase().includes('box') ||
+                           product.name?.toLowerCase().includes('bundle') ||
+                           product.name?.toLowerCase().includes('pack');
+            return !isSealed;
+          })() && (
           <div className="p-4 border-b border-gray-700 bg-gray-900">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -592,6 +616,7 @@ const AddToCollectionModal = ({
               </div>
             )}
           </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
@@ -636,14 +661,14 @@ const AddToCollectionModal = ({
                     </label>
                     <div className="relative retailer-dropdown-container">
                       <div 
-                        className="w-full px-4 py-3 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center justify-between"
+                        className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center justify-between"
                         style={{ backgroundColor: '#111827', color: 'white' }}
                         onClick={() => setShowRetailerDropdown(!showRetailerDropdown)}
                       >
                         <span className={formData.buyLocation ? 'text-white' : 'text-gray-400'}>
                           {formData.buyLocation || 'Select retailer...'}
                         </span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center">
                           {formData.buyLocation && (
                             <button
                               type="button"
@@ -916,14 +941,39 @@ const AddToCollectionModal = ({
               )}
               {product.marketValue !== undefined && product.marketValue !== null && (
                 <p className="text-blue-400 text-xs mt-1">
-                  Value: ${product.marketValue.toFixed(2)}
+                  {(() => {
+                    // Determine the label based on item type and grading
+                    const isSealed = product.itemType === 'Sealed' || 
+                                   product.itemType === 'Sealed Product' || 
+                                   product.supertype === 'Sealed Product' ||
+                                   product.name?.toLowerCase().includes('box') ||
+                                   product.name?.toLowerCase().includes('bundle') ||
+                                   product.name?.toLowerCase().includes('pack');
+                    
+                    if (isSealed) {
+                      return `Sealed: $${product.marketValue.toFixed(2)}`;
+                    } else {
+                      // For single cards, show grading info or default to "Raw"
+                      const gradingInfo = selectedGradingCompany === 'Raw' ? 'Raw' : `${selectedGradingCompany} ${selectedGradingGrade}`;
+                      return `${gradingInfo}: $${product.marketValue.toFixed(2)}`;
+                    }
+                  })()}
                 </p>
               )}
             </div>
           </div>
         </div>
 
-        {/* Card Type Selection */}
+        {/* Card Type Selection - Only show for non-sealed products */}
+        {(() => {
+          const isSealed = product.itemType === 'Sealed' || 
+                         product.itemType === 'Sealed Product' || 
+                         product.supertype === 'Sealed Product' ||
+                         product.name?.toLowerCase().includes('box') ||
+                         product.name?.toLowerCase().includes('bundle') ||
+                         product.name?.toLowerCase().includes('pack');
+          return !isSealed;
+        })() && (
         <div className="px-6 py-4 border-b border-gray-700/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -1087,6 +1137,7 @@ const AddToCollectionModal = ({
             </div>
           )}
         </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
@@ -1099,51 +1150,6 @@ const AddToCollectionModal = ({
 
             {/* Form Fields */}
             <div className="space-y-4">
-              {/* Order Date and Quantity Row */}
-              <div className="grid grid-cols-2 gap-4">
-                {/* Order Date */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Order Date
-                  </label>
-                  <input
-                    type="date"
-                    name="buyDate"
-                    value={formData.buyDate}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors cursor-pointer"
-                    style={{ 
-                      backgroundColor: '#111827',
-                      colorScheme: 'dark',
-                      WebkitAppearance: 'none',
-                      MozAppearance: 'textfield'
-                    }}
-                    onClick={(e) => {
-                      e.target.showPicker && e.target.showPicker();
-                    }}
-                  />
-                </div>
-
-                {/* Quantity */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Quantity
-                  </label>
-                  <input
-                    type="number"
-                    name="quantity"
-                    value={formData.quantity}
-                    onChange={handleInputChange}
-                    min="1"
-                    required
-                    placeholder="1"
-                    className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
-                    style={{ backgroundColor: '#111827' }}
-                  />
-                </div>
-              </div>
-
               {/* Purchase Location */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -1151,14 +1157,14 @@ const AddToCollectionModal = ({
                 </label>
                 <div className="relative retailer-dropdown-container">
                   <div 
-                    className="w-full px-4 py-3 pr-10 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center justify-between"
+                    className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus-within:ring-0.5 focus-within:ring-indigo-400/50 focus-within:border-indigo-400/50 transition-colors cursor-pointer flex items-center justify-between"
                     style={{ backgroundColor: '#111827', color: 'white' }}
                     onClick={() => setShowRetailerDropdown(!showRetailerDropdown)}
                   >
                     <span className={formData.buyLocation ? 'text-white' : 'text-gray-400'}>
                       {formData.buyLocation || 'Select retailer...'}
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center">
                       {formData.buyLocation && (
                         <button
                           type="button"
@@ -1214,6 +1220,50 @@ const AddToCollectionModal = ({
                 </div>
               </div>
 
+              {/* Order Date and Quantity Row */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Order Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Order Date
+                  </label>
+                  <input
+                    type="date"
+                    name="buyDate"
+                    value={formData.buyDate}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors cursor-pointer"
+                    style={{ 
+                      backgroundColor: '#111827',
+                      colorScheme: 'dark',
+                      WebkitAppearance: 'none',
+                      MozAppearance: 'textfield'
+                    }}
+                    onClick={(e) => {
+                      e.target.showPicker && e.target.showPicker();
+                    }}
+                  />
+                </div>
+
+                {/* Quantity */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    value={formData.quantity}
+                    onChange={handleInputChange}
+                    min="1"
+                    required
+                    placeholder="1"
+                    className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-0.5 focus:ring-indigo-400/50 focus:border-indigo-400/50 transition-colors"
+                    style={{ backgroundColor: '#111827' }}
+                  />
+                </div>
+              </div>
 
               {/* Price Row - Side by side */}
               <div className="grid grid-cols-2 gap-4">

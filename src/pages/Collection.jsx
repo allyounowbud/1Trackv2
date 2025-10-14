@@ -332,14 +332,7 @@ const Collection = () => {
       return;
     }
     
-    const totalItems = (collectionData.items || []).filter(item => {
-      if (selectedFilter === 'All') return true;
-      if (selectedFilter === 'Graded') {
-        return item.status.includes('PSA') || item.status.includes('BGS') || 
-               item.status.includes('CGC') || item.status.includes('SGC');
-      }
-      return item.status === selectedFilter;
-    }).length;
+    const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
     
     // If there's only 1 item and not in bulk mode, show the normal menu
     if (totalItems === 1) {
@@ -363,14 +356,7 @@ const Collection = () => {
   };
 
   const selectAll = () => {
-    const totalItems = (collectionData.items || []).filter(item => {
-      if (selectedFilter === 'All') return true;
-      if (selectedFilter === 'Graded') {
-        return item.status.includes('PSA') || item.status.includes('BGS') || 
-               item.status.includes('CGC') || item.status.includes('SGC');
-      }
-      return item.status === selectedFilter;
-    }).length;
+    const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
     
     // Only allow select all if there are multiple items
     if (totalItems > 1) {
@@ -678,6 +664,24 @@ const Collection = () => {
     return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
+  // Helper function to filter items based on selected filter
+  const matchesFilter = (item, filter) => {
+    if (filter === 'All') return true;
+    if (filter === 'Graded') {
+      return item.item_type === 'Single' && item.card_condition && item.card_condition !== 'Raw';
+    }
+    if (filter === 'Ungraded') {
+      return item.item_type === 'Single' && (!item.card_condition || item.card_condition === 'Raw');
+    }
+    if (filter === 'Sealed') {
+      return item.item_type === 'Sealed';
+    }
+    if (filter === 'Custom') {
+      return item.source === 'manual';
+    }
+    return true;
+  };
+
   // Memoize filtered orders for better performance
   const filteredOrders = useMemo(() => {
     return orders.filter(order => !order.is_sold);
@@ -693,7 +697,7 @@ const Collection = () => {
       const overrideKey = `${order.item_id}`;
       const overrideValue = marketValueOverrides[overrideKey];
       const marketValue = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
-      return sum + (marketValue * order.buy_quantity);
+      return sum + (marketValue * order.quantity);
     }, 0);
 
     const totalPaidCents = orders.reduce((sum, order) => {
@@ -707,7 +711,7 @@ const Collection = () => {
         const overrideKey = `${order.item_id}`;
         const overrideValue = marketValueOverrides[overrideKey];
         const marketValueCents = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
-        const marketValue = marketValueCents * order.buy_quantity;
+        const marketValue = marketValueCents * order.quantity;
         const cost = order.total_cost_cents || 0;
         return sum + (marketValue - cost);
       }
@@ -729,24 +733,17 @@ const Collection = () => {
     
     // Optimized category filtering and counting
     const categoryCounts = filteredOrders.reduce((acc, order) => {
-      const quantity = order.buy_quantity || 1;
-      const itemName = order.item_name?.toLowerCase() || '';
-      const itemType = order.item_type?.toLowerCase() || '';
-      
-      // Helper function to check if item is sealed
-      const isSealed = itemType === 'sealed product' || 
-                      itemName.includes('box') ||
-                      itemName.includes('bundle') ||
-                      itemName.includes('collection') ||
-                      itemName.includes('tin');
+      const quantity = order.quantity || 1;
       
       if (order.source === 'manual') {
         acc.custom += quantity;
-      } else if (order.card_type === 'graded') {
-        acc.graded += quantity;
-      } else if (isSealed) {
+      } else if (order.item_type === 'Sealed') {
         acc.sealed += quantity;
+      } else if (order.item_type === 'Single' && order.card_condition && order.card_condition !== 'Raw') {
+        // PSA 10, BGS 9, etc. are considered graded
+        acc.graded += quantity;
       } else {
+        // Raw cards or singles without specific condition are ungraded
         acc.ungraded += quantity;
       }
       
@@ -773,7 +770,7 @@ const Collection = () => {
         };
       }
       
-      itemGroups[itemName].quantity += order.buy_quantity || 1;
+      itemGroups[itemName].quantity += order.quantity || 1;
       itemGroups[itemName].totalPaid += (order.total_cost_cents || 0);
       itemGroups[itemName].orders.push(order);
     });
@@ -788,32 +785,22 @@ const Collection = () => {
       const profit = totalValue - group.totalPaid;
       const profitPercent = group.totalPaid > 0 ? (profit / group.totalPaid) * 100 : 0;
       
-      // Determine status based on card type and grading information
-      let status = "Ungraded";
+      // Determine status based on new item_type and card_condition fields
+      let status = "Unknown";
       if (group.source === 'manual') {
         status = "Custom";
       } else {
-        // Check if any order for this item is sealed
-        const sealedOrder = group.orders.find(order => order.card_type === 'sealed');
-        if (sealedOrder) {
-          status = "Sealed";
-        } else {
-          // Check if any order for this item is graded
-          const gradedOrder = group.orders.find(order => 
-            order.card_type === 'graded' && order.graded_company && order.graded_grade
-          );
-          
-          if (gradedOrder) {
-            status = `${gradedOrder.graded_company} ${gradedOrder.graded_grade}`;
+        // Use the new item_type and card_condition fields
+        const firstOrder = group.orders[0];
+        if (firstOrder) {
+          if (firstOrder.item_type === 'Sealed') {
+            status = "Sealed";
+          } else if (firstOrder.item_type === 'Single' && firstOrder.card_condition) {
+            status = firstOrder.card_condition; // Will show "Raw", "PSA 10", etc.
+          } else if (firstOrder.item_type === 'Single') {
+            status = "Raw"; // Fallback for singles without condition
           } else {
-            // Check if it's a raw card (explicitly set as raw)
-            const rawOrder = group.orders.find(order => order.card_type === 'raw');
-            if (rawOrder) {
-              status = "Ungraded";
-            } else {
-              // Fallback to old logic for backward compatibility
-              status = "Ungraded";
-            }
+            status = firstOrder.item_type || "Unknown";
           }
         }
       }
@@ -827,7 +814,11 @@ const Collection = () => {
         cardNumber: group.card_number, // Separate card number field
         set: group.set_name || "Unknown Set",
         status: status,
-        value: perItemValue / 100, // Convert cents to dollars (per-item value)
+        item_type: group.item_type, // Add new field
+        card_condition: group.orders[0]?.card_condition, // Add new field
+        grading_company: group.orders[0]?.grading_company, // Add new field
+        value: perItemValue / 100, // Convert cents to dollars (per-item value) - used for calculations
+        originalValue: (group.market_value_cents || 0) / 100, // Original market value (not affected by overrides)
         paid: group.totalPaid / 100, // Convert cents to dollars (total paid)
         quantity: group.quantity,
         profit: profit / 100, // Convert cents to dollars (total profit)
@@ -843,27 +834,19 @@ const Collection = () => {
       if (filter === 'Ungraded') {
         filteredOrders = orders.filter(order => 
           !order.is_sold && 
-          (order.card_type === 'raw' || !order.card_type) &&
-          order.item_type !== 'Sealed Product' && 
-          !order.item_name?.toLowerCase().includes('box') &&
-          !order.item_name?.toLowerCase().includes('bundle') &&
-          !order.item_name?.toLowerCase().includes('collection') &&
-          !order.item_name?.toLowerCase().includes('tin')
+          order.item_type === 'Single' && 
+          (!order.card_condition || order.card_condition === 'Raw')
         );
       } else if (filter === 'Graded') {
         filteredOrders = orders.filter(order => 
-          !order.is_sold && order.card_type === 'graded'
+          !order.is_sold && 
+          order.item_type === 'Single' && 
+          order.card_condition && 
+          order.card_condition !== 'Raw'
         );
       } else if (filter === 'Sealed') {
         filteredOrders = orders.filter(order => 
-          !order.is_sold && (
-            order.card_type === 'sealed' ||
-            order.item_type === 'Sealed Product' ||
-            order.item_name?.toLowerCase().includes('box') ||
-            order.item_name?.toLowerCase().includes('bundle') ||
-            order.item_name?.toLowerCase().includes('collection') ||
-            order.item_name?.toLowerCase().includes('tin')
-          )
+          !order.is_sold && order.item_type === 'Sealed'
         );
       } else if (filter === 'Custom') {
         filteredOrders = orders.filter(order => 
@@ -872,7 +855,7 @@ const Collection = () => {
       }
 
       const filteredValueCents = filteredOrders.reduce((sum, order) => {
-        return sum + ((order.market_value_cents || 0) * order.buy_quantity);
+        return sum + ((order.market_value_cents || 0) * order.quantity);
       }, 0);
 
       const filteredPaidCents = filteredOrders.reduce((sum, order) => {
@@ -883,7 +866,7 @@ const Collection = () => {
         if (order.is_sold) {
           return sum + (order.net_profit_cents || 0);
         } else {
-          const marketValue = (order.market_value_cents || 0) * order.buy_quantity;
+          const marketValue = (order.market_value_cents || 0) * order.quantity;
           const cost = order.total_cost_cents || 0;
           return sum + (marketValue - cost);
         }
@@ -941,32 +924,25 @@ const Collection = () => {
     const data = [];
     const today = new Date();
     
-    // Filter orders based on selectedFilter
-    let filteredOrders = orders;
+    // Filter orders based on selectedFilter using the same logic as the main filtering
+    let filteredOrders = orders.filter(order => !order.is_sold);
+    
     if (selectedFilter === 'Ungraded') {
       filteredOrders = orders.filter(order => 
         !order.is_sold && 
-        (order.card_type === 'raw' || !order.card_type) &&
-        order.item_type !== 'Sealed Product' && 
-        !order.item_name?.toLowerCase().includes('box') &&
-        !order.item_name?.toLowerCase().includes('bundle') &&
-        !order.item_name?.toLowerCase().includes('collection') &&
-        !order.item_name?.toLowerCase().includes('tin')
+        order.item_type === 'Single' && 
+        (!order.card_condition || order.card_condition === 'Raw')
       );
     } else if (selectedFilter === 'Graded') {
       filteredOrders = orders.filter(order => 
-        !order.is_sold && order.card_type === 'graded'
+        !order.is_sold && 
+        order.item_type === 'Single' && 
+        order.card_condition && 
+        order.card_condition !== 'Raw'
       );
     } else if (selectedFilter === 'Sealed') {
       filteredOrders = orders.filter(order => 
-        !order.is_sold && (
-          order.card_type === 'sealed' ||
-          order.item_type === 'Sealed Product' ||
-          order.item_name?.toLowerCase().includes('box') ||
-          order.item_name?.toLowerCase().includes('bundle') ||
-          order.item_name?.toLowerCase().includes('collection') ||
-          order.item_name?.toLowerCase().includes('tin')
-        )
+        !order.is_sold && order.item_type === 'Sealed'
       );
     } else if (selectedFilter === 'Custom') {
       filteredOrders = orders.filter(order => 
@@ -977,12 +953,16 @@ const Collection = () => {
     // Group filtered orders by date to calculate cumulative value
     const ordersByDate = {};
     filteredOrders.forEach(order => {
-      if (!order.is_sold) {
-        const orderDate = new Date(order.buy_date).toISOString().split('T')[0];
-        if (!ordersByDate[orderDate]) {
-          ordersByDate[orderDate] = [];
+      if (!order.is_sold && order.purchase_date) {
+        try {
+          const orderDate = new Date(order.purchase_date).toISOString().split('T')[0];
+          if (!ordersByDate[orderDate]) {
+            ordersByDate[orderDate] = [];
+          }
+          ordersByDate[orderDate].push(order);
+        } catch (error) {
+          console.warn('Invalid date in order:', order.purchase_date, error);
         }
-        ordersByDate[orderDate].push(order);
       }
     });
     
@@ -999,7 +979,7 @@ const Collection = () => {
           const overrideKey = `${order.item_id}`;
           const overrideValue = marketValueOverrides[overrideKey];
           const marketValue = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
-          cumulativeValue += marketValue * order.buy_quantity;
+          cumulativeValue += marketValue * order.quantity;
         });
       }
       
@@ -1013,10 +993,11 @@ const Collection = () => {
   };
 
   const chartData = generateChartData();
-  const maxValue = Math.max(...chartData.map(d => d.value));
-  const minValue = Math.min(...chartData.map(d => d.value));
+  const validValues = chartData.filter(d => d && typeof d.value === 'number' && !isNaN(d.value)).map(d => d.value);
+  const maxValue = validValues.length > 0 ? Math.max(...validValues) : 0;
+  const minValue = validValues.length > 0 ? Math.min(...validValues) : 0;
   
-  // Debug logging (removed to prevent infinite re-renders)
+  // Chart data ready for rendering
   
   // Calculate percentage change for the selected time range
   const calculatePercentageChange = () => {
@@ -1294,7 +1275,7 @@ const Collection = () => {
 
             {/* Dynamic chart based on real data */}
             {(() => {
-              if (chartData.length === 0) return null;
+              if (chartData.length === 0 || validValues.length === 0) return null;
               
               const width = 300;
               const height = 100;
@@ -1305,12 +1286,14 @@ const Collection = () => {
               const scaleY = valueRange > 0 ? (height - 2 * padding) / valueRange : 1;
               const scaleX = (width - 2 * padding) / (chartData.length - 1);
               
-              // Generate path data
-              const points = chartData.map((point, index) => {
-                const x = padding + (index * scaleX);
-                const y = height - padding - ((point.value - minValue) * scaleY);
-                return { x, y };
-              });
+              // Generate path data with safety checks
+              const points = chartData
+                .filter(point => point && typeof point.value === 'number' && !isNaN(point.value))
+                .map((point, index) => {
+                  const x = padding + (index * scaleX);
+                  const y = height - padding - ((point.value - minValue) * scaleY);
+                  return { x, y };
+                });
               
               // Create smooth curved line using quadratic Bézier curves
               const createSmoothPath = (points) => {
@@ -1467,13 +1450,7 @@ const Collection = () => {
               <div className="text-sm text-gray-400">
                 {selectedFilter === 'All' 
                   ? (collectionData.items?.length || 0)
-                  : (collectionData.items?.filter(item => {
-                      if (selectedFilter === 'Graded') {
-                        return item.status.includes('PSA') || item.status.includes('BGS') || 
-                               item.status.includes('CGC') || item.status.includes('SGC');
-                      }
-                      return item.status === selectedFilter;
-                    }).length || 0)
+                  : (collectionData.items?.filter(item => matchesFilter(item, selectedFilter)).length || 0)
                 } Results
               </div>
             </div>
@@ -1483,13 +1460,7 @@ const Collection = () => {
                   selectedFilter === 'All' 
                     ? collectionData.totalValue 
                     : (collectionData.items || [])
-                        .filter(item => {
-                          if (selectedFilter === 'Graded') {
-                            return item.status.includes('PSA') || item.status.includes('BGS') || 
-                                   item.status.includes('CGC') || item.status.includes('SGC');
-                          }
-                          return item.status === selectedFilter;
-                        })
+                        .filter(item => matchesFilter(item, selectedFilter))
                         .reduce((sum, item) => sum + (item.value * item.quantity), 0)
                 )}
               </span></div>
@@ -1518,15 +1489,7 @@ const Collection = () => {
         <div className={`px-3 md:px-6 lg:px-8 ${isBulkSelectionMode ? 'pb-24' : 'pb-4'}`}>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
           {(collectionData.items || [])
-            .filter(item => {
-              if (selectedFilter === 'All') return true;
-              if (selectedFilter === 'Graded') {
-                // Show all graded cards (PSA, BGS, CGC, SGC)
-                return item.status.includes('PSA') || item.status.includes('BGS') || 
-                       item.status.includes('CGC') || item.status.includes('SGC');
-              }
-              return item.status === selectedFilter;
-            })
+            .filter(item => matchesFilter(item, selectedFilter))
             .map((item) => {
             const isSelected = selectedItems.has(item.id);
             return (
@@ -1538,14 +1501,7 @@ const Collection = () => {
                          : 'hover:bg-gray-800/50 hover:border-gray-600'
                      }`}
                      onTouchStart={(e) => {
-                       const totalItems = (collectionData.items || []).filter(item => {
-      if (selectedFilter === 'All') return true;
-      if (selectedFilter === 'Graded') {
-        return item.status.includes('PSA') || item.status.includes('BGS') || 
-               item.status.includes('CGC') || item.status.includes('SGC');
-      }
-      return item.status === selectedFilter;
-    }).length;
+                       const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
                        if (totalItems > 1 || isBulkSelectionMode) {
                          longPressTriggeredRef.current = false;
                          longPressRef.current = setTimeout(() => {
@@ -1562,14 +1518,7 @@ const Collection = () => {
                        }
                      }}
                      onMouseDown={(e) => {
-                       const totalItems = (collectionData.items || []).filter(item => {
-      if (selectedFilter === 'All') return true;
-      if (selectedFilter === 'Graded') {
-        return item.status.includes('PSA') || item.status.includes('BGS') || 
-               item.status.includes('CGC') || item.status.includes('SGC');
-      }
-      return item.status === selectedFilter;
-    }).length;
+                       const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
                        if (e.button === 0 && (totalItems > 1 || isBulkSelectionMode)) { // Left click and multiple items or already in bulk mode
                          longPressTriggeredRef.current = false;
                          longPressRef.current = setTimeout(() => {
@@ -1595,14 +1544,7 @@ const Collection = () => {
                        }
                        
                        // Only handle click if we're already in selection mode AND there are multiple items
-                       const totalItems = (collectionData.items || []).filter(item => {
-      if (selectedFilter === 'All') return true;
-      if (selectedFilter === 'Graded') {
-        return item.status.includes('PSA') || item.status.includes('BGS') || 
-               item.status.includes('CGC') || item.status.includes('SGC');
-      }
-      return item.status === selectedFilter;
-    }).length;
+                       const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
                        if (isSelectionMode && (totalItems > 1 || isBulkSelectionMode)) {
                          e.preventDefault();
                          handleItemSelect(item.id);
@@ -1645,7 +1587,7 @@ const Collection = () => {
                   
                   {/* Status Text */}
                   <div className="text-[11px] md:text-xs text-blue-400 font-medium">
-                    {item.status}
+                    {item.item_type === 'Single' ? (item.card_condition || 'Raw') : (item.item_type || 'Unknown')}
                   </div>
                 
                 {/* Spacing */}
@@ -1654,12 +1596,12 @@ const Collection = () => {
                 {/* Financial Details */}
                 <div className="space-y-1">
                   <div className="text-[11px] md:text-xs text-white">
-                    {item.value > 0 ? formatPrice(item.value * item.quantity) : 'No Market Data'} Value • Qty {item.quantity}
+                    {item.originalValue > 0 ? formatPrice(item.originalValue * item.quantity) : 'No Market Data'} Value • Qty {item.quantity}
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="text-[11px] md:text-xs text-white">
                       {formatPrice(item.paid)} Paid 
-                        {item.value > 0 ? (
+                        {item.originalValue > 0 ? (
                       <span className={`ml-1 ${item.profit > 0 ? 'text-green-400' : 'text-red-400'}`}>
                         ({item.profit > 0 ? '+' : ''}{item.profitPercent.toFixed(1)}%)
                       </span>
@@ -1795,24 +1737,51 @@ const Collection = () => {
                     <div className="max-h-[70vh] overflow-y-auto pb-12">
                       {(() => {
                         // Get all orders for selected items
-                        const selectedItemsOrders = orders.filter(order => 
-                          selectedItems.has(order.item_id)
-                        );
+                        const selectedItemsOrders = orders.filter(order => {
+                          // For custom items (item_id exists), match by item_id
+                          if (order.item_id && selectedItems.has(order.item_id)) {
+                            return true;
+                          }
+                          // For linked products, match by product table IDs
+                          if (order.pokemon_card_id && selectedItems.has(order.pokemon_card_id)) {
+                            return true;
+                          }
+                          if (order.cached_card_id && selectedItems.has(order.cached_card_id)) {
+                            return true;
+                          }
+                          if (order.cached_sealed_product_id && selectedItems.has(order.cached_sealed_product_id)) {
+                            return true;
+                          }
+                          // Fallback: match by item name (for backward compatibility)
+                          if (order.item_name) {
+                            const matchingItem = collectionData.items?.find(item => 
+                              selectedItems.has(item.id) && item.name === order.item_name
+                            );
+                            return !!matchingItem;
+                          }
+                          return false;
+                        });
                         
                         // Group orders by item
                         const groupedOrders = {};
                         selectedItemsOrders.forEach(order => {
-                          if (!groupedOrders[order.item_id]) {
-                            const item = collectionData.items?.find(i => i.id === order.item_id);
-                            groupedOrders[order.item_id] = {
-                              itemId: order.item_id,
-                              itemName: order.item_name || item?.name || 'Unknown Item',
-                              itemImage: item?.image,
-                              itemType: item?.status || 'Unknown',
+                          // Create unique key based on available product references
+                          const groupKey = order.item_id || 
+                                          order.pokemon_card_id || 
+                                          order.cached_card_id || 
+                                          order.cached_sealed_product_id || 
+                                          `fallback_${order.item_name}`;
+                          
+                          if (!groupedOrders[groupKey]) {
+                            groupedOrders[groupKey] = {
+                              itemId: order.item_id || order.pokemon_card_id || order.cached_card_id || order.cached_sealed_product_id,
+                              itemName: order.item_name || 'Unknown Item',
+                              itemImage: order.image_url || '/icons/other.png',
+                              itemType: order.item_type || 'Unknown',
                               orders: []
                             };
                           }
-                          groupedOrders[order.item_id].orders.push(order);
+                          groupedOrders[groupKey].orders.push(order);
                         });
 
                         return Object.values(groupedOrders).map((group) => (
@@ -1855,10 +1824,10 @@ const Collection = () => {
                                                   } else {
                                                     // Regular edit functionality
                                                     const updateData = {
-                                                      buy_date: editData.buy_date || order.buy_date,
-                                                      buy_location: editData.buy_location || order.buy_location,
-                                                      buy_quantity: editData.buy_quantity || order.buy_quantity,
-                                                      buy_price_cents: editData.buy_price_cents !== undefined ? editData.buy_price_cents : order.buy_price_cents
+                                                      purchase_date: editData.purchase_date || order.purchase_date,
+                                                      retailer_name: editData.retailer_name || order.retailer_name,
+                                                      quantity: editData.quantity || order.quantity,
+                                                      price_per_item_cents: editData.price_per_item_cents !== undefined ? editData.price_per_item_cents : order.price_per_item_cents
                                                     };
 
                                                     await updateOrder(supabase, order.id, updateData);
@@ -1909,11 +1878,11 @@ const Collection = () => {
                                                 setInlineEditData(prev => ({
                                                   ...prev,
                                                   [orderGroupId]: {
-                                                    buy_date: order.buy_date,
-                                                    buy_location: order.buy_location,
-                                                    buy_quantity: order.buy_quantity,
-                                                    buy_price_cents: order.buy_price_cents,
-                                                    total_cost: ((order.buy_price_cents / 100) * order.buy_quantity).toFixed(2)
+                                                    purchase_date: order.purchase_date,
+                                                    retailer_name: order.retailer_name,
+                                                    quantity: order.quantity,
+                                                    price_per_item_cents: order.price_per_item_cents,
+                                                    total_cost: ((order.total_cost_cents || 0) / 100).toFixed(2)
                                                   }
                                                 }));
                                               }}
@@ -1932,8 +1901,8 @@ const Collection = () => {
                                                     ...prev[orderGroupId],
                                                     isMarkingAsSold: true,
                                                     sell_date: new Date().toISOString().split('T')[0],
-                                                    sell_price_cents: order.buy_price_cents,
-                                                    sell_quantity: order.buy_quantity,
+                                                    sell_price_cents: order.price_per_item_cents,
+                                                    sell_quantity: order.quantity,
                                                     sell_location: '',
                                                     sell_fees_cents: 0,
                                                     sell_fee_percentage: null
@@ -2111,7 +2080,7 @@ const Collection = () => {
                                                             onClick={() => {
                                                               const sellPrice = editData.sell_price_cents !== undefined 
                                                                 ? editData.sell_price_cents / 100 
-                                                                : order.buy_price_cents / 100;
+                                                                : order.price_per_item_cents / 100;
                                                               const autoFee = marketplace.fee_percentage > 0 
                                                                 ? (sellPrice * marketplace.fee_percentage / 100) 
                                                                 : 0;
@@ -2149,7 +2118,7 @@ const Collection = () => {
                                                 <input
                                                   type="number"
                                                   min="1"
-                                                  value={editData.sell_quantity !== undefined ? editData.sell_quantity : order.buy_quantity}
+                                                  value={editData.sell_quantity !== undefined ? editData.sell_quantity : order.quantity}
                                                   onChange={(e) => {
                                                     setInlineEditData(prev => ({
                                                       ...prev,
@@ -2166,7 +2135,7 @@ const Collection = () => {
                                                   type="number"
                                                   step="0.01"
                                                   min="0"
-                                                  value={editData.sell_price_cents !== undefined ? (editData.sell_price_cents / 100) : (order.buy_price_cents / 100)}
+                                                  value={editData.sell_price_cents !== undefined ? (editData.sell_price_cents / 100) : (order.price_per_item_cents / 100)}
                                                   onChange={(e) => {
                                                     setInlineEditData(prev => ({
                                                       ...prev,
@@ -2223,11 +2192,11 @@ const Collection = () => {
                                                 {isEditing ? (
                                                   <input
                                                     type="date"
-                                                    value={editData.buy_date || order.buy_date}
+                                                    value={editData.purchase_date || order.purchase_date}
                                                     onChange={(e) => {
                                                       setInlineEditData(prev => ({
                                                         ...prev,
-                                                        [orderGroupId]: { ...prev[orderGroupId], buy_date: e.target.value }
+                                                        [orderGroupId]: { ...prev[orderGroupId], purchase_date: e.target.value }
                                                       }));
                                                     }}
                                                     className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
@@ -2235,7 +2204,7 @@ const Collection = () => {
                                                   />
                                                 ) : (
                                                   <div className="text-white" style={{ fontSize: '12px' }}>
-                                                    {new Date(order.buy_date).toLocaleDateString()}
+                                                    {new Date(order.purchase_date).toLocaleDateString()}
                                                   </div>
                                                 )}
                                               </div>
@@ -2254,7 +2223,7 @@ const Collection = () => {
                                                       className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors text-left flex items-center justify-between"
                                                       style={{ fontSize: '12px' }}
                                                     >
-                                                      <span className="truncate">{editData.buy_location || order.buy_location || 'Select'}</span>
+                                                      <span className="truncate">{editData.retailer_name || order.retailer_name || 'Select'}</span>
                                                       <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                       </svg>
@@ -2278,7 +2247,7 @@ const Collection = () => {
                                                       const filteredRetailers = isLocationDropdownClicked 
                                                         ? retailers 
                                                         : retailers.filter(retailer => 
-                                                            retailer.display_name.toLowerCase().includes((editData.buy_location || order.buy_location || '').toLowerCase())
+                                                            retailer.display_name.toLowerCase().includes((editData.retailer_name || order.retailer_name || '').toLowerCase())
                                                           );
                                                       
                                                       return filteredRetailers.length > 0 ? (
@@ -2290,7 +2259,7 @@ const Collection = () => {
                                                               onClick={() => {
                                                                 setInlineEditData(prev => ({
                                                                   ...prev,
-                                                                  [orderGroupId]: { ...prev[orderGroupId], buy_location: retailer.display_name }
+                                                                  [orderGroupId]: { ...prev[orderGroupId], retailer_name: retailer.display_name }
                                                                 }));
                                                                 setIsLocationFocused(false);
                                                                 setIsLocationDropdownClicked(false);
@@ -2307,7 +2276,7 @@ const Collection = () => {
                                                   </div>
                                                 ) : (
                                                   <div className="text-white truncate" style={{ fontSize: '12px' }}>
-                                                    {order.buy_location || 'N/A'}
+                                                    {order.retailer_name || 'N/A'}
                                                   </div>
                                                 )}
                                               </div>
@@ -2322,7 +2291,7 @@ const Collection = () => {
                                                   <input
                                                     type="number"
                                                     min="1"
-                                                    value={editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity}
+                                                    value={editData.quantity !== undefined ? editData.quantity : order.quantity}
                                                     onChange={(e) => {
                                                       const inputValue = e.target.value;
                                                       
@@ -2332,7 +2301,7 @@ const Collection = () => {
                                                           ...prev,
                                                           [orderGroupId]: { 
                                                             ...prev[orderGroupId], 
-                                                            buy_quantity: '',
+                                                            quantity: '',
                                                             total_cost: '0.00'
                                                           }
                                                         }));
@@ -2341,14 +2310,14 @@ const Collection = () => {
                                                       
                                                       const newQty = parseInt(inputValue);
                                                       if (!isNaN(newQty) && newQty >= 1) {
-                                                        const pricePerItem = editData.buy_price_cents !== undefined 
-                                                          ? editData.buy_price_cents / 100
-                                                          : order.buy_price_cents / 100;
+                                                        const pricePerItem = editData.price_cents !== undefined 
+                                                          ? editData.price_cents / 100
+                                                          : order.price_cents / 100;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
                                                           [orderGroupId]: { 
                                                             ...prev[orderGroupId], 
-                                                            buy_quantity: newQty,
+                                                            quantity: newQty,
                                                             total_cost: (pricePerItem * newQty).toFixed(2)
                                                           }
                                                         }));
@@ -2358,15 +2327,15 @@ const Collection = () => {
                                                       // Ensure minimum value of 1 when losing focus
                                                       const inputValue = e.target.value;
                                                       if (inputValue === '' || parseInt(inputValue) < 1) {
-                                                        const defaultQty = order.buy_quantity;
-                                                        const pricePerItem = editData.buy_price_cents !== undefined 
-                                                          ? editData.buy_price_cents / 100
-                                                          : order.buy_price_cents / 100;
+                                                        const defaultQty = order.quantity;
+                                                        const pricePerItem = editData.price_cents !== undefined 
+                                                          ? editData.price_cents / 100
+                                                          : order.price_cents / 100;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
                                                           [orderGroupId]: { 
                                                             ...prev[orderGroupId], 
-                                                            buy_quantity: defaultQty,
+                                                            quantity: defaultQty,
                                                             total_cost: (pricePerItem * defaultQty).toFixed(2)
                                                           }
                                                         }));
@@ -2377,7 +2346,7 @@ const Collection = () => {
                                                   />
                                                 ) : (
                                                   <div className="text-white font-medium" style={{ fontSize: '12px' }}>
-                                                    {order.buy_quantity}
+                                                    {order.quantity}
                                                   </div>
                                                 )}
                                               </div>
@@ -2390,7 +2359,7 @@ const Collection = () => {
                                                     type="number"
                                                     step="0.01"
                                                     min="0"
-                                                    value={editData.buy_price_cents !== undefined ? (editData.buy_price_cents === '' ? '' : editData.buy_price_cents / 100) : (order.buy_price_cents / 100)}
+                                                    value={editData.price_cents !== undefined ? (editData.price_cents === '' ? '' : editData.price_cents / 100) : (order.price_cents / 100)}
                                                     onChange={(e) => {
                                                       const inputValue = e.target.value;
                                                       
@@ -2400,7 +2369,7 @@ const Collection = () => {
                                                           ...prev,
                                                           [orderGroupId]: { 
                                                             ...prev[orderGroupId], 
-                                                            buy_price_cents: '',
+                                                            price_cents: '',
                                                             total_cost: ''
                                                           }
                                                         }));
@@ -2409,13 +2378,13 @@ const Collection = () => {
                                                       
                                                       const newPricePerItem = parseFloat(inputValue);
                                                       if (!isNaN(newPricePerItem) && newPricePerItem >= 0) {
-                                                        const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
+                                                        const qty = editData.quantity !== undefined ? editData.quantity : order.quantity;
                                                         const totalCost = newPricePerItem * qty;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
                                                           [orderGroupId]: { 
                                                             ...prev[orderGroupId], 
-                                                            buy_price_cents: Math.round(newPricePerItem * 100),
+                                                            price_cents: Math.round(newPricePerItem * 100),
                                                             total_cost: totalCost.toFixed(2)
                                                           }
                                                         }));
@@ -2425,14 +2394,14 @@ const Collection = () => {
                                                       // Ensure minimum value of 0 when losing focus
                                                       const inputValue = e.target.value;
                                                       if (inputValue === '' || parseFloat(inputValue) < 0) {
-                                                        const defaultPrice = order.buy_price_cents / 100;
-                                                        const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
+                                                        const defaultPrice = order.price_cents / 100;
+                                                        const qty = editData.quantity !== undefined ? editData.quantity : order.quantity;
                                                         const totalCost = defaultPrice * qty;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
                                                           [orderGroupId]: { 
                                                             ...prev[orderGroupId], 
-                                                            buy_price_cents: Math.round(defaultPrice * 100),
+                                                            price_cents: Math.round(defaultPrice * 100),
                                                             total_cost: totalCost.toFixed(2)
                                                           }
                                                         }));
@@ -2443,7 +2412,7 @@ const Collection = () => {
                                                   />
                                                 ) : (
                                                   <div className="text-white font-medium" style={{ fontSize: '12px' }}>
-                                                    ${(order.buy_price_cents / 100).toFixed(2)}
+                                                    ${(order.price_cents / 100).toFixed(2)}
                                                   </div>
                                                 )}
                                               </div>
@@ -2456,7 +2425,7 @@ const Collection = () => {
                                                     type="number"
                                                     step="0.01"
                                                     min="0"
-                                                    value={editData.total_cost !== undefined ? editData.total_cost : ((order.buy_price_cents / 100) * order.buy_quantity)}
+                                                    value={editData.total_cost !== undefined ? editData.total_cost : ((order.total_cost_cents || 0) / 100)}
                                                     onChange={(e) => {
                                                       const inputValue = e.target.value;
                                                       
@@ -2467,7 +2436,7 @@ const Collection = () => {
                                                           [orderGroupId]: { 
                                                             ...prev[orderGroupId], 
                                                             total_cost: '',
-                                                            buy_price_cents: ''
+                                                            price_cents: ''
                                                           }
                                                         }));
                                                         return;
@@ -2475,14 +2444,14 @@ const Collection = () => {
                                                       
                                                       const newTotal = parseFloat(inputValue);
                                                       if (!isNaN(newTotal) && newTotal >= 0) {
-                                                        const qty = editData.buy_quantity !== undefined ? editData.buy_quantity : order.buy_quantity;
+                                                        const qty = editData.quantity !== undefined ? editData.quantity : order.quantity;
                                                         const pricePerItem = qty > 0 ? newTotal / qty : 0;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
                                                           [orderGroupId]: { 
                                                             ...prev[orderGroupId], 
                                                             total_cost: newTotal,
-                                                            buy_price_cents: Math.round(pricePerItem * 100)
+                                                            price_cents: Math.round(pricePerItem * 100)
                                                           }
                                                         }));
                                                       }
@@ -2491,13 +2460,13 @@ const Collection = () => {
                                                       // Ensure minimum value of 0 when losing focus
                                                       const inputValue = e.target.value;
                                                       if (inputValue === '' || parseFloat(inputValue) < 0) {
-                                                        const defaultTotal = (order.buy_price_cents / 100) * order.buy_quantity;
+                                                        const defaultTotal = (order.total_cost_cents || 0) / 100;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
                                                           [orderGroupId]: { 
                                                             ...prev[orderGroupId], 
                                                             total_cost: defaultTotal,
-                                                            buy_price_cents: order.buy_price_cents
+                                                            price_cents: order.price_cents
                                                           }
                                                         }));
                                                       }
@@ -2507,7 +2476,7 @@ const Collection = () => {
                                                   />
                                                 ) : (
                                                   <div className="text-white font-medium" style={{ fontSize: '12px' }}>
-                                                    ${((order.buy_price_cents / 100) * order.buy_quantity).toFixed(2)}
+                                                    ${((order.total_cost_cents || 0) / 100).toFixed(2)}
                                                   </div>
                                                 )}
                                               </div>
@@ -2701,14 +2670,7 @@ const Collection = () => {
                   {!(showBulkOrderBook || showBulkOverridePrice) && (
                     <button
                       onClick={() => {
-                        const allFilteredItems = (collectionData.items || []).filter(item => {
-          if (selectedFilter === 'All') return true;
-          if (selectedFilter === 'Graded') {
-            return item.status.includes('PSA') || item.status.includes('BGS') || 
-                   item.status.includes('CGC') || item.status.includes('SGC');
-          }
-          return item.status === selectedFilter;
-                        });
+                        const allFilteredItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter));
                         
                         if (selectedItems.size === allFilteredItems.length) {
                           // All selected, so deselect all
@@ -2721,14 +2683,7 @@ const Collection = () => {
                       className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors whitespace-nowrap"
                     >
                       {(() => {
-                        const allFilteredItems = (collectionData.items || []).filter(item => {
-                      if (selectedFilter === 'All') return true;
-                      if (selectedFilter === 'Graded') {
-                        return item.status.includes('PSA') || item.status.includes('BGS') || 
-                               item.status.includes('CGC') || item.status.includes('SGC');
-                      }
-                      return item.status === selectedFilter;
-                        });
+                        const allFilteredItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter));
                         return selectedItems.size === allFilteredItems.length ? 'Deselect All' : 'Select All';
                       })()}
                     </button>
@@ -3093,7 +3048,7 @@ const Collection = () => {
                     {/* Date Header */}
                     <div className="pb-1 border-b border-gray-700/30 mb-2">
                       <div className="text-sm font-semibold text-white">
-                        {new Date(order.buy_date).toLocaleDateString('en-US', { 
+                        {new Date(order.purchase_date).toLocaleDateString('en-US', { 
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric'
@@ -3104,15 +3059,15 @@ const Collection = () => {
                     {/* Compact Details Row */}
                     <div className="flex items-center justify-between mt-2 text-xs">
                       <div className="flex items-center gap-4">
-                        <span className="text-gray-400">Qty: <span className="text-white font-medium">{order.buy_quantity}</span></span>
-                        <span className="text-gray-400">Price: <span className="text-white font-medium">{formatPrice((order.buy_price_cents || 0) / 100)}</span></span>
-                        {order.buy_location && (
-                          <span className="text-gray-400">Location: <span className="text-white font-medium">{order.buy_location}</span></span>
+                        <span className="text-gray-400">Qty: <span className="text-white font-medium">{order.quantity}</span></span>
+                        <span className="text-gray-400">Price: <span className="text-white font-medium">{formatPrice((order.price_cents || 0) / 100)}</span></span>
+                        {order.retailer_name && (
+                          <span className="text-gray-400">Location: <span className="text-white font-medium">{order.retailer_name}</span></span>
                         )}
                       </div>
-                      {order.buy_notes && (
-                        <div className="text-gray-400 truncate max-w-[200px]" title={order.buy_notes}>
-                          {order.buy_notes}
+                      {order.notes && (
+                        <div className="text-gray-400 truncate max-w-[200px]" title={order.notes}>
+                          {order.notes}
                         </div>
                       )}
                     </div>
@@ -3181,15 +3136,15 @@ const Collection = () => {
                 {ordersToConfirmDelete.map((order) => (
                   <div key={order.id} className="bg-gray-800 border border-gray-600 rounded-lg p-3">
                     <div className="text-sm font-medium text-white">
-                      {new Date(order.buy_date).toLocaleDateString('en-US', { 
+                      {new Date(order.purchase_date).toLocaleDateString('en-US', { 
                         month: 'short', 
                         day: 'numeric',
                         year: 'numeric'
                       })}
                     </div>
                     <div className="text-xs text-gray-400 mt-1">
-                      Qty: {order.buy_quantity} • Price: {formatPrice((order.buy_price_cents || 0) / 100)}
-                      {order.buy_location && ` • Location: ${order.buy_location}`}
+                      Qty: {order.quantity} • Price: {formatPrice((order.price_cents || 0) / 100)}
+                      {order.retailer_name && ` • Location: ${order.retailer_name}`}
                     </div>
                   </div>
                 ))}
@@ -3305,7 +3260,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
     sellDate: new Date().toISOString().split('T')[0],
     sellPrice: '',
-    quantity: order?.buy_quantity || 1,
+    quantity: order?.quantity || 1,
     location: '',
     fees: 0,
     notes: ''
@@ -3349,7 +3304,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
             <input
               type="number"
               min="1"
-              max={order?.buy_quantity || 1}
+              max={order?.quantity || 1}
               value={formData.quantity}
               onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value)})}
               className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -3744,14 +3699,10 @@ const AddItemForm = ({ prefilledData, onMarketValueChange, onSuccess, onCancel }
       const orderData = {
         item_id: itemId,
         user_id: user.id,
-        order_type: 'buy',
-        buy_date: formData.buyDate,
-        buy_price_cents: Math.round((parseFloat(formData.buyPrice) / parseInt(formData.quantity)) * 100),
-        buy_quantity: parseInt(formData.quantity),
-        buy_location: formData.buyLocation || null,
-        card_type: formData.cardType,
-        graded_company: formData.cardType === 'graded' ? formData.gradedCompany : null,
-        graded_grade: formData.cardType === 'graded' ? formData.gradedGrade : null,
+        purchase_date: formData.buyDate,
+        price_per_item_cents: Math.round((parseFloat(formData.buyPrice) / parseInt(formData.quantity)) * 100),
+        quantity: parseInt(formData.quantity),
+        retailer_name: formData.buyLocation || null,
       };
 
       const { error: orderError } = await supabase

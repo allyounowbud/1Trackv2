@@ -47,6 +47,7 @@ class PokemonGameService extends BaseGameService {
         let dbQuery = supabase
           .from(databases.cards)
           .select('*', { count: 'exact' })
+          .neq('supertype', 'Sealed Product') // Exclude sealed products
           .limit(1000);
 
         // Apply search
@@ -99,7 +100,8 @@ class PokemonGameService extends BaseGameService {
         // For non-number sorting, use regular database pagination
         let dbQuery = supabase
           .from(databases.cards)
-          .select('*', { count: 'exact' });
+          .select('*', { count: 'exact' })
+          .neq('supertype', 'Sealed Product'); // Exclude sealed products
 
         // Apply search
         if (query && query.trim()) {
@@ -199,9 +201,9 @@ class PokemonGameService extends BaseGameService {
 
       // Apply language filter
       if (languageFilter === 'english') {
-        query = query.eq('language_code', 'EN');
+        query = query.eq('language_code', 'en');
       } else if (languageFilter === 'japanese') {
-        query = query.eq('language_code', 'JA');
+        query = query.eq('language_code', 'ja');
       }
 
       // Get expansions with pagination
@@ -218,16 +220,16 @@ class PokemonGameService extends BaseGameService {
         .eq('is_online_only', false);
 
       if (languageFilter === 'english') {
-        countQuery = countQuery.eq('language_code', 'EN');
+        countQuery = countQuery.eq('language_code', 'en');
       } else if (languageFilter === 'japanese') {
-        countQuery = countQuery.eq('language_code', 'JA');
+        countQuery = countQuery.eq('language_code', 'ja');
       }
 
       const { count, error: countError } = await countQuery;
 
       if (countError) throw countError;
 
-      // Get card counts for each expansion separately
+      // Get card counts for each expansion separately and clean expansion names
       const expansionsWithCounts = await Promise.all(
         expansions.map(async (expansion) => {
           try {
@@ -241,7 +243,14 @@ class PokemonGameService extends BaseGameService {
               return { ...expansion, total_cards: 0 };
             }
 
-            return { ...expansion, total_cards: cardCount || 0 };
+            // Clean the expansion name by removing the identifier (e.g., "ME01: Mega Evolution" -> "Mega Evolution")
+            const cleanName = expansion.name?.replace(/^[^:]+:\s*/, '') || expansion.name;
+
+            return { 
+              ...expansion, 
+              name: cleanName,
+              total_cards: cardCount || 0 
+            };
           } catch (error) {
             console.warn(`Error counting cards for expansion ${expansion.id}:`, error);
             return { ...expansion, total_cards: 0 };
@@ -290,7 +299,8 @@ class PokemonGameService extends BaseGameService {
         let query = supabase
           .from(databases.cards)
           .select('*', { count: 'exact' })
-          .eq('expansion_id', expansionId);
+          .eq('expansion_id', expansionId)
+          .neq('supertype', 'Sealed Product'); // Exclude sealed products
 
         if (rarity) query = query.eq('rarity', rarity);
         if (supertype) query = query.eq('supertype', supertype);
@@ -331,7 +341,8 @@ class PokemonGameService extends BaseGameService {
         let query = supabase
           .from(databases.cards)
           .select('*', { count: 'exact' })
-          .eq('expansion_id', expansionId);
+          .eq('expansion_id', expansionId)
+          .neq('supertype', 'Sealed Product'); // Exclude sealed products
 
         if (rarity) query = query.eq('rarity', rarity);
         if (supertype) query = query.eq('supertype', supertype);
@@ -425,11 +436,18 @@ class PokemonGameService extends BaseGameService {
     try {
       console.log(`📦 Fetching sealed products for expansion ${expansionId} from database`);
 
-      // Build query
+      const databases = this.getDatabases();
+
+      // Build query - sealed products are stored in pokemon_cards table with supertype = 'Sealed Product'
+      // Exclude code cards and digital products
       let query = supabase
-        .from('pokemon_sealed_products')
+        .from(databases.cards)
         .select('*', { count: 'exact' })
-        .eq('expansion_id', expansionId);
+        .eq('expansion_id', expansionId)
+        .eq('supertype', 'Sealed Product')
+        .not('name', 'ilike', '%code card%')
+        .not('name', 'ilike', '%digital%')
+        .not('name', 'ilike', '%online%');
 
       // Apply sorting
       query = query.order(sortBy, { ascending: sortOrder === 'asc' });
@@ -470,14 +488,17 @@ class PokemonGameService extends BaseGameService {
 
   /**
    * Format TCGCSV sealed product from database for UI
-   * @param {Object} product - Database product record
+   * @param {Object} product - Database product record from pokemon_cards table
    * @returns {Object} Formatted product
    */
   formatTcgcsvSealedProduct(product) {
     const marketValue = product.market_price || 0;
+    
+    // Clean the expansion name by removing the identifier (e.g., "ME01: Mega Evolution" -> "Mega Evolution")
+    const cleanExpansionName = product.expansion_name?.replace(/^[^:]+:\s*/, '') || product.expansion_name;
 
     return {
-      id: product.product_id,
+      id: product.id,
       name: product.name,
       image_url: product.image_url,
       image: product.image_url,
@@ -506,29 +527,19 @@ class PokemonGameService extends BaseGameService {
       } : null,
       
       // Product info
-      product_type: product.product_type,
-      sub_type_name: product.sub_type_name,
-      clean_name: product.clean_name,
-      url: product.url,
-      upc: product.upc,
-      card_text: product.card_text,
+      product_type: product.product_type || 'sealed',
+      supertype: product.supertype,
       
       // Expansion info
       expansion_id: product.expansion_id,
-      expansion_name: product.expansion_name,
-      set_name: product.expansion_name,
-      episode_name: product.expansion_name,
+      expansion_name: cleanExpansionName,
+      set_name: cleanExpansionName,
       
       // Metadata
       source: 'tcgcsv',
-      itemType: 'sealed',
+      itemType: 'Sealed',
       type: 'sealed',
-      gameId: 'pokemon',
-      
-      // TCGCSV IDs
-      productId: product.product_id,
-      tcgcsvGroupId: product.tcgcsv_group_id,
-      categoryId: product.category_id
+      gameId: 'pokemon'
     };
   }
 
@@ -546,15 +557,22 @@ class PokemonGameService extends BaseGameService {
     try {
       console.log(`🔍 Searching sealed products for: "${query}"`);
 
-      // Build search query using PostgreSQL full-text search
-      let dbQuery = supabase
-        .from('pokemon_sealed_products')
-        .select('*', { count: 'exact' });
+      const databases = this.getDatabases();
 
-      // Apply search across name and card_text
+      // Build search query - sealed products are stored in pokemon_cards table with supertype = 'Sealed Product'
+      // Exclude code cards and digital products
+      let dbQuery = supabase
+        .from(databases.cards)
+        .select('*', { count: 'exact' })
+        .eq('supertype', 'Sealed Product')
+        .not('name', 'ilike', '%code card%')
+        .not('name', 'ilike', '%digital%')
+        .not('name', 'ilike', '%online%');
+
+      // Apply search across name and flavor_text
       if (query && query.trim()) {
         const searchTerm = query.trim();
-        dbQuery = dbQuery.or(`name.ilike.%${searchTerm}%,clean_name.ilike.%${searchTerm}%,card_text.ilike.%${searchTerm}%`);
+        dbQuery = dbQuery.or(`name.ilike.%${searchTerm}%,flavor_text.ilike.%${searchTerm}%`);
       }
 
       // Apply sorting
@@ -601,9 +619,16 @@ class PokemonGameService extends BaseGameService {
   formatCard(card) {
     if (!card) return null;
 
+
+    // Clean the name by removing card numbers (e.g., "Bulbasaur - 001/132" -> "Bulbasaur")
+    const cleanName = card.name.replace(/\s*-\s*\d+\/\d+.*$/, '');
+    
+    // Clean the expansion name by removing the identifier (e.g., "ME01: Mega Evolution" -> "Mega Evolution")
+    const cleanExpansionName = card.expansion_name?.replace(/^[^:]+:\s*/, '') || card.expansion_name;
+
     return {
       id: card.id,
-      name: card.name,
+      name: cleanName,
       number: card.number,
       artist: card.artist,
       rarity: card.rarity,
@@ -611,45 +636,38 @@ class PokemonGameService extends BaseGameService {
       supertype: card.supertype,
       types: card.types,
       subtypes: card.subtypes,
-      expansion_name: card.expansion_name,
+      expansion_name: cleanExpansionName,
       expansion_id: card.expansion_id,
-      set_name: card.expansion_name,
-      image_url: card.image_medium || card.image_small,
-      image: card.image_medium || card.image_small,
+      set_name: cleanExpansionName,
+      image_url: card.image_url || card.image_medium || card.image_small,
+      image: card.image_url || card.image_medium || card.image_small,
       
-      // Pricing
-      raw_market: card.raw_market,
-      graded_market: card.graded_market,
-      marketValue: card.raw_market || card.graded_market || 0,
-      market_value_cents: card.raw_market 
-        ? Math.round(card.raw_market * 100) 
-        : (card.graded_market ? Math.round(card.graded_market * 100) : 0),
+      // Pricing - use actual database columns
+      raw_market: card.market_price,
+      graded_market: null, // TCGCSV doesn't provide graded pricing
+      marketValue: card.market_price || 0,
+      market_value_cents: card.market_price ? Math.round(card.market_price * 100) : 0,
       
-      raw_price: card.raw_market ? parseFloat(card.raw_market) : null,
-      graded_price: card.graded_market ? parseFloat(card.graded_market) : null,
+      raw_price: card.market_price ? parseFloat(card.market_price) : null,
+      graded_price: null, // TCGCSV doesn't provide graded pricing
       
-      raw_pricing: card.raw_market ? {
-        market: parseFloat(card.raw_market).toFixed(2),
+      raw_pricing: card.market_price ? {
+        market: parseFloat(card.market_price).toFixed(2),
+        low: card.low_price ? parseFloat(card.low_price).toFixed(2) : null,
+        mid: card.mid_price ? parseFloat(card.mid_price).toFixed(2) : null,
+        high: card.high_price ? parseFloat(card.high_price).toFixed(2) : null,
         trends: {
-          days_7: { percent_change: card.raw_trend_7d_percent || card.trend || 0 },
-          days_30: { percent_change: card.raw_trend_30d_percent || 0 },
-          days_90: { percent_change: card.raw_trend_90d_percent || 0 },
-          days_180: { percent_change: card.raw_trend_180d_percent || 0 }
+          days_7: { percent_change: 0 },
+          days_30: { percent_change: 0 },
+          days_90: { percent_change: 0 },
+          days_180: { percent_change: 0 }
         }
       } : null,
       
-      graded_pricing: card.graded_market ? {
-        market: parseFloat(card.graded_market).toFixed(2),
-        trends: {
-          days_7: { percent_change: card.graded_trend_7d_percent || 0 },
-          days_30: { percent_change: card.graded_trend_30d_percent || 0 },
-          days_90: { percent_change: card.graded_trend_90d_percent || 0 },
-          days_180: { percent_change: card.graded_trend_180d_percent || 0 }
-        }
-      } : null,
+      graded_pricing: null, // TCGCSV doesn't provide graded pricing
       
       source: 'pokemon_cards',
-      itemType: 'singles',
+      itemType: card.supertype === 'Sealed Product' ? 'Sealed' : 'Single',
       type: 'card',
       gameId: 'pokemon'
     };
@@ -689,7 +707,7 @@ class PokemonGameService extends BaseGameService {
       expansion_name: product.episode_name || 'Unknown Set',
       set_name: product.episode_name || 'Unknown Set',
       source: 'sealed_products',
-      itemType: 'sealed',
+      itemType: 'Sealed',
       type: 'sealed',
       gameId: 'pokemon'
     };

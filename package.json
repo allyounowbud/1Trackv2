@@ -27,12 +27,16 @@
     "robust-sync": "node scripts/robust-sync.js",
     "sync-detailed-pricing": "node scripts/sync-detailed-pricing.js",
     "sync-pricing-simple": "node scripts/sync-pricing-simple.js",
-    "monitor-sync": "node scripts/monitor-sync.js"
+    "monitor-sync": "node scripts/monitor-sync.js",
+    "import-tcgcsv": "node import-tcgcsv-data.js",
+    "import-tcgcsv-complete": "node import-tcgcsv-complete.js",
+    "test-tcgcsv": "node import-tcgcsv-test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.2",
     "@tanstack/react-query": "^5.85.9",
     "cheerio": "^1.0.0-rc.12",
+    "csv-parser": "^3.0.0",
     "dotenv": "^16.6.1",
     "googleapis": "^159.0.0",
     "lucide-react": "^0.544.0",
