@@ -7,7 +7,7 @@ export default function ThemeToggle({ isCollapsed = false }) {
   const itemBase = isCollapsed 
     ? "flex items-center justify-center w-10 h-10 rounded-lg"
     : "flex items-center gap-3 px-3 py-2 rounded-lg w-full";
-  const itemIdle = "text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-800/50";
+  const itemIdle = "text-gray-600 hover:text-gray-900 hover:bg-gray-100";
 
   return (
     <button

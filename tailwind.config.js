@@ -4,10 +4,25 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class',
+  darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
+        // Theme-aware gray colors that adapt based on the theme
+        gray: {
+          50: 'rgb(var(--bg-secondary))',   // white
+          100: 'rgb(var(--bg-tertiary))',   // #F5F5F5
+          200: 'rgb(var(--border-secondary))', // #D1D5DB
+          300: 'rgb(var(--border-primary))',   // #9CA3AF
+          400: 'rgb(var(--text-tertiary))',    // #9CA3AF
+          500: 'rgb(var(--text-primary))',     // #4B5563
+          600: 'rgb(var(--text-primary))',     // #4B5563
+          700: 'rgb(var(--text-secondary))',   // #111827
+          800: 'rgb(var(--bg-elevated))',      // white
+          900: 'rgb(var(--card-bg))',         // white
+          950: 'rgb(var(--bg-primary))',      // #F8F8F8
+        },
+        // Preserve existing color schemes
         primary: {
           50: '#eff6ff',
           100: '#dbeafe',
@@ -56,6 +71,20 @@ export default {
           800: '#991b1b',
           900: '#7f1d1d',
         },
+      },
+        // Override text colors to be theme-aware
+        textColor: {
+          white: 'rgb(var(--text-primary))',  // #4B5563 in light mode
+          black: 'rgb(var(--text-secondary))', // #111827 in light mode
+        },
+      // Override background colors to be theme-aware
+      backgroundColor: {
+        white: 'rgb(var(--bg-secondary))',
+        black: 'rgb(var(--bg-primary))',
+      },
+      // Override border colors to be theme-aware
+      borderColor: {
+        white: 'rgb(var(--border-primary))',
       },
     },
   },

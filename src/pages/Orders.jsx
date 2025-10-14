@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useModal } from '../contexts/ModalContext';
+import { 
+  hasItemsRemaining, 
+  hasItemsSold, 
+  getRemainingCount,
+  getSoldCount,
+  getStatusDisplayText
+} from '../utils/orderStatus';
 
 const Orders = () => {
   const { openModal, closeModal } = useModal();
@@ -22,31 +29,10 @@ const Orders = () => {
         throw new Error('User not authenticated');
       }
 
+      // Use the individual_orders_clean view which has all the data we need
       const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          items (
-            id,
-            name,
-            set_name,
-            item_type,
-            rarity,
-            market_value_cents,
-            image_url
-          ),
-          buy_marketplace:marketplaces!orders_buy_marketplace_id_fkey (
-            id,
-            name,
-            display_name
-          ),
-          sell_marketplace:marketplaces!orders_sell_marketplace_id_fkey (
-            id,
-            name,
-            display_name
-          )
-        `)
-        .eq('user_id', user.id)
+        .from('individual_orders_clean')
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -110,12 +96,17 @@ const Orders = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  // Determine order status based on whether it's sold or in collection
+  // Determine order status based on quantity sold
   const getOrderStatus = (order) => {
-    if (order.is_sold || order.status === 'sold') {
-      return 'sold';
+    const soldCount = getSoldCount(order);
+    const remainingCount = getRemainingCount(order);
+    
+    if (soldCount > 0 && remainingCount === 0) {
+      return 'sold'; // Fully sold
+    } else if (soldCount > 0 && remainingCount > 0) {
+      return 'partial'; // Partially sold
     }
-    return 'on_hand';
+    return 'on_hand'; // Not sold yet
   };
 
   // Filter orders based on status and search
@@ -124,7 +115,7 @@ const Orders = () => {
     const matchesStatus = filterStatus === 'all' || status === filterStatus;
     const matchesSearch = !searchQuery || 
       order.items?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.buy_location?.toLowerCase().includes(searchQuery.toLowerCase());
+      order.retailer_name?.toLowerCase().includes(searchQuery.toLowerCase());
     
     return matchesStatus && matchesSearch;
   });
@@ -136,7 +127,10 @@ const Orders = () => {
     sold: orders.filter(order => getOrderStatus(order) === 'sold').length,
     totalValue: orders
       .filter(order => getOrderStatus(order) === 'on_hand')
-      .reduce((sum, order) => sum + (order.buy_price_cents * order.buy_quantity), 0),
+      .reduce((sum, order) => {
+        const remaining = getRemainingCount(order);
+        return sum + (order.price_per_item_cents * remaining);
+      }, 0),
     totalProfit: orders
       .filter(order => getOrderStatus(order) === 'sold')
       .reduce((sum, order) => sum + (order.net_profit_cents || 0), 0)
@@ -145,16 +139,15 @@ const Orders = () => {
   const handleEdit = (order) => {
     setEditingOrder(order.id);
     setEditFormData({
-      buy_date: order.buy_date,
-      buy_price_cents: order.buy_price_cents,
-      buy_quantity: order.buy_quantity,
-      buy_location: order.buy_location,
-      buy_notes: order.buy_notes,
-      sell_date: order.sell_date,
-      sell_price_cents: order.sell_price_cents,
-      sell_quantity: order.sell_quantity,
-      sell_fees_cents: order.sell_fees_cents,
-      status: order.status
+      purchase_date: order.purchase_date,
+      price_per_item_cents: order.price_per_item_cents,
+      quantity: order.quantity,
+      retailer_name: order.retailer_name,
+      notes: order.notes,
+      sale_date: order.sale_date,
+      sale_price_per_item_cents: order.sale_price_per_item_cents,
+      quantity_sold: order.quantity_sold,
+      sale_fees_cents: order.sale_fees_cents
     });
   };
 
@@ -351,8 +344,8 @@ const Orders = () => {
                           <div className="md:col-span-2">
                             <input
                               type="date"
-                              value={editFormData.buy_date || ''}
-                              onChange={(e) => setEditFormData({...editFormData, buy_date: e.target.value})}
+                              value={editFormData.purchase_date || ''}
+                              onChange={(e) => setEditFormData({...editFormData, purchase_date: e.target.value})}
                               className="w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-sm"
                             />
                           </div>
@@ -362,15 +355,15 @@ const Orders = () => {
                             <div className="flex space-x-1">
                               <input
                                 type="number"
-                                value={editFormData.buy_price_cents ? (editFormData.buy_price_cents / 100).toFixed(2) : ''}
-                                onChange={(e) => setEditFormData({...editFormData, buy_price_cents: Math.round(parseFloat(e.target.value || 0) * 100)})}
+                                value={editFormData.price_per_item_cents ? (editFormData.price_per_item_cents / 100).toFixed(2) : ''}
+                                onChange={(e) => setEditFormData({...editFormData, price_per_item_cents: Math.round(parseFloat(e.target.value || 0) * 100)})}
                                 className="flex-1 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-sm"
                                 placeholder="0.00"
                               />
                               <input
                                 type="number"
-                                value={editFormData.buy_quantity || ''}
-                                onChange={(e) => setEditFormData({...editFormData, buy_quantity: parseInt(e.target.value) || 1})}
+                                value={editFormData.quantity || ''}
+                                onChange={(e) => setEditFormData({...editFormData, quantity: parseInt(e.target.value) || 1})}
                                 className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-sm"
                                 placeholder="Qty"
                               />
@@ -396,8 +389,8 @@ const Orders = () => {
                           <div className="md:col-span-2">
                             <input
                               type="text"
-                              value={editFormData.buy_location || ''}
-                              onChange={(e) => setEditFormData({...editFormData, buy_location: e.target.value})}
+                              value={editFormData.retailer_name || ''}
+                              onChange={(e) => setEditFormData({...editFormData, retailer_name: e.target.value})}
                               className="w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-sm"
                               placeholder="Location"
                             />
@@ -465,17 +458,17 @@ const Orders = () => {
                         {/* Buy Date */}
                         <div className="md:col-span-2">
                           <div className="text-sm text-gray-300">
-                            {formatDate(order.buy_date)}
+                            {formatDate(order.purchase_date)}
                           </div>
                         </div>
 
                         {/* Price */}
                         <div className="md:col-span-2">
                           <div className="text-sm text-white">
-                            {formatPrice(order.buy_price_cents * order.buy_quantity)}
+                            {formatPrice(order.total_cost_cents)}
                           </div>
                           <div className="text-xs text-gray-400">
-                            {formatPrice(order.buy_price_cents)} × {order.buy_quantity}
+                            {formatPrice(order.price_per_item_cents)} × {order.quantity}
                           </div>
                         </div>
 
@@ -484,16 +477,23 @@ const Orders = () => {
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             status === 'sold' 
                               ? 'bg-green-500/20 text-green-400' 
+                              : status === 'partial'
+                              ? 'bg-yellow-500/20 text-yellow-400'
                               : 'bg-blue-500/20 text-blue-400'
                           }`}>
-                            {status === 'sold' ? 'Sold' : 'On Hand'}
+                            {getStatusDisplayText(order)}
                           </span>
+                          {status === 'partial' && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              {getRemainingCount(order)} remaining
+                            </div>
+                          )}
                         </div>
 
                         {/* Location */}
                         <div className="md:col-span-2">
                           <div className="text-sm text-gray-300">
-                            {order.buy_location || 'N/A'}
+                            {order.retailer_name || 'N/A'}
                           </div>
                         </div>
 

@@ -9,6 +9,75 @@
     transform: scale(1.02);
   }
   
+  /* Theme-aware background utilities */
+  .bg-theme-primary {
+    background-color: rgb(var(--bg-primary));
+  }
+  
+  .bg-theme-secondary {
+    background-color: rgb(var(--bg-secondary));
+  }
+  
+  .bg-theme-tertiary {
+    background-color: rgb(var(--bg-tertiary));
+  }
+  
+  .bg-theme-elevated {
+    background-color: rgb(var(--bg-elevated));
+  }
+  
+  .bg-theme-card {
+    background-color: rgb(var(--card-bg));
+  }
+  
+  /* Theme-aware text utilities */
+  .text-theme-primary {
+    color: rgb(var(--text-primary));
+  }
+  
+  .text-theme-secondary {
+    color: rgb(var(--text-secondary));
+  }
+  
+  .text-theme-tertiary {
+    color: rgb(var(--text-tertiary));
+  }
+  
+  /* Theme-aware border utilities */
+  .border-theme-primary {
+    border-color: rgb(var(--border-primary));
+  }
+  
+  .border-theme-secondary {
+    border-color: rgb(var(--border-secondary));
+  }
+  
+  /* Theme-aware hover utilities */
+  .hover\:bg-theme-hover:hover {
+    background-color: rgb(var(--card-hover));
+  }
+  
+  /* Theme-aware menu utilities */
+  .bg-menu {
+    background-color: rgb(var(--menu-bg));
+  }
+  
+  .bg-menu-overlay {
+    background-color: rgba(var(--menu-overlay));
+  }
+  
+  .border-menu {
+    border-color: rgb(var(--menu-border));
+  }
+  
+  .text-menu {
+    color: rgb(var(--menu-text));
+  }
+  
+  .text-menu-secondary {
+    color: rgb(var(--menu-text-secondary));
+  }
+  
   /* Modal scroll locking */
   body.modal-open {
     position: fixed !important;
@@ -86,10 +155,102 @@
 }
 
 @layer base {
+  /* CSS Variables for theme colors */
+  :root {
+    /* Light mode (default) - refined palette like the image */
+    --bg-primary: 248, 248, 248;      /* #F8F8F8 - very light gray background */
+    --bg-secondary: 255, 255, 255;    /* white - elevated surfaces */
+    --bg-tertiary: 245, 245, 245;     /* #F5F5F5 - subtle gray */
+    --bg-elevated: 255, 255, 255;     /* white - cards and elevated elements */
+    --bg-nav: 255, 255, 255;          /* white - navigation */
+    --bg-sidebar: 248, 248, 248;      /* #F8F8F8 - sidebar matches main bg */
+    
+    --text-primary: 75, 85, 99;       /* #4B5563 - gray-600 for main text */
+    --text-secondary: 17, 24, 39;     /* #111827 - gray-900 for darker text */
+    --text-tertiary: 156, 163, 175;   /* #9CA3AF - gray-400 for placeholders */
+    
+    --border-primary: 156, 163, 175;  /* #9CA3AF - more visible gray borders */
+    --border-secondary: 209, 213, 219; /* #D1D5DB - light borders */
+    
+    --input-bg: 255, 255, 255;        /* white - input backgrounds */
+    --input-border: 229, 231, 235;    /* #E5E7EB - gray-200 borders */
+    
+    --card-bg: 255, 255, 255;         /* white - card backgrounds */
+    --card-border: 156, 163, 175;     /* #9CA3AF - more visible gray borders */
+    --card-hover: 249, 250, 251;      /* #F9FAFB - subtle hover state */
+    
+    /* Menu theme variables for light mode */
+    --menu-bg: 255, 255, 255;         /* white - menu backgrounds */
+    --menu-overlay: 0, 0, 0, 0.6;     /* black with opacity - overlay */
+    --menu-border: 209, 213, 219;     /* #D1D5DB - menu borders */
+    --menu-text: 17, 24, 39;          /* #111827 - menu text */
+    --menu-text-secondary: 75, 85, 99; /* #4B5563 - secondary menu text */
+  }
+  
+  [data-theme="dark"] {
+    --bg-primary: 17, 24, 39;         /* gray-900 */
+    --bg-secondary: 31, 41, 55;       /* gray-800 */
+    --bg-tertiary: 55, 65, 81;        /* gray-700 */
+    --bg-elevated: 31, 41, 55;        /* gray-800 */
+    --bg-nav: 3, 7, 18;               /* gray-950 */
+    --bg-sidebar: 3, 7, 18;           /* gray-950 */
+    
+    --text-primary: 255, 255, 255;    /* white */
+    --text-secondary: 156, 163, 175;  /* gray-400 */
+    --text-tertiary: 107, 114, 128;   /* gray-500 */
+    
+    --border-primary: 55, 65, 81;     /* gray-700 */
+    --border-secondary: 31, 41, 55;   /* gray-800 */
+    
+    --input-bg: 31, 41, 55;           /* gray-800 */
+    --input-border: 55, 65, 81;       /* gray-700 */
+    
+    --card-bg: 31, 41, 55;            /* gray-800 */
+    --card-border: 55, 65, 81;        /* gray-700 */
+    --card-hover: 55, 65, 81;         /* gray-700 */
+    
+    /* Menu theme variables for dark mode */
+    --menu-bg: 17, 24, 39;            /* gray-900 - menu backgrounds */
+    --menu-overlay: 0, 0, 0, 0.6;     /* black with opacity - overlay */
+    --menu-border: 55, 65, 81;        /* #374151 - menu borders */
+    --menu-text: 255, 255, 255;       /* white - menu text */
+    --menu-text-secondary: 156, 163, 175; /* #9CA3AF - secondary menu text */
+  }
+  
+  [data-theme="darker"] {
+    --bg-primary: 0, 0, 0;            /* black */
+    --bg-secondary: 17, 24, 39;       /* gray-900 */
+    --bg-tertiary: 31, 41, 55;        /* gray-800 */
+    --bg-elevated: 17, 24, 39;        /* gray-900 */
+    --bg-nav: 0, 0, 0;                /* black */
+    --bg-sidebar: 0, 0, 0;            /* black */
+    
+    --text-primary: 243, 244, 246;    /* gray-100 */
+    --text-secondary: 156, 163, 175;  /* gray-400 */
+    --text-tertiary: 107, 114, 128;   /* gray-500 */
+    
+    --border-primary: 31, 41, 55;     /* gray-800 */
+    --border-secondary: 17, 24, 39;   /* gray-900 */
+    
+    --input-bg: 17, 24, 39;           /* gray-900 */
+    --input-border: 31, 41, 55;       /* gray-800 */
+    
+    --card-bg: 17, 24, 39;            /* gray-900 */
+    --card-border: 31, 41, 55;        /* gray-800 */
+    --card-hover: 31, 41, 55;         /* gray-800 */
+    
+    /* Menu theme variables for darker mode */
+    --menu-bg: 0, 0, 0;               /* black - menu backgrounds */
+    --menu-overlay: 0, 0, 0, 0.8;     /* black with higher opacity - overlay */
+    --menu-border: 31, 41, 55;        /* #1F2937 - menu borders */
+    --menu-text: 243, 244, 246;       /* #F3F4F6 - menu text */
+    --menu-text-secondary: 156, 163, 175; /* #9CA3AF - secondary menu text */
+  }
+
   html {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
     font-weight: 200;
-    background-color: #111827;
+    background-color: rgb(var(--bg-primary));
     margin: 0;
     padding: 0;
     overflow: hidden; /* Prevent html scroll - app container handles it */
@@ -117,9 +278,9 @@
   }
   
   body {
-    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white;
     font-weight: 200;
-    background-color: #111827;
+    background-color: rgb(var(--bg-primary));
+    color: rgb(var(--text-primary));
     margin: 0;
     padding: 0;
     overflow: hidden; /* Prevent body scroll - app container handles it */
@@ -154,7 +315,7 @@
     bottom: 0;
     display: flex;
     flex-direction: column;
-    background-color: #111827;
+    background-color: rgb(var(--bg-primary));
     overflow: hidden;
   }
 
@@ -165,7 +326,7 @@
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     padding-bottom: 80px; /* Space for bottom navigation */
-    background-color: #111827;
+    background-color: rgb(var(--bg-primary));
   }
 
   /* iPhone-style bottom navigation */
@@ -175,8 +336,8 @@
     left: 0;
     right: 0;
     height: 80px;
-    background-color: #030712;
-    border-top: 1px solid #374151;
+    background-color: rgb(var(--bg-nav));
+    border-top: 1px solid rgb(var(--border-primary));
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -279,7 +440,7 @@
     right: 0;
     bottom: 0;
     display: flex;
-    background-color: #111827;
+    background-color: rgb(var(--bg-primary));
     overflow: hidden;
   }
 
@@ -287,19 +448,19 @@
     position: relative;
     height: 100vh;
     flex-shrink: 0;
-    background-color: #030712;
-    border-right: 1px solid #374151;
+    background-color: rgb(var(--bg-sidebar));
+    border-right: 1px solid rgb(var(--border-primary));
     z-index: 1000;
     display: flex;
     flex-direction: column;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
   }
 
   .desktop-main-content {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    background-color: #111827;
+    background-color: rgb(var(--bg-primary));
     padding: 2rem;
     /* Desktop-optimized padding */
     padding-bottom: 2rem;

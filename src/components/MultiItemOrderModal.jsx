@@ -301,16 +301,30 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
         const buyPriceCents = Math.round(parseFloat(itemDetail.pricePerItem) * 100);
         const totalCostCents = Math.round(parseFloat(itemDetail.totalPrice) * 100);
         
+        // Get current user for RLS
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          throw new Error('User not authenticated');
+        }
+        
         const baseOrderData = {
+          user_id: user.id,
           item_id: itemId,
-          order_type: 'buy',
-          buy_date: formData.buyDate,
-          buy_price_cents: buyPriceCents,
-          buy_quantity: parseInt(itemDetail.quantity),
+          purchase_date: formData.buyDate,
+          price_per_item_cents: buyPriceCents,
+          quantity: parseInt(itemDetail.quantity),
+          quantity_sold: 0, // Initialize as not sold
           total_cost_cents: totalCostCents,
-          buy_location: formData.buyLocation || null,
-          buy_notes: formData.buyNotes || null,
-          status: 'ordered'
+          retailer_name: formData.buyLocation || null,
+          notes: formData.buyNotes || null,
+          
+          // Item classification fields
+          item_type: item.itemType || 'Single',
+          card_condition: 'Raw', // Default for multi-item orders
+          
+          // Link to product tables
+          pokemon_card_id: item.source === 'pokemon' ? item.api_id : null,
+          product_source: item.source === 'pokemon' ? 'pokemon' : (itemId ? 'custom' : 'unknown')
         };
 
         return baseOrderData;

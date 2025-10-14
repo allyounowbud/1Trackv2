@@ -42,9 +42,17 @@ export const ThemeProvider = ({ children }) => {
     setTheme(newTheme);
   };
 
+  const toggleTheme = () => {
+    const themes = ['light', 'dark', 'darker'];
+    const currentIndex = themes.indexOf(theme);
+    const nextIndex = (currentIndex + 1) % themes.length;
+    setTheme(themes[nextIndex]);
+  };
+
   const value = {
     theme,
     changeTheme,
+    toggleTheme,
     isLight: theme === 'light',
     isDark: theme === 'dark',
     isDarker: theme === 'darker'

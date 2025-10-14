@@ -123,7 +123,7 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+      <div className="bg-white  rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="relative">
           {/* Background with series color */}
@@ -133,7 +133,7 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
           <div className="absolute inset-0 p-6 flex items-end">
             <div className="flex items-end gap-4">
               {logoUrl && (
-                <div className="w-20 h-20 bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-lg">
+                <div className="w-20 h-20 bg-white rounded-lg overflow-hidden shadow-lg">
                   <SafeImage
                     src={logoUrl}
                     alt={`${localizedExpansion.displayName} logo`}
@@ -169,7 +169,7 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 dark:border-gray-700">
+        <div className="flex border-b border-gray-300">
           {[
             { id: 'overview', label: 'Overview' },
             { id: 'details', label: 'Details' },
@@ -181,7 +181,7 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
               className={`px-6 py-3 text-sm font-medium ${
                 activeTab === tab.id
                   ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               {tab.label}
@@ -196,31 +196,31 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
               {/* Basic Info */}
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
                     Basic Information
                   </h3>
                   <div className="space-y-3">
                     <div>
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Series</label>
-                      <p className="text-gray-900 dark:text-white font-medium">{localizedExpansion.series}</p>
+                      <label className="text-sm font-medium text-gray-700">Series</label>
+                      <p className="text-gray-900 font-medium">{localizedExpansion.series}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Code</label>
-                      <p className="text-gray-900 dark:text-white font-mono">{localizedExpansion.code}</p>
+                      <label className="text-sm font-medium text-gray-700">Code</label>
+                      <p className="text-gray-900 font-mono">{localizedExpansion.code}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Language</label>
-                      <p className="text-gray-900 dark:text-white">
+                      <label className="text-sm font-medium text-gray-700">Language</label>
+                      <p className="text-gray-900">
                         {localizedExpansion.language} ({localizedExpansion.language_code})
                       </p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Release Date</label>
-                      <p className="text-gray-900 dark:text-white">{formatDate(localizedExpansion.release_date)}</p>
+                      <label className="text-sm font-medium text-gray-700">Release Date</label>
+                      <p className="text-gray-900">{formatDate(localizedExpansion.release_date)}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Availability</label>
-                      <p className="text-gray-900 dark:text-white">
+                      <label className="text-sm font-medium text-gray-700">Availability</label>
+                      <p className="text-gray-900">
                         {localizedExpansion.is_online_only ? 'Online Only' : 'Physical & Online'}
                       </p>
                     </div>
@@ -228,25 +228,25 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
                 </div>
                 
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
                     Card Counts
                   </h3>
                   <div className="space-y-3">
                     <div>
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Total Cards</label>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                      <label className="text-sm font-medium text-gray-700">Total Cards</label>
+                      <p className="text-2xl font-bold text-gray-900">
                         {formatCardCount(localizedExpansion.cardCount)}
                       </p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Printed Cards</label>
-                      <p className="text-xl font-semibold text-gray-700 dark:text-gray-300">
+                      <label className="text-sm font-medium text-gray-700">Printed Cards</label>
+                      <p className="text-xl font-semibold text-gray-700">
                         {formatCardCount(localizedExpansion.printedCardCount)}
                       </p>
                     </div>
                     {localizedExpansion.hasSecretRares && (
                       <div>
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Secret Rares</label>
+                        <label className="text-sm font-medium text-gray-700">Secret Rares</label>
                         <p className="text-lg font-semibold text-purple-600 dark:text-purple-400">
                           {formatCardCount(localizedExpansion.cardCount - localizedExpansion.printedCardCount)}
                         </p>
@@ -259,32 +259,32 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
               {/* Visual Assets */}
               {(logoUrl || symbolUrl) && (
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
                     Visual Assets
                   </h3>
                   <div className="flex gap-4">
                     {logoUrl && (
                       <div className="text-center">
-                        <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden mb-2">
+                        <div className="w-24 h-24 bg-gray-100 rounded-lg overflow-hidden mb-2">
                           <SafeImage
                             src={logoUrl}
                             alt={`${localizedExpansion.displayName} logo`}
                             className="w-full h-full object-contain"
                           />
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Logo</p>
+                        <p className="text-sm text-gray-600">Logo</p>
                       </div>
                     )}
                     {symbolUrl && (
                       <div className="text-center">
-                        <div className="w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden mb-2">
+                        <div className="w-24 h-24 bg-gray-100 rounded-lg overflow-hidden mb-2">
                           <SafeImage
                             src={symbolUrl}
                             alt={`${localizedExpansion.displayName} symbol`}
                             className="w-full h-full object-contain"
                           />
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Symbol</p>
+                        <p className="text-sm text-gray-600">Symbol</p>
                       </div>
                     )}
                   </div>
@@ -297,42 +297,42 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
             <div className="space-y-6">
               {/* Technical Details */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
                   Technical Details
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Expansion ID</label>
-                    <p className="text-gray-900 dark:text-white font-mono text-sm">{localizedExpansion.id}</p>
+                    <label className="text-sm font-medium text-gray-700">Expansion ID</label>
+                    <p className="text-gray-900 font-mono text-sm">{localizedExpansion.id}</p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Language Code</label>
-                    <p className="text-gray-900 dark:text-white font-mono text-sm">{localizedExpansion.language_code}</p>
+                    <label className="text-sm font-medium text-gray-700">Language Code</label>
+                    <p className="text-gray-900 font-mono text-sm">{localizedExpansion.language_code}</p>
                   </div>
                 </div>
               </div>
 
               {/* Release Information */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
                   Release Information
                 </h3>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Release Year</label>
-                    <p className="text-gray-900 dark:text-white font-semibold">
+                    <label className="text-sm font-medium text-gray-700">Release Year</label>
+                    <p className="text-gray-900 font-semibold">
                       {localizedExpansion.releaseYear || 'Unknown'}
                     </p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Release Month</label>
-                    <p className="text-gray-900 dark:text-white font-semibold">
+                    <label className="text-sm font-medium text-gray-700">Release Month</label>
+                    <p className="text-gray-900 font-semibold">
                       {localizedExpansion.releaseMonth || 'Unknown'}
                     </p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Release Day</label>
-                    <p className="text-gray-900 dark:text-white font-semibold">
+                    <label className="text-sm font-medium text-gray-700">Release Day</label>
+                    <p className="text-gray-900 font-semibold">
                       {localizedExpansion.releaseDay || 'Unknown'}
                     </p>
                   </div>
@@ -341,13 +341,13 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
 
               {/* Language Information */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
                   Language Information
                 </h3>
                 <div className="space-y-2">
                   <div>
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Detected Language</label>
-                    <p className="text-gray-900 dark:text-white">
+                    <label className="text-sm font-medium text-gray-700">Detected Language</label>
+                    <p className="text-gray-900">
                       {localizedExpansion.isJapanese ? 'Japanese' : 'English'}
                       {localizedExpansion.isJapanese && (
                         <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
@@ -358,8 +358,8 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
                   </div>
                   {localizedExpansion.displayNameSecondary && (
                     <div>
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">English Translation</label>
-                      <p className="text-gray-900 dark:text-white italic">
+                      <label className="text-sm font-medium text-gray-700">English Translation</label>
+                      <p className="text-gray-900 italic">
                         {localizedExpansion.displayNameSecondary}
                       </p>
                     </div>
@@ -373,29 +373,29 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
             <div className="space-y-6">
               {/* Card Count Statistics */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
                   Card Count Analysis
                 </h3>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Total Cards</span>
+                    <span className="text-sm font-medium text-gray-700">Total Cards</span>
                     <div className="flex items-center gap-3">
-                      <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div className="w-32 bg-gray-200 rounded-full h-2">
                         <div 
                           className="bg-blue-600 h-2 rounded-full" 
                           style={{ width: '100%' }}
                         ></div>
                       </div>
-                      <span className="text-sm font-bold text-gray-900 dark:text-white">
+                      <span className="text-sm font-bold text-gray-900">
                         {formatCardCount(localizedExpansion.cardCount)}
                       </span>
                     </div>
                   </div>
                   
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Printed Cards</span>
+                    <span className="text-sm font-medium text-gray-700">Printed Cards</span>
                     <div className="flex items-center gap-3">
-                      <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div className="w-32 bg-gray-200 rounded-full h-2">
                         <div 
                           className="bg-green-600 h-2 rounded-full" 
                           style={{ 
@@ -403,7 +403,7 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
                           }}
                         ></div>
                       </div>
-                      <span className="text-sm font-bold text-gray-900 dark:text-white">
+                      <span className="text-sm font-bold text-gray-900">
                         {formatCardCount(localizedExpansion.printedCardCount)}
                       </span>
                     </div>
@@ -411,9 +411,9 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
                   
                   {localizedExpansion.hasSecretRares && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Secret Rares</span>
+                      <span className="text-sm font-medium text-gray-700">Secret Rares</span>
                       <div className="flex items-center gap-3">
-                        <div className="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div className="w-32 bg-gray-200 rounded-full h-2">
                           <div 
                             className="bg-purple-600 h-2 rounded-full" 
                             style={{ 
@@ -432,7 +432,7 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
 
               {/* Expansion Size Category */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
                   Expansion Size Category
                 </h3>
                 <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
@@ -445,7 +445,7 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
                    localizedExpansion.cardCount >= 100 ? 'Medium Expansion' :
                    'Small Expansion'}
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                <p className="text-sm text-gray-600 mt-2">
                   Based on total card count of {formatCardCount(localizedExpansion.cardCount)} cards
                 </p>
               </div>
@@ -454,10 +454,10 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
           >
             Close
           </button>

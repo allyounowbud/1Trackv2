@@ -1,17 +1,7 @@
--- Clean up orders table by removing redundant product data
--- Now that orders link directly to product tables, we don't need to duplicate product info
+-- SAFE version - Recreate all views with only columns that definitely exist
+-- This version makes minimal assumptions about which columns exist
 
--- First, make sure all orders are properly linked
--- This will help identify any orders that still need the old data
-SELECT 
-    COUNT(*) as total_orders,
-    COUNT(pokemon_card_id) as linked_to_pokemon,
-    COUNT(item_id) as linked_to_custom_items,
-    COUNT(CASE WHEN pokemon_card_id IS NULL AND item_id IS NULL THEN 1 END) as unlinked_orders
-FROM orders;
-
--- Step 1: Drop the views first (they depend on the columns we want to remove)
--- Drop all dependent views with CASCADE to handle dependencies
+-- Step 1: Drop all views if they exist (CASCADE to handle dependencies)
 DROP VIEW IF EXISTS orders_fully_sold CASCADE;
 DROP VIEW IF EXISTS orders_partially_sold CASCADE;
 DROP VIEW IF EXISTS orders_sold CASCADE;
@@ -19,59 +9,64 @@ DROP VIEW IF EXISTS orders_on_hand CASCADE;
 DROP VIEW IF EXISTS individual_orders_clean CASCADE;
 DROP VIEW IF EXISTS collection_summary_clean CASCADE;
 
--- Step 2: Drop the redundant API card data columns
--- These are no longer needed since we're linking directly to product tables
-ALTER TABLE orders DROP COLUMN IF EXISTS api_card_id;
-ALTER TABLE orders DROP COLUMN IF EXISTS api_card_name;
-ALTER TABLE orders DROP COLUMN IF EXISTS api_card_set;
-ALTER TABLE orders DROP COLUMN IF EXISTS api_card_image_url;
-ALTER TABLE orders DROP COLUMN IF EXISTS api_card_market_value_cents;
-
--- Step 3: Recreate the individual_orders_clean view (clean, without duplicate data)
--- Market value should be fetched in real-time from the product tables when needed
+-- Step 2: Create individual_orders_clean view (SAFE VERSION)
+-- Only includes columns we're certain exist
 CREATE OR REPLACE VIEW individual_orders_clean AS
 SELECT
     o.id,
     o.user_id,
     o.order_group_id,
     o.order_number,
-    o.item_id, -- For custom items
-    o.pokemon_card_id, -- Link to pokemon_cards
-    o.product_source, -- Source of the product (e.g., 'pokemon', 'custom')
+    o.item_id,
+    o.pokemon_card_id,
+    o.product_source,
 
-    -- Item identification (from linked tables only)
+    -- Item identification
     COALESCE(pc.name, i.item_name, 'Unknown Item') AS item_name,
     COALESCE(pc.expansion_name, i.set_name, 'Unknown Set') AS set_name,
     COALESCE(pc.image_url, i.image_url, '/icons/other.png') AS image_url,
 
-    -- Market value (fetched from linked product tables in real-time)
+    -- Market value
     COALESCE(
-        pc.market_price * 100, -- Convert to cents
+        pc.market_price * 100,
         i.market_value_cents,
         0
     ) AS market_value_cents,
     
-    -- Order details (purchase information)
+    -- Order details
     o.purchase_date,
     o.price_per_item_cents,
     o.quantity,
     o.total_cost_cents,
-    o.retailer_id,
-    o.marketplace_id,
     o.retailer_name,
     o.notes,
     
-    -- Sale information
+    -- Sale information (with safe defaults)
     o.sale_date,
-    o.quantity_sold,
-    o.sale_retailer_id,
-    o.sale_marketplace_id,
-    o.sale_retailer_name,
+    COALESCE(o.quantity_sold, 0) AS quantity_sold,
     o.sale_price_per_item_cents,
     o.sale_total_cents,
     o.sale_fees_cents,
-    o.sale_shipping_cents,
     o.sale_net_cents,
+    
+    -- Calculate net profit on the fly
+    CASE 
+        WHEN COALESCE(o.quantity_sold, 0) > 0 AND o.sale_net_cents IS NOT NULL THEN
+            o.sale_net_cents - (o.price_per_item_cents * COALESCE(o.quantity_sold, 0))
+        ELSE 
+            NULL
+    END AS net_profit_cents,
+    
+    -- Computed sale status fields
+    COALESCE(o.quantity_sold, 0) AS sold_count,
+    o.quantity - COALESCE(o.quantity_sold, 0) AS remaining_count,
+    
+    -- Sale status indicators
+    CASE 
+        WHEN COALESCE(o.quantity_sold, 0) = 0 THEN 'on_hand'
+        WHEN COALESCE(o.quantity_sold, 0) >= o.quantity THEN 'fully_sold'
+        ELSE 'partially_sold'
+    END AS sale_status,
     
     -- Timestamps
     o.created_at,
@@ -83,7 +78,7 @@ SELECT
     o.grading_company,
     o.grading_grade,
 
-    -- Source of the item (for filtering/display)
+    -- Source
     CASE
         WHEN o.item_id IS NOT NULL THEN 'manual'
         WHEN o.pokemon_card_id IS NOT NULL THEN 'pokemon'
@@ -92,14 +87,15 @@ SELECT
 
 FROM orders o
 LEFT JOIN items i ON o.item_id = i.id
-LEFT JOIN pokemon_cards pc ON o.pokemon_card_id = pc.id;
+LEFT JOIN pokemon_cards pc ON o.pokemon_card_id = pc.id
+WHERE o.user_id = auth.uid();
 
--- Step 4: Recreate the collection_summary_clean view
+-- Step 3: Create collection_summary_clean view (SAFE VERSION)
 CREATE OR REPLACE VIEW collection_summary_clean AS
 SELECT
     o.user_id,
     
-    -- Item identification (from linked tables only)
+    -- Item identification
     COALESCE(pc.name, i.item_name, 'Unknown Item') AS item_name,
     COALESCE(pc.expansion_name, i.set_name, 'Unknown Set') AS set_name,
     COALESCE(pc.image_url, i.image_url, '/icons/other.png') AS image_url,
@@ -110,16 +106,16 @@ SELECT
     o.grading_company,
     o.grading_grade,
 
-    -- Collection data
+    -- Collection data (only count remaining items, not sold)
     o.order_group_id,
     o.item_id,
     o.pokemon_card_id,
-    SUM(o.quantity) AS total_quantity,
+    SUM(o.quantity - COALESCE(o.quantity_sold, 0)) AS total_quantity,
     AVG(o.price_per_item_cents) AS avg_price_cents,
     
-    -- Market value (fetched from linked product tables in real-time)
+    -- Market value
     COALESCE(
-        MAX(pc.market_price) * 100, -- Convert to cents
+        MAX(pc.market_price) * 100,
         MAX(i.market_value_cents),
         0
     ) AS market_value_cents,
@@ -127,7 +123,7 @@ SELECT
     MAX(o.purchase_date) AS latest_order_date,
     COUNT(*) AS order_count,
     
-    -- Source of the item (for filtering/display)
+    -- Source
     CASE
         WHEN o.item_id IS NOT NULL THEN 'manual'
         WHEN o.pokemon_card_id IS NOT NULL THEN 'pokemon'
@@ -138,6 +134,7 @@ FROM orders o
 LEFT JOIN items i ON o.item_id = i.id
 LEFT JOIN pokemon_cards pc ON o.pokemon_card_id = pc.id
 WHERE o.user_id = auth.uid()
+AND (o.quantity - COALESCE(o.quantity_sold, 0)) > 0  -- Only include orders with remaining items
 GROUP BY
     -- Group by item identification
     COALESCE(pc.name, i.item_name, 'Unknown Item'),
@@ -154,24 +151,24 @@ GROUP BY
     o.pokemon_card_id,
     o.user_id;
 
--- Recreate convenience views that depend on individual_orders_clean
+-- Step 4: Create convenience views
 CREATE OR REPLACE VIEW orders_on_hand AS
 SELECT * FROM individual_orders_clean
-WHERE quantity - COALESCE(quantity_sold, 0) > 0;
+WHERE remaining_count > 0;
 
 CREATE OR REPLACE VIEW orders_sold AS
 SELECT * FROM individual_orders_clean
-WHERE COALESCE(quantity_sold, 0) > 0;
+WHERE sold_count > 0;
 
 CREATE OR REPLACE VIEW orders_partially_sold AS
 SELECT * FROM individual_orders_clean
-WHERE COALESCE(quantity_sold, 0) > 0 AND quantity - COALESCE(quantity_sold, 0) > 0;
+WHERE sold_count > 0 AND remaining_count > 0;
 
 CREATE OR REPLACE VIEW orders_fully_sold AS
 SELECT * FROM individual_orders_clean
-WHERE quantity - COALESCE(quantity_sold, 0) = 0 AND COALESCE(quantity_sold, 0) > 0;
+WHERE remaining_count = 0 AND sold_count > 0;
 
--- Grant permissions on views (need both authenticated and anon for REST API)
+-- Step 5: Grant permissions (CRITICAL for REST API access)
 GRANT SELECT ON individual_orders_clean TO authenticated, anon;
 GRANT SELECT ON collection_summary_clean TO authenticated, anon;
 GRANT SELECT ON orders_on_hand TO authenticated, anon;
@@ -179,13 +176,14 @@ GRANT SELECT ON orders_sold TO authenticated, anon;
 GRANT SELECT ON orders_partially_sold TO authenticated, anon;
 GRANT SELECT ON orders_fully_sold TO authenticated, anon;
 
--- Add helpful comments
-COMMENT ON TABLE orders IS 'Order tracking table - stores only order-specific data, links to product tables for item details';
-COMMENT ON COLUMN orders.pokemon_card_id IS 'Foreign key to pokemon_cards table - fetch real-time market data from there';
-COMMENT ON COLUMN orders.item_id IS 'Foreign key to items table for custom items - fetch market data from there';
-
--- Summary of changes
+-- Step 6: Verify views were created
 SELECT 
-    'Cleanup completed! Orders table now only stores order-specific data.' as status,
-    'Product details and market values are fetched in real-time from linked tables.' as note;
+    'Views created successfully!' as status,
+    COUNT(*) FILTER (WHERE table_name = 'individual_orders_clean') as individual_orders_clean,
+    COUNT(*) FILTER (WHERE table_name = 'collection_summary_clean') as collection_summary_clean,
+    COUNT(*) FILTER (WHERE table_name = 'orders_on_hand') as orders_on_hand,
+    COUNT(*) FILTER (WHERE table_name = 'orders_sold') as orders_sold
+FROM information_schema.views
+WHERE table_schema = 'public'
+AND table_name IN ('individual_orders_clean', 'collection_summary_clean', 'orders_on_hand', 'orders_sold');
 

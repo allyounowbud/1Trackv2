@@ -167,7 +167,7 @@ const GlobalHeader = () => {
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-40 bg-gray-950 border-b border-gray-800">
+    <div className="fixed top-0 left-0 right-0 z-40 bg-gray-950 border-b border-gray-300">
       <div className="w-full pl-4 pr-0 h-[50px] flex items-center gap-1">
         {/* Game Selector - Outside search bar */}
         <div className="relative game-dropdown">

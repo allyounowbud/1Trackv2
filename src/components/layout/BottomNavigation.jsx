@@ -85,7 +85,7 @@ const BottomNavigation = ({ currentPath, customButtons }) => {
   }
 
   return (
-    <div className="bottom-nav-fixed bg-gray-950 border-t border-gray-800 safe-bottom">
+    <div className="bottom-nav-fixed bg-gray-950 border-t border-gray-300 safe-bottom">
       <div className="flex items-center w-full py-2">
         {navItems.map((item) => (
           <button

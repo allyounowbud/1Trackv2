@@ -700,7 +700,7 @@ const PokemonPage = () => {
                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
                       languageFilter === 'english'
                         ? 'bg-indigo-600 text-white'
-                        : 'bg-transparent text-white hover:bg-gray-700'
+                        : 'bg-white text-white hover:bg-gray-700'
                     }`}
                   >
                     ENG
@@ -710,7 +710,7 @@ const PokemonPage = () => {
                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
                       languageFilter === 'japanese'
                         ? 'bg-indigo-600 text-white'
-                        : 'bg-transparent text-white hover:bg-gray-700'
+                        : 'bg-white text-white hover:bg-gray-700'
                     }`}
                   >
                     JPN
@@ -758,14 +758,14 @@ const PokemonPage = () => {
                 )}
                 
                 {/* Product Type Toggle */}
-                <div className="relative inline-flex rounded-lg bg-gray-800 p-1">
+                <div className="relative inline-flex rounded-xl bg-gray-200 p-1">
                   <button
                     onClick={() => setProductTypeFilter('singles')}
                     disabled={loading}
-                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                       productTypeFilter === 'singles' 
-                        ? 'bg-indigo-600 text-white' 
-                        : 'bg-transparent text-white hover:bg-gray-700'
+                        ? 'bg-indigo-600 text-white shadow-sm' 
+                        : 'bg-transparent text-gray-600 hover:text-gray-800'
                     } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     Singles
@@ -773,10 +773,10 @@ const PokemonPage = () => {
                   <button
                     onClick={() => setProductTypeFilter('sealed')}
                     disabled={loading}
-                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                       productTypeFilter === 'sealed' 
-                        ? 'bg-indigo-600 text-white' 
-                        : 'bg-transparent text-white hover:bg-gray-700'
+                        ? 'bg-indigo-600 text-white shadow-sm' 
+                        : 'bg-transparent text-gray-600 hover:text-gray-800'
                     } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     Sealed
@@ -806,13 +806,13 @@ const PokemonPage = () => {
                     <button
                       key={expansion.id}
                       onClick={() => handleExpansionClick(expansion)}
-                      className="group bg-transparent rounded-lg border border-gray-700 hover:border-gray-600 transition-all p-4 text-left"
+                      className="group bg-white rounded-lg border border-gray-200 hover:border-gray-600 transition-all p-4 text-left"
                     >
                       {expansion.logo && (
                         <img
                           src={expansion.logo}
                           alt={expansion.name}
-                          className="w-full h-32 object-contain mb-3 bg-transparent"
+                          className="w-full h-32 object-contain mb-3 bg-white"
                         />
                       )}
                       <h3 className="font-semibold text-white text-sm mb-1 group-hover:text-blue-400">
@@ -858,10 +858,10 @@ const PokemonPage = () => {
                         return (
                           <div
                             key={item.id}
-                            className={`group bg-transparent rounded-lg border transition-all p-3 flex flex-col h-full ${
+                            className={`group bg-white rounded-lg border border-gray-200 transition-all p-3 flex flex-col h-full ${
                               isSelected 
-                                ? 'border-indigo-500 bg-indigo-500/10' 
-                                : 'border-gray-700 hover:border-gray-600'
+                                ? 'border-indigo-300 bg-indigo-50' 
+                                : 'hover:border-gray-300'
                             }`}
                             onClick={(e) => {
                               // Only handle clicks in multi-select mode
@@ -884,7 +884,7 @@ const PokemonPage = () => {
                         <SafeImage
                           src={item.image_url}
                           alt={item.name}
-                          className={`w-full object-contain bg-transparent rounded ${
+                          className={`w-full object-contain bg-white rounded ${
                             productTypeFilter === 'singles' ? 'aspect-[5/7]' : 'aspect-[4/3]'
                           }`}
                         />
@@ -995,10 +995,10 @@ const PokemonPage = () => {
                     return (
                       <div
                         key={card.id}
-                        className={`group bg-transparent rounded-lg border transition-all p-3 flex flex-col h-full ${
+                        className={`group bg-white rounded-lg border border-gray-200 transition-all p-3 flex flex-col h-full ${
                           isSelected 
-                            ? 'border-indigo-500 bg-indigo-500/10' 
-                            : 'border-gray-700 hover:border-gray-600'
+                            ? 'border-indigo-300 bg-indigo-50' 
+                            : 'hover:border-gray-300'
                         }`}
                         onClick={(e) => {
                           // Only handle clicks in multi-select mode
@@ -1021,7 +1021,7 @@ const PokemonPage = () => {
                         <SafeImage
                           src={card.image_url}
                           alt={card.name}
-                          className="w-full object-contain bg-transparent rounded aspect-[5/7]"
+                          className="w-full object-contain bg-white rounded aspect-[5/7]"
                         />
                       </div>
                       

@@ -10,6 +10,16 @@ import { queryKeys, queryClient } from '../lib/queryClient';
 import SafeImage from '../components/SafeImage';
 import AddToCollectionModal from '../components/AddToCollectionModal';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { 
+  filterOnHandOrders, 
+  filterSoldOrders, 
+  getRemainingCount,
+  getSoldCount,
+  hasItemsSold,
+  getStatusDisplayText,
+  getEffectiveQuantity,
+  isPartiallySold
+} from '../utils/orderStatus';
 
 
 // Simple data fetching - just one table!
@@ -683,12 +693,13 @@ const Collection = () => {
   };
 
   // Memoize filtered orders for better performance
+  // Use quantity-based filtering for partial sale support
   const filteredOrders = useMemo(() => {
-    return orders.filter(order => !order.is_sold);
+    return filterOnHandOrders(orders);
   }, [orders]);
 
   const soldOrders = useMemo(() => {
-    return orders.filter(order => order.is_sold);
+    return filterSoldOrders(orders);
   }, [orders]);
 
   // Calculate collection statistics with optimized processing
@@ -697,21 +708,27 @@ const Collection = () => {
       const overrideKey = `${order.item_id}`;
       const overrideValue = marketValueOverrides[overrideKey];
       const marketValue = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
-      return sum + (marketValue * order.quantity);
+      const remainingQty = getRemainingCount(order);
+      return sum + (marketValue * remainingQty);
     }, 0);
 
     const totalPaidCents = orders.reduce((sum, order) => {
-      return sum + (order.total_cost_cents || 0);
+      const remainingQty = getRemainingCount(order);
+      return sum + (order.price_per_item_cents * remainingQty);
     }, 0);
 
     const totalProfitCents = orders.reduce((sum, order) => {
-      if (order.is_sold) {
+      const soldCount = getSoldCount(order);
+      if (soldCount > 0) {
+        // For sold items, use actual net profit
         return sum + (order.net_profit_cents || 0);
       } else {
+        // For on-hand items, calculate unrealized profit
         const overrideKey = `${order.item_id}`;
         const overrideValue = marketValueOverrides[overrideKey];
         const marketValueCents = overrideValue ? overrideValue * 100 : (order.market_value_cents || 0);
-        const marketValue = marketValueCents * order.quantity;
+        const remainingQty = getRemainingCount(order);
+        const marketValue = marketValueCents * remainingQty;
         const cost = order.total_cost_cents || 0;
         return sum + (marketValue - cost);
       }
@@ -733,7 +750,7 @@ const Collection = () => {
     
     // Optimized category filtering and counting
     const categoryCounts = filteredOrders.reduce((acc, order) => {
-      const quantity = order.quantity || 1;
+      const quantity = getRemainingCount(order);
       
       if (order.source === 'manual') {
         acc.custom += quantity;
@@ -770,8 +787,9 @@ const Collection = () => {
         };
       }
       
-      itemGroups[itemName].quantity += order.quantity || 1;
-      itemGroups[itemName].totalPaid += (order.total_cost_cents || 0);
+      const remainingQty = getRemainingCount(order);
+      itemGroups[itemName].quantity += remainingQty;
+      itemGroups[itemName].totalPaid += (order.price_per_item_cents * remainingQty);
       itemGroups[itemName].orders.push(order);
     });
 
@@ -833,29 +851,30 @@ const Collection = () => {
       
       if (filter === 'Ungraded') {
         filteredOrders = orders.filter(order => 
-          !order.is_sold && 
+          getRemainingCount(order) > 0 && 
           order.item_type === 'Single' && 
           (!order.card_condition || order.card_condition === 'Raw')
         );
       } else if (filter === 'Graded') {
         filteredOrders = orders.filter(order => 
-          !order.is_sold && 
+          getRemainingCount(order) > 0 && 
           order.item_type === 'Single' && 
           order.card_condition && 
           order.card_condition !== 'Raw'
         );
       } else if (filter === 'Sealed') {
         filteredOrders = orders.filter(order => 
-          !order.is_sold && order.item_type === 'Sealed'
+          getRemainingCount(order) > 0 && order.item_type === 'Sealed'
         );
       } else if (filter === 'Custom') {
         filteredOrders = orders.filter(order => 
-          !order.is_sold && order.source === 'manual'
+          getRemainingCount(order) > 0 && order.source === 'manual'
         );
       }
 
       const filteredValueCents = filteredOrders.reduce((sum, order) => {
-        return sum + ((order.market_value_cents || 0) * order.quantity);
+        const remainingQty = getRemainingCount(order);
+        return sum + ((order.market_value_cents || 0) * remainingQty);
       }, 0);
 
       const filteredPaidCents = filteredOrders.reduce((sum, order) => {
@@ -863,10 +882,12 @@ const Collection = () => {
       }, 0);
 
       const filteredProfitCents = filteredOrders.reduce((sum, order) => {
-        if (order.is_sold) {
+        const soldCount = getSoldCount(order);
+        if (soldCount > 0) {
           return sum + (order.net_profit_cents || 0);
         } else {
-          const marketValue = (order.market_value_cents || 0) * order.quantity;
+          const remainingQty = getRemainingCount(order);
+          const marketValue = (order.market_value_cents || 0) * remainingQty;
           const cost = order.total_cost_cents || 0;
           return sum + (marketValue - cost);
         }
@@ -925,35 +946,35 @@ const Collection = () => {
     const today = new Date();
     
     // Filter orders based on selectedFilter using the same logic as the main filtering
-    let filteredOrders = orders.filter(order => !order.is_sold);
+    let filteredOrders = orders.filter(order => getRemainingCount(order) > 0);
     
     if (selectedFilter === 'Ungraded') {
       filteredOrders = orders.filter(order => 
-        !order.is_sold && 
+        getRemainingCount(order) > 0 && 
         order.item_type === 'Single' && 
         (!order.card_condition || order.card_condition === 'Raw')
       );
     } else if (selectedFilter === 'Graded') {
       filteredOrders = orders.filter(order => 
-        !order.is_sold && 
+        getRemainingCount(order) > 0 && 
         order.item_type === 'Single' && 
         order.card_condition && 
         order.card_condition !== 'Raw'
       );
     } else if (selectedFilter === 'Sealed') {
       filteredOrders = orders.filter(order => 
-        !order.is_sold && order.item_type === 'Sealed'
+        getRemainingCount(order) > 0 && order.item_type === 'Sealed'
       );
     } else if (selectedFilter === 'Custom') {
       filteredOrders = orders.filter(order => 
-        !order.is_sold && order.source === 'manual'
+        getRemainingCount(order) > 0 && order.source === 'manual'
       );
     }
     
     // Group filtered orders by date to calculate cumulative value
     const ordersByDate = {};
     filteredOrders.forEach(order => {
-      if (!order.is_sold && order.purchase_date) {
+      if (getRemainingCount(order) > 0 && order.purchase_date) {
         try {
           const orderDate = new Date(order.purchase_date).toISOString().split('T')[0];
           if (!ordersByDate[orderDate]) {
@@ -1121,19 +1142,11 @@ const Collection = () => {
 
   return (
     <div>
-      {/* Mobile Header with OneTrack Logo */}
-      <div className="md:hidden px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <h1 className="text-2xl font-bold text-white tracking-wide">OneTrack</h1>
-          </div>
-        </div>
-      </div>
 
       {/* Collection Value Section */}
       <div className="px-4 md:px-6 lg:px-8 py-6">
         <div className="text-center mb-3 pt-2 md:mb-6 md:pt-4">
-          <div className="text-sm text-gray-300 mb-1 md:mb-2">
+          <div className="text-sm text-gray-600 mb-1 md:mb-2">
             {selectedFilter === 'All' ? 'Your collection is worth' : 
              selectedFilter === 'Ungraded' ? 'Your ungraded collection is worth' :
              selectedFilter === 'Graded' ? 'Your graded collection is worth' :
@@ -1144,7 +1157,7 @@ const Collection = () => {
           <div className="text-5xl md:text-4xl lg:text-5xl font-bold text-blue-400 mb-1 md:mb-2 tracking-tight">
             {formatPrice(collectionData.filteredValue)}
           </div>
-          <div className="text-sm text-gray-300">You Paid • {formatPrice(collectionData.filteredPaid)} <span className={collectionData.filteredProfitPercentage >= 0 ? 'text-green-400' : 'text-red-400'}>({collectionData.filteredProfitPercentage >= 0 ? '+' : ''}{collectionData.filteredProfitPercentage.toFixed(1)}%)</span></div>
+          <div className="text-sm text-gray-600">You Paid • {formatPrice(collectionData.filteredPaid)} <span className={collectionData.filteredProfitPercentage >= 0 ? 'text-green-600' : 'text-red-400'}>({collectionData.filteredProfitPercentage >= 0 ? '+' : ''}{collectionData.filteredProfitPercentage.toFixed(1)}%)</span></div>
         </div>
       </div>
 
@@ -1165,9 +1178,9 @@ const Collection = () => {
                 }
               }, 100);
             }}
-            className="text-center bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:border-blue-400/50"
+            className="text-center bg-transparent border border-gray-200 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
           >
-            <div className="text-xs text-gray-400 mb-1 md:mb-2">Ungraded</div>
+            <div className="text-xs text-gray-600 mb-1 md:mb-2">Ungraded</div>
             <div className="text-sm font-bold text-blue-400">
               {collectionData.ungradedCount}
             </div>
@@ -1186,9 +1199,9 @@ const Collection = () => {
                 }
               }, 100);
             }}
-            className="text-center bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:border-blue-400/50"
+            className="text-center bg-transparent border border-gray-200 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
           >
-            <div className="text-xs text-gray-400 mb-1 md:mb-2">Graded</div>
+            <div className="text-xs text-gray-600 mb-1 md:mb-2">Graded</div>
             <div className="text-sm font-bold text-blue-400">
               {collectionData.gradedCount}
             </div>
@@ -1207,9 +1220,9 @@ const Collection = () => {
                 }
               }, 100);
             }}
-            className="text-center bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:border-blue-400/50"
+            className="text-center bg-transparent border border-gray-200 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
           >
-            <div className="text-xs text-gray-400 mb-1 md:mb-2">Sealed</div>
+            <div className="text-xs text-gray-600 mb-1 md:mb-2">Sealed</div>
             <div className="text-sm font-bold text-blue-400">
               {collectionData.sealedCount}
             </div>
@@ -1228,9 +1241,9 @@ const Collection = () => {
                 }
               }, 100);
             }}
-            className="text-center bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:border-blue-400/50"
+            className="text-center bg-transparent border border-gray-200 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
           >
-            <div className="text-xs text-gray-400 mb-1 md:mb-2">Custom</div>
+            <div className="text-xs text-gray-600 mb-1 md:mb-2">Custom</div>
             <div className="text-sm font-bold text-blue-400">
               {collectionData.customCount}
             </div>
@@ -1240,12 +1253,12 @@ const Collection = () => {
 
       {/* Collection History */}
       <div className="px-3 md:px-6 lg:px-8 pb-4 md:pb-8" style={{ paddingTop: '9px' }}>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:p-10 lg:p-12">
+        <div className="bg-transparent border border-gray-200 rounded-xl p-4 md:p-10 lg:p-12">
           <div className="flex items-center justify-between mb-4 md:mb-8">
             <div>
-              <div className="text-base md:text-2xl lg:text-3xl font-semibold text-white">My Portfolio</div>
+              <div className="text-base md:text-2xl lg:text-3xl font-semibold text-gray-600">My Portfolio</div>
               {/* Summary Text */}
-              <div className="text-sm text-gray-400 mt-1">
+              <div className="text-sm text-gray-600 mt-1">
                 {currentDateRange.label} <span className="text-blue-400">{formatPrice(collectionData.filteredValue)}</span> 
                 <span className="text-blue-400 ml-1">
                   ({percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(2)}%)
@@ -1399,7 +1412,7 @@ const Collection = () => {
                  </div>
           
             {/* Disclaimer text - centered and smaller */}
-            <div className="text-center text-sm text-gray-500/40 leading-tight px-6">
+            <div className="text-center text-sm text-gray-400 leading-tight px-6">
               <div>Collection history tracks the total value of your items for each day since the day they're added.</div>
             </div>
         </div>
@@ -1480,7 +1493,7 @@ const Collection = () => {
               placeholder="Search your items..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 md:pl-12 pr-3 md:pr-4 py-2 md:py-3 bg-gray-800 border border-gray-700 rounded-lg text-sm md:text-base text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+              className="w-full pl-10 md:pl-12 pr-3 md:pr-4 py-2 md:py-3 bg-white border border-gray-200 rounded-lg text-sm md:text-base text-gray-600 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
             />
           </div>
         </div>
@@ -1495,10 +1508,10 @@ const Collection = () => {
             return (
                    <div 
                      key={item.id} 
-                     className={`relative bg-gray-900 border border-gray-800 rounded-xl overflow-hidden transition-all duration-200 ${
-                       isSelected && isBulkSelectionMode
-                         ? 'border-indigo-400 bg-indigo-900/20 shadow-indigo-400/25' 
-                         : 'hover:bg-gray-800/50 hover:border-gray-600'
+                     className={`relative bg-white border border-gray-200 rounded-xl overflow-hidden transition-all duration-200 ${
+                       isSelected && (isBulkSelectionMode || isSelectionMode)
+                         ? 'border-indigo-300 bg-indigo-50' 
+                         : 'hover:bg-gray-100 hover:border-gray-300'
                      }`}
                      onTouchStart={(e) => {
                        const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
@@ -1560,7 +1573,7 @@ const Collection = () => {
                     className="w-full h-full object-contain"
                   />
                 ) : null}
-                <div className={`w-full h-full flex items-center justify-center bg-gray-800 ${item.image ? 'hidden' : 'flex'}`}>
+                <div className={`w-full h-full flex items-center justify-center bg-gray-100 ${item.image ? 'hidden' : 'flex'}`}>
                   <div className="text-center">
                     <div className="text-2xl mb-1">📦</div>
                     <div className="text-gray-400 text-xs">No Image</div>
@@ -1572,7 +1585,7 @@ const Collection = () => {
               <div className="p-3 space-y-1">
                 {/* Item Name - First Line */}
                 <div>
-                  <h3 className="text-white leading-tight line-clamp-2 font-bold text-[11px] md:text-xs">
+                  <h3 className="text-gray-700 leading-tight line-clamp-2 font-bold text-[11px] md:text-xs">
                     {item.name}
                     {item.cardNumber && (
                       <span className="text-blue-400"> #{item.cardNumber}</span>
@@ -1581,7 +1594,7 @@ const Collection = () => {
                 </div>
                 
                 {/* Set Name - Ghost Text */}
-                <div className="text-[11px] md:text-xs text-gray-400 truncate">
+                <div className="text-[11px] md:text-xs text-gray-500 truncate">
                   {item.set}
                 </div>
                   
@@ -1595,18 +1608,18 @@ const Collection = () => {
                 
                 {/* Financial Details */}
                 <div className="space-y-1">
-                  <div className="text-[11px] md:text-xs text-white">
+                  <div className="text-[11px] md:text-xs text-gray-700">
                     {item.originalValue > 0 ? formatPrice(item.originalValue * item.quantity) : 'No Market Data'} Value • Qty {item.quantity}
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className="text-[11px] md:text-xs text-white">
+                    <div className="text-[11px] md:text-xs text-gray-700">
                       {formatPrice(item.paid)} Paid 
                         {item.originalValue > 0 ? (
-                      <span className={`ml-1 ${item.profit > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      <span className={`ml-1 ${item.profit > 0 ? 'text-green-600' : 'text-red-400'}`}>
                         ({item.profit > 0 ? '+' : ''}{item.profitPercent.toFixed(1)}%)
                       </span>
                         ) : (
-                          <span className="ml-1 text-gray-400">(No market data)</span>
+                          <span className="ml-1 text-gray-500">(No market data)</span>
                         )}
                     </div>
                     
@@ -1625,7 +1638,7 @@ const Collection = () => {
                           setShowItemMenu(true);
                           openCollectionMenu();
                         }}
-                        className="text-gray-400 hover:text-white"
+                        className="text-gray-400 hover:text-gray-900"
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
@@ -1647,13 +1660,13 @@ const Collection = () => {
           <div className="bg-gray-800 rounded-lg p-6 w-80 max-w-[90vw]">
             <h3 className="text-white font-medium mb-4">Order Actions</h3>
             <div className="space-y-2">
-              {!orders.find(o => o.id === selectedOrderId)?.is_sold && (
+              {getRemainingCount(orders.find(o => o.id === selectedOrderId)) > 0 && (
                 <button
                   onClick={() => {
                     setShowOrderMenu(false);
                     setShowMarkAsSoldModal(true);
                   }}
-                  className="w-full text-left px-3 py-2 text-green-400 hover:bg-gray-700 rounded-md transition-colors"
+                  className="w-full text-left px-3 py-2 text-green-600 hover:bg-gray-700 rounded-md transition-colors"
                 >
                   Mark as Sold
                 </button>
@@ -1694,11 +1707,9 @@ const Collection = () => {
 
       {/* Bulk Selection Preview Bar - Fixed at bottom with expandable actions */}
       {isBulkSelectionMode && !showOverridePriceModal && selectedItems.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 transition-all duration-300 ease-out rounded-t-3xl"
+        <div className="fixed bottom-0 left-0 right-0 z-50 transition-all duration-300 ease-out rounded-t-3xl bg-menu border-t border-menu"
         style={{ 
           bottom: '-1px',
-          backgroundColor: '#030712',
-          borderTop: '1px solid #374151',
           position: 'fixed',
           transform: 'none',
           WebkitTransform: 'none',
@@ -1713,19 +1724,19 @@ const Collection = () => {
                 (showBulkOrderBook || showBulkOverridePrice ? 'max-h-[75vh]' : 'max-h-96') + ' opacity-100' : 
                 'max-h-0 opacity-0'
             }`}>
-              <div className={`border-t border-gray-600/30 border-b border-gray-700/50 bg-gray-900/50 backdrop-blur-sm rounded-t-2xl ${(showBulkOrderBook || showBulkOverridePrice) ? 'border-t-2 border-t-gray-600' : ''}`}>
+              <div className={`border-t border-menu border-b border-menu bg-menu backdrop-blur-sm rounded-t-2xl ${(showBulkOrderBook || showBulkOverridePrice) ? 'border-t-2 border-t-menu' : ''}`}>
                 {showBulkOrderBook ? (
                   /* Order Book Content */
                   <div className="px-6 py-4">
                     {/* Order Book Header */}
                     <div className="mb-4">
-                      <h2 className="text-lg font-semibold text-white">
+                      <h2 className="text-lg font-semibold text-menu">
                         {editingOrderGroupId ? 
                           (inlineEditData[editingOrderGroupId]?.isMarkingAsSold ? 'Marking Order as Sold' : 'Editing Order') : 
                           'Viewing On Hand Orders'
                         }
                       </h2>
-                      <p className="text-sm text-gray-400 m-0">
+                      <p className="text-sm text-menu-secondary m-0">
                         {editingOrderGroupId ? 
                           (inlineEditData[editingOrderGroupId]?.isMarkingAsSold ? 'You are marking the following items as sold.' : 'You are about to change details in the order book.') : 
                           'Edit, mark as sold or delete orders all together.'
@@ -1826,7 +1837,7 @@ const Collection = () => {
                                                     const updateData = {
                                                       purchase_date: editData.purchase_date || order.purchase_date,
                                                       retailer_name: editData.retailer_name || order.retailer_name,
-                                                      quantity: editData.quantity || order.quantity,
+                                                      quantity: editData.quantity !== undefined ? editData.quantity : getRemainingCount(order),
                                                       price_per_item_cents: editData.price_per_item_cents !== undefined ? editData.price_per_item_cents : order.price_per_item_cents
                                                     };
 
@@ -1880,9 +1891,9 @@ const Collection = () => {
                                                   [orderGroupId]: {
                                                     purchase_date: order.purchase_date,
                                                     retailer_name: order.retailer_name,
-                                                    quantity: order.quantity,
+                                                    quantity: getRemainingCount(order),
                                                     price_per_item_cents: order.price_per_item_cents,
-                                                    total_cost: ((order.total_cost_cents || 0) / 100).toFixed(2)
+                                                    total_cost: ((order.price_per_item_cents * getRemainingCount(order)) / 100).toFixed(2)
                                                   }
                                                 }));
                                               }}
@@ -1902,7 +1913,7 @@ const Collection = () => {
                                                     isMarkingAsSold: true,
                                                     sell_date: new Date().toISOString().split('T')[0],
                                                     sell_price_cents: order.price_per_item_cents,
-                                                    sell_quantity: order.quantity,
+                                                    sell_quantity: Math.min(1, getRemainingCount(order)),
                                                     sell_location: '',
                                                     sell_fees_cents: 0,
                                                     sell_fee_percentage: null
@@ -2118,7 +2129,7 @@ const Collection = () => {
                                                 <input
                                                   type="number"
                                                   min="1"
-                                                  value={editData.sell_quantity !== undefined ? editData.sell_quantity : order.quantity}
+                                                  value={editData.sell_quantity !== undefined ? editData.sell_quantity : Math.min(1, getRemainingCount(order))}
                                                   onChange={(e) => {
                                                     setInlineEditData(prev => ({
                                                       ...prev,
@@ -2291,7 +2302,8 @@ const Collection = () => {
                                                   <input
                                                     type="number"
                                                     min="1"
-                                                    value={editData.quantity !== undefined ? editData.quantity : order.quantity}
+                                                    value={editData.quantity !== undefined ? editData.quantity : getRemainingCount(order)}
+                                                    disabled={isPartiallySold(order)}
                                                     onChange={(e) => {
                                                       const inputValue = e.target.value;
                                                       
@@ -2310,9 +2322,9 @@ const Collection = () => {
                                                       
                                                       const newQty = parseInt(inputValue);
                                                       if (!isNaN(newQty) && newQty >= 1) {
-                                                        const pricePerItem = editData.price_cents !== undefined 
-                                                          ? editData.price_cents / 100
-                                                          : order.price_cents / 100;
+                                                        const pricePerItem = editData.price_per_item_cents !== undefined 
+                                                          ? editData.price_per_item_cents / 100
+                                                          : order.price_per_item_cents / 100;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
                                                           [orderGroupId]: { 
@@ -2327,10 +2339,10 @@ const Collection = () => {
                                                       // Ensure minimum value of 1 when losing focus
                                                       const inputValue = e.target.value;
                                                       if (inputValue === '' || parseInt(inputValue) < 1) {
-                                                        const defaultQty = order.quantity;
-                                                        const pricePerItem = editData.price_cents !== undefined 
-                                                          ? editData.price_cents / 100
-                                                          : order.price_cents / 100;
+                                                        const defaultQty = getRemainingCount(order);
+                                                        const pricePerItem = editData.price_per_item_cents !== undefined 
+                                                          ? editData.price_per_item_cents / 100
+                                                          : order.price_per_item_cents / 100;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
                                                           [orderGroupId]: { 
@@ -2341,12 +2353,16 @@ const Collection = () => {
                                                         }));
                                                       }
                                                     }}
-                                                    className="w-full h-7 px-2 bg-gray-700/50 border border-gray-600 rounded text-white focus:border-indigo-400 focus:outline-none transition-colors"
+                                                    className={`w-full h-7 px-2 border rounded text-white focus:outline-none transition-colors ${
+                                                      isPartiallySold(order) 
+                                                        ? 'bg-gray-800/50 border-gray-700 text-gray-400 cursor-not-allowed' 
+                                                        : 'bg-gray-700/50 border-gray-600 focus:border-indigo-400'
+                                                    }`}
                                                     style={{ fontSize: '12px' }}
                                                   />
                                                 ) : (
                                                   <div className="text-white font-medium" style={{ fontSize: '12px' }}>
-                                                    {order.quantity}
+                                                    {getRemainingCount(order)}
                                                   </div>
                                                 )}
                                               </div>
@@ -2359,7 +2375,7 @@ const Collection = () => {
                                                     type="number"
                                                     step="0.01"
                                                     min="0"
-                                                    value={editData.price_cents !== undefined ? (editData.price_cents === '' ? '' : editData.price_cents / 100) : (order.price_cents / 100)}
+                                                    value={editData.price_per_item_cents !== undefined ? (editData.price_per_item_cents === '' ? '' : editData.price_per_item_cents / 100) : (order.price_per_item_cents / 100)}
                                                     onChange={(e) => {
                                                       const inputValue = e.target.value;
                                                       
@@ -2378,7 +2394,7 @@ const Collection = () => {
                                                       
                                                       const newPricePerItem = parseFloat(inputValue);
                                                       if (!isNaN(newPricePerItem) && newPricePerItem >= 0) {
-                                                        const qty = editData.quantity !== undefined ? editData.quantity : order.quantity;
+                                                        const qty = editData.quantity !== undefined ? editData.quantity : getRemainingCount(order);
                                                         const totalCost = newPricePerItem * qty;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
@@ -2394,8 +2410,8 @@ const Collection = () => {
                                                       // Ensure minimum value of 0 when losing focus
                                                       const inputValue = e.target.value;
                                                       if (inputValue === '' || parseFloat(inputValue) < 0) {
-                                                        const defaultPrice = order.price_cents / 100;
-                                                        const qty = editData.quantity !== undefined ? editData.quantity : order.quantity;
+                                                        const defaultPrice = order.price_per_item_cents / 100;
+                                                        const qty = editData.quantity !== undefined ? editData.quantity : getRemainingCount(order);
                                                         const totalCost = defaultPrice * qty;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
@@ -2412,7 +2428,7 @@ const Collection = () => {
                                                   />
                                                 ) : (
                                                   <div className="text-white font-medium" style={{ fontSize: '12px' }}>
-                                                    ${(order.price_cents / 100).toFixed(2)}
+                                                    ${(order.price_per_item_cents / 100).toFixed(2)}
                                                   </div>
                                                 )}
                                               </div>
@@ -2425,7 +2441,7 @@ const Collection = () => {
                                                     type="number"
                                                     step="0.01"
                                                     min="0"
-                                                    value={editData.total_cost !== undefined ? editData.total_cost : ((order.total_cost_cents || 0) / 100)}
+                                                    value={editData.total_cost !== undefined ? editData.total_cost : ((order.price_per_item_cents * getRemainingCount(order)) / 100)}
                                                     onChange={(e) => {
                                                       const inputValue = e.target.value;
                                                       
@@ -2444,7 +2460,7 @@ const Collection = () => {
                                                       
                                                       const newTotal = parseFloat(inputValue);
                                                       if (!isNaN(newTotal) && newTotal >= 0) {
-                                                        const qty = editData.quantity !== undefined ? editData.quantity : order.quantity;
+                                                        const qty = editData.quantity !== undefined ? editData.quantity : getRemainingCount(order);
                                                         const pricePerItem = qty > 0 ? newTotal / qty : 0;
                                                         setInlineEditData(prev => ({
                                                           ...prev,
@@ -2466,7 +2482,7 @@ const Collection = () => {
                                                           [orderGroupId]: { 
                                                             ...prev[orderGroupId], 
                                                             total_cost: defaultTotal,
-                                                            price_cents: order.price_cents
+                                                            price_cents: order.price_per_item_cents
                                                           }
                                                         }));
                                                       }
@@ -2476,7 +2492,7 @@ const Collection = () => {
                                                   />
                                                 ) : (
                                                   <div className="text-white font-medium" style={{ fontSize: '12px' }}>
-                                                    ${((order.total_cost_cents || 0) / 100).toFixed(2)}
+                                                    ${((order.price_per_item_cents * getRemainingCount(order)) / 100).toFixed(2)}
                                                   </div>
                                                 )}
                                               </div>
@@ -2662,7 +2678,7 @@ const Collection = () => {
               {/* Header with stats and actions */}
               <div className="flex items-end justify-between w-full mb-1 min-w-0 py-1">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <span className="font-medium text-gray-400 truncate" style={{ fontSize: '13px' }}>
+                  <span className="font-medium text-menu-secondary truncate" style={{ fontSize: '13px' }}>
                     {selectedItems.size} {selectedItems.size === 1 ? 'Item' : 'Items'} Selected
                   </span>
                 </div>
@@ -2680,7 +2696,8 @@ const Collection = () => {
                           selectAll();
                         }
                       }}
-                      className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors whitespace-nowrap"
+                      className="px-2 py-1 bg-gray-300 hover:bg-gray-400 rounded text-xs font-medium transition-colors whitespace-nowrap"
+                      style={{ color: 'black' }}
                     >
                       {(() => {
                         const allFilteredItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter));
@@ -2702,7 +2719,8 @@ const Collection = () => {
                           exitBulkSelectionMode(); // Exit bulk selection mode
                         }
                       }}
-                      className="px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700"
+                      className="px-2 py-1 rounded text-xs font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700"
+                      style={{ color: 'black' }}
                     >
                       Go Back
                     </button>
@@ -2746,7 +2764,8 @@ const Collection = () => {
                             setShowSuccessNotification(false);
                           }, 4000);
                         }}
-                        className="px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-emerald-600 hover:bg-emerald-700"
+                        className="px-2 py-1 rounded text-xs font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap bg-emerald-600 hover:bg-emerald-700"
+                        style={{ color: 'black' }}
                       >
                         Save
                       </button>
@@ -2757,9 +2776,10 @@ const Collection = () => {
                     onClick={() => {
                         setShowBulkActionsMenu(!showBulkActionsMenu);
                     }}
-                      className={`px-2 py-1 rounded text-xs text-white font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap ${
-                        showBulkActionsMenu ? 'bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                      className={`px-2 py-1 rounded text-xs font-medium transition-all duration-300 ease-out flex items-center gap-1 whitespace-nowrap ${
+                        showBulkActionsMenu ? 'bg-indigo-400' : 'bg-indigo-300 hover:bg-indigo-400'
                       }`}
+                      style={{ color: 'black' }}
                   >
                       Actions
                       <svg className={`w-3 h-3 flex-shrink-0 transition-transform duration-300 ease-out ${showBulkActionsMenu ? 'rotate-180' : ''}`} fill="currentColor" viewBox="0 0 20 20">
@@ -2771,7 +2791,8 @@ const Collection = () => {
                 {!(showBulkOrderBook || showBulkOverridePrice) && (
                   <button
                     onClick={clearSelection}
-                      className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-medium transition-colors flex items-center justify-center flex-shrink-0"
+                      className="w-6 h-6 bg-gray-300 hover:bg-gray-400 rounded text-xs font-medium transition-colors flex items-center justify-center flex-shrink-0"
+                      style={{ color: 'black' }}
                   >
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -2806,7 +2827,7 @@ const Collection = () => {
                           style={{ imageRendering: 'crisp-edges' }}
                         />
                       ) : (
-                        <div className="w-10 h-14 bg-gray-800 rounded flex items-center justify-center">
+                        <div className="w-10 h-14 bg-gray-100 rounded flex items-center justify-center">
                           <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd"/>
                           </svg>
@@ -2822,15 +2843,15 @@ const Collection = () => {
                 </div>
                       {/* Quantity badge if > 1 */}
                       {item.quantity > 1 && (
-                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center border-2 border-gray-950">
-                          <span className="text-xs font-semibold text-white">{item.quantity}</span>
-                  </div>
+                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center">
+                          <span className="text-[10px] font-normal text-center" style={{ color: 'white' }}>{item.quantity}</span>
+                        </div>
                       )}
                 </div>
                   ))}
                 {selectedItems.size > 6 && (
-                  <div className="flex-shrink-0 w-10 h-14 bg-gray-800 rounded flex items-center justify-center">
-                    <span className="text-xs font-medium text-gray-400">+{selectedItems.size - 6}</span>
+                  <div className="flex-shrink-0 w-10 h-14 bg-gray-100 rounded flex items-center justify-center">
+                    <span className="text-xs font-medium text-gray-600">+{selectedItems.size - 6}</span>
                   </div>
                 )}
               </div>
@@ -2843,11 +2864,11 @@ const Collection = () => {
       {/* Individual Item Menu Overlay - Hide when bulk actions bar is showing */}
       {showItemMenu && !isBulkSelectionMode && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end modal-overlay transition-opacity duration-200"
+          className="fixed inset-0 bg-menu-overlay backdrop-blur-sm flex items-end modal-overlay transition-opacity duration-200"
           onClick={handleItemMenuClose}
         >
           <div 
-            className="w-full bg-gray-900/95 backdrop-blur-xl border-t border-gray-600 rounded-t-3xl max-h-[85vh] overflow-y-auto"
+            className="w-full bg-menu border-t border-menu rounded-t-3xl max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
             style={{
               animation: isItemMenuClosing ? 'slideDown 0.3s ease-out' : 'slideUp 0.3s ease-out',
@@ -2866,16 +2887,16 @@ const Collection = () => {
             </div>
 
             {/* Header with close button */}
-            <div className="px-6 py-4 border-b border-gray-700/50 relative">
+            <div className="px-6 py-4 border-b border-menu relative">
               <button
                 onClick={handleItemMenuClose}
                 className="absolute right-4 top-4 w-8 h-8 flex items-center justify-center rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition-colors"
               >
-                <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-menu-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <h2 className="text-lg font-semibold text-white pr-12">
+              <h2 className="text-lg font-semibold text-menu pr-12">
                 Manage Collected Product
               </h2>
             </div>
@@ -2907,8 +2928,8 @@ const Collection = () => {
                     </svg>
                   </div>
                   <div className="text-left">
-                    <div className="text-sm font-semibold text-white">View Order Book</div>
-                    <div className="text-xs text-gray-400 mt-0.5">View and manage all orders for this item</div>
+                    <div className="text-sm font-semibold text-menu">View Order Book</div>
+                    <div className="text-xs text-menu-secondary mt-0.5">View and manage all orders for this item</div>
                   </div>
                 </div>
                 <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
@@ -2941,7 +2962,7 @@ const Collection = () => {
                   </div>
                   <div className="text-left">
                     <div className="text-sm font-semibold text-purple-400">Override Market Price</div>
-                    <div className="text-xs text-gray-400 mt-0.5">Set a custom market value for your view</div>
+                    <div className="text-xs text-menu-secondary mt-0.5">Set a custom market value for your view</div>
                   </div>
                 </div>
                 <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
@@ -3059,8 +3080,8 @@ const Collection = () => {
                     {/* Compact Details Row */}
                     <div className="flex items-center justify-between mt-2 text-xs">
                       <div className="flex items-center gap-4">
-                        <span className="text-gray-400">Qty: <span className="text-white font-medium">{order.quantity}</span></span>
-                        <span className="text-gray-400">Price: <span className="text-white font-medium">{formatPrice((order.price_cents || 0) / 100)}</span></span>
+                        <span className="text-gray-400">Qty: <span className="text-white font-medium">{getRemainingCount(order)}</span></span>
+                        <span className="text-gray-400">Price: <span className="text-white font-medium">{formatPrice((order.price_per_item_cents || 0) / 100)}</span></span>
                         {order.retailer_name && (
                           <span className="text-gray-400">Location: <span className="text-white font-medium">{order.retailer_name}</span></span>
                         )}
@@ -3143,7 +3164,7 @@ const Collection = () => {
                       })}
                     </div>
                     <div className="text-xs text-gray-400 mt-1">
-                      Qty: {order.quantity} • Price: {formatPrice((order.price_cents || 0) / 100)}
+                      Qty: {getRemainingCount(order)} • Price: {formatPrice((order.price_per_item_cents || 0) / 100)}
                       {order.retailer_name && ` • Location: ${order.retailer_name}`}
                     </div>
                   </div>
@@ -3257,10 +3278,13 @@ const Collection = () => {
 
 // Mark as Sold Modal Component
 const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
+  const remainingQuantity = getRemainingCount(order);
+  const alreadySold = getSoldCount(order);
+  
   const [formData, setFormData] = useState({
     sellDate: new Date().toISOString().split('T')[0],
     sellPrice: '',
-    quantity: order?.quantity || 1,
+    quantity: Math.min(1, remainingQuantity), // Default to 1 or remaining, whichever is smaller
     location: '',
     fees: 0,
     notes: ''
@@ -3275,6 +3299,16 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center modal-overlay">
       <div className="bg-gray-800 rounded-lg p-6 w-80 max-w-[90vw]">
         <h3 className="text-white font-medium mb-4">Mark as Sold</h3>
+        {alreadySold > 0 && (
+          <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded-lg">
+            <p className="text-yellow-300 text-sm">
+              🟡 Partially sold: {alreadySold} of {order?.quantity} already sold
+            </p>
+            <p className="text-gray-400 text-xs mt-1">
+              Remaining: {remainingQuantity} available to sell
+            </p>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-gray-300 text-sm mb-1">Sell Date</label>
@@ -3300,11 +3334,13 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
           </div>
           
           <div>
-            <label className="block text-gray-300 text-sm mb-1">Quantity Sold</label>
+            <label className="block text-gray-300 text-sm mb-1">
+              Quantity to Sell (max: {remainingQuantity})
+            </label>
             <input
               type="number"
               min="1"
-              max={order?.quantity || 1}
+              max={remainingQuantity}
               value={formData.quantity}
               onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value)})}
               className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"

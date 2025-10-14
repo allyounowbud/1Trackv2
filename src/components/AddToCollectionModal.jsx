@@ -336,6 +336,7 @@ const AddToCollectionModal = ({
         price_per_item_cents: buyPriceCents, // Price per item
         total_cost_cents: totalCostCents, // Total cost for this order
         quantity: parseInt(formData.quantity),
+        quantity_sold: 0, // Initialize as not sold
         notes: formData.buyNotes || null,
         retailer_name: formData.buyLocation || null, // Store custom location name
         

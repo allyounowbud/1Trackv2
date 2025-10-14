@@ -2706,7 +2706,7 @@ const SearchApi = () => {
                   </div>
                   
                   {/* Singles/Sealed Toggle */}
-                <div className="flex bg-gray-800 rounded-lg p-1">
+                <div className="flex bg-gray-200 rounded-xl p-1">
                   <button
                     onClick={async () => {
                       setExpansionViewMode('singles');
@@ -2719,10 +2719,10 @@ const SearchApi = () => {
                       await searchCacheService.forceClearAllCache();
                       performExpansionSearch(selectedExpansion.id, 1, false, 'singles', true, filterValues);
                     }}
-                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                       expansionViewMode === 'singles'
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-gray-400 hover:text-white'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-transparent text-gray-600 hover:text-gray-800'
                     }`}
                   >
                     Singles
@@ -2739,10 +2739,10 @@ const SearchApi = () => {
                       
                       performExpansionSearch(selectedExpansion.id, 1, false, 'sealed', true, filterValues);
                     }}
-                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                       expansionViewMode === 'sealed'
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-gray-400 hover:text-white'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-transparent text-gray-600 hover:text-gray-800'
                     }`}
                   >
                     Sealed
@@ -2803,12 +2803,12 @@ const SearchApi = () => {
               return (
                <div
                  key={`${card.id}-${index}`}
-                  className={`rounded-lg overflow-hidden border transition-colors cursor-pointer bg-transparent relative ${
+                  className={`rounded-lg overflow-hidden border-gray-200 transition-colors cursor-pointer bg-white relative ${
                     contextMultiSelectMode
                       ? isSelected
-                        ? 'border-indigo-400 bg-indigo-900/30 hover:bg-indigo-900/50 hover:border-indigo-300'
-                        : 'border-gray-700 hover:bg-gray-800/50 hover:border-gray-600'
-                      : 'border-gray-700 hover:bg-gray-800/50 hover:border-gray-600'
+                        ? 'border-indigo-300 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-300'
+                        : 'border hover:bg-gray-100 hover:border-gray-300'
+                      : 'border hover:bg-gray-100 hover:border-gray-300'
                   }`}
                   onClick={(e) => {
                     handleCardClick(card);
