@@ -1138,6 +1138,7 @@ const PokemonPage = () => {
         />
       )}
       
+
       {/* Cart Bottom Menu */}
       <CartBottomMenu
         cartItems={cartItems}

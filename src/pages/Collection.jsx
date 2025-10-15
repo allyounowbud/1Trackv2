@@ -1705,8 +1705,9 @@ const Collection = () => {
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" />
       )}
 
+
       {/* Bulk Selection Preview Bar - Fixed at bottom with expandable actions */}
-      {isBulkSelectionMode && !showOverridePriceModal && selectedItems.size > 0 && (
+      {false && isBulkSelectionMode && !showOverridePriceModal && selectedItems.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-50 transition-all duration-300 ease-out rounded-t-3xl bg-menu border-t border-menu"
         style={{ 
           bottom: '-1px',

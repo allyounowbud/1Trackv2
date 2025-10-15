@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import BottomNavigation from './BottomNavigation';
 import DesktopSidebar from './DesktopSidebar';
 import GlobalHeader from './GlobalHeader';
+import { UniversalBottomNavigation, UniversalTopSearchBar } from '../ui';
 import { useModal } from '../../contexts/ModalContext';
 import { useCart } from '../../contexts/CartContext';
 
@@ -16,6 +17,9 @@ const ResponsiveLayout = ({ children }) => {
 
   // Check if we should show the global header (exclude settings and admin pages)
   const shouldShowGlobalHeader = !location.pathname.startsWith('/settings') && !location.pathname.startsWith('/admin');
+  
+  // Check if bulk menu is active (hide bottom nav when true)
+  const isBulkMenuActive = isBulkSelectionMode || isCartMenuOpen || isCollectionMenuOpen;
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -45,7 +49,7 @@ const ResponsiveLayout = ({ children }) => {
     // Desktop layout with sidebar
     return (
       <div className="desktop-app-container">
-        {shouldShowGlobalHeader && <GlobalHeader />}
+        {shouldShowGlobalHeader && <UniversalTopSearchBar />}
         <DesktopSidebar 
           currentPath={location.pathname} 
           onExpandedChange={setSidebarExpanded}
@@ -60,17 +64,22 @@ const ResponsiveLayout = ({ children }) => {
   // Mobile layout with bottom navigation
   return (
     <div className="app-container">
-      {shouldShowGlobalHeader && <GlobalHeader />}
+      {shouldShowGlobalHeader && <UniversalTopSearchBar />}
       {/* Main Content Area - with proper spacing for bottom nav and header */}
       <div className={`main-content ${shouldShowGlobalHeader ? 'pt-[50px]' : ''}`}>
         {children}
       </div>
       
-      {/* Bottom Navigation - Show normal nav when all menus are closed */}
-      {!isCartMenuOpen && !isBulkSelectionMode && !isCollectionMenuOpen && (
+      {/* Universal Bottom Navigation - Hidden when bulk menu is active */}
+      <UniversalBottomNavigation 
+        isVisible={!isBulkMenuActive}
+      />
+      
+      {/* Legacy Bottom Navigation - Keep for custom buttons */}
+      {isBulkMenuActive && customBottomButtons && (
         <BottomNavigation 
           currentPath={location.pathname} 
-          customButtons={null}
+          customButtons={customBottomButtons}
         />
       )}
     </div>

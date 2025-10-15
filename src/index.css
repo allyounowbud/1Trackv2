@@ -248,7 +248,7 @@
   }
 
   html {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     font-weight: 200;
     background-color: rgb(var(--bg-primary));
     margin: 0;
@@ -278,6 +278,7 @@
   }
   
   body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     font-weight: 200;
     background-color: rgb(var(--bg-primary));
     color: rgb(var(--text-primary));
@@ -288,6 +289,7 @@
   
   /* Make all text elements use thin font by default */
   h1, h2, h3, h4, h5, h6, p, span, div, button, input, textarea, select {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     font-weight: 200;
   }
   
@@ -505,6 +507,30 @@
   
   *::-webkit-scrollbar {
     display: none; /* Webkit browsers */
+  }
+
+  /* Custom scrollbar for bulk menu actions */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    -ms-overflow-style: auto;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+    display: block;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(107, 114, 128); /* gray-500 */
+    border-radius: 2px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(75, 85, 99); /* gray-600 */
   }
 
   /* Line clamp utilities */

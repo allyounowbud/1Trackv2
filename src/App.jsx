@@ -18,6 +18,7 @@ import Orders from './pages/Orders';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
 import Login from './pages/Login';
+import UniversalComponentsTest from './pages/UniversalComponentsTest';
 import LoadingScreen from './components/LoadingScreen';
 import './index.css';
 
@@ -77,6 +78,9 @@ function App() {
                           
                           {/* Admin routes */}
                           <Route path="/admin" element={<AdminDashboard />} />
+                          
+                          {/* Universal Components Test Page */}
+                          <Route path="/test-components" element={<UniversalComponentsTest />} />
                         </Routes>
                       </ResponsiveLayout>
                     </AuthGuard>
