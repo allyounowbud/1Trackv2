@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   getRemainingCount,
   getSoldCount,
@@ -41,6 +41,17 @@ const UniversalOrderBook = ({
 }) => {
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
+  const [isDragging, setIsDragging] = useState(false);
+  const [startY, setStartY] = useState(0);
+  const [currentY, setCurrentY] = useState(0);
+  const [translateY, setTranslateY] = useState(0);
+
+  // Reset translateY when order book closes
+  useEffect(() => {
+    if (!isVisible) {
+      setTranslateY(0);
+    }
+  }, [isVisible]);
 
   if (!isVisible) return null;
 
@@ -132,25 +143,75 @@ const UniversalOrderBook = ({
     setEditFormData({});
   };
 
+  // Touch event handlers for swipe to close
+  const handleTouchStart = (e) => {
+    setIsDragging(true);
+    setStartY(e.touches[0].clientY);
+    setCurrentY(e.touches[0].clientY);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+
+    const touchY = e.touches[0].clientY;
+    const deltaY = touchY - startY;
+
+    // Only allow downward swipes
+    if (deltaY > 0) {
+      setTranslateY(deltaY);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDragging) return;
+
+    setIsDragging(false);
+
+    // If swiped down more than 100px, close the order book
+    if (translateY > 100) {
+      onClose();
+    } else {
+      // Snap back to original position
+      setTranslateY(0);
+    }
+  };
+
   return (
-    <div className={`fixed inset-0 bg-black/50 flex items-center justify-center modal-overlay z-50`}>
-      <div className={`${styles.container} rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden`}>
+    <div className="fixed bottom-0 left-0 right-0 z-[60]" data-order-book>
+      <div 
+        className={`overflow-hidden transition-all duration-300 ease-in-out z-[59] ${isDragging ? '' : 'transition-all duration-300 ease-out'}`}
+        style={{ 
+          backgroundColor: '#1a1f2e',
+          transform: `translateY(${translateY}px)`
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         {/* Header */}
-        <div className={`${styles.header} rounded-lg p-4 mb-4`}>
+        <div className="px-6 py-3 rounded-t-3xl" style={{ backgroundColor: '#1a1f2e' }}>
+          {/* iPhone-style swipe indicator */}
+          <div className="flex justify-center mb-4">
+            <div className="w-10 h-1 bg-gray-400 rounded-full"></div>
+          </div>
           <div className="flex items-center justify-between">
             <div>
-              <h3 className={`text-lg font-semibold ${styles.text}`}>
+              <h3 className="text-lg font-semibold text-white">
                 Viewing On Hand Orders
               </h3>
-              <p className={`text-sm ${styles.textSecondary} mt-1`}>
+              <p className="text-sm text-gray-400 mt-1">
                 Edit, mark as sold or delete orders all together
               </p>
             </div>
             <button
-              onClick={onClose}
-              className={`w-8 h-8 rounded-full ${styles.button} flex items-center justify-center transition-colors`}
+              onClick={() => {
+                setTranslateY(0);
+                onClose();
+              }}
+              className="bg-white hover:bg-gray-100 rounded flex items-center justify-center transition-colors"
+              style={{ width: '24px', height: '24px' }}
             >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-3 h-3 text-black" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
               </svg>
             </button>
@@ -158,7 +219,7 @@ const UniversalOrderBook = ({
         </div>
 
         {/* Orders List */}
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+        <div className="px-6 py-3 space-y-4 max-h-[60vh] overflow-y-auto">
           {orders.length === 0 ? (
             <div className="text-center py-8">
               <div className="text-gray-400 text-lg mb-2">No orders found</div>
@@ -348,13 +409,16 @@ const UniversalOrderBook = ({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-between items-center pt-4 border-t border-gray-600 mt-4">
-          <div className={`text-sm ${styles.textSecondary}`}>
+        <div className="px-6 py-3 flex justify-between items-center border-t" style={{ borderTopColor: 'rgba(75, 85, 99, 0.4)' }}>
+          <div className="text-sm text-gray-400">
             {orders.length} Order{orders.length !== 1 ? 's' : ''} Total
           </div>
           <button
-            onClick={onClose}
-            className={`px-4 py-2 ${styles.button} rounded-lg font-medium transition-colors`}
+            onClick={() => {
+              setTranslateY(0);
+              onClose();
+            }}
+            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
           >
             Close
           </button>

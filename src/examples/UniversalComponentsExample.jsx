@@ -17,6 +17,7 @@ import {
  * using the new universal components.
  */
 const UniversalComponentsExample = () => {
+  // Force refresh to ensure changes are applied
   // State management
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItems, setSelectedItems] = useState(new Set());
@@ -124,45 +125,41 @@ const UniversalComponentsExample = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Page Header */}
+      {/* Page Header - Match Collection page structure */}
       <div className="bg-white border-b border-gray-200 px-4 py-6">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Universal Components Example
-          </h1>
-          
-          {/* Search Bar */}
-          <UniversalSearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search your items..."
-            variant="collection"
-            showResultsCount={true}
-            resultsCount={mockItems.length}
-            onClear={handleSearchClear}
-          />
-        </div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">
+          Universal Components Example
+        </h1>
+        
+        {/* Search Bar */}
+        <UniversalSearchBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search your items..."
+          variant="collection"
+          showResultsCount={true}
+          resultsCount={mockItems.length}
+          onClear={handleSearchClear}
+        />
       </div>
 
-      {/* Items Grid */}
-      <UniversalGrid
-        variant="collection"
-        showSelectionHint={!isBulkSelectionMode}
-        hasBulkMenu={showBulkMenu}
-      >
-        {mockItems.map((item) => (
-          <UniversalCard
-            key={item.id}
-            item={item}
-            variant="collection"
-            isSelected={selectedItems.has(item.id)}
-            showSelection={isBulkSelectionMode}
-            onClick={() => handleItemClick(item)}
-            onLongPress={() => handleLongPress(item.id)}
-            onSelectionChange={() => handleSelectionToggle(item.id)}
-          />
-        ))}
-      </UniversalGrid>
+      {/* Items Grid - Direct Collection page structure */}
+      <div className={`px-4 md:px-6 lg:px-8 ${showBulkMenu ? 'pb-24' : 'pb-4'}`}>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
+          {mockItems.map((item) => (
+            <UniversalCard
+              key={item.id}
+              item={item}
+              variant="collection"
+              isSelected={selectedItems.has(item.id)}
+              showSelection={isBulkSelectionMode}
+              onClick={() => handleItemClick(item)}
+              onLongPress={() => handleLongPress(item.id)}
+              onSelectionChange={() => handleSelectionToggle(item.id)}
+            />
+          ))}
+        </div>
+      </div>
 
       {/* Bulk Menu */}
       <UniversalBulkMenu

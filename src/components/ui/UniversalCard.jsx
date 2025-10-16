@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import SafeImage from '../SafeImage';
 
 /**
@@ -18,6 +18,9 @@ import SafeImage from '../SafeImage';
  * @param {Function} props.onClick - Click handler
  * @param {Function} props.onLongPress - Long press handler
  * @param {Function} props.onSelectionChange - Selection change handler
+ * @param {Function} props.onViewOrderBook - View order book handler
+ * @param {Function} props.onOverridePrice - Override price handler
+ * @param {Function} props.onDelete - Delete item handler
  * @param {Object} props.className - Additional CSS classes
  * @param {Object} props.children - Additional content to render inside card
  */
@@ -32,6 +35,10 @@ const UniversalCard = ({
   onClick,
   onLongPress,
   onSelectionChange,
+  onMenuClick,
+  onViewOrderBook,
+  onOverridePrice,
+  onDelete,
   className = '',
   children,
   ...props
@@ -42,10 +49,12 @@ const UniversalCard = ({
     
     switch (variant) {
       case 'collection':
-        return `${baseStyles} bg-gray-800 ${
+        return `${baseStyles} ${
           isSelected 
-            ? 'border-indigo-400 bg-gray-700' 
-            : 'hover:bg-gray-700'
+            ? 'bg-indigo-900/30 border-indigo-400' 
+            : showSelection 
+              ? 'bg-gray-800 hover:bg-gray-700/50' 
+              : 'bg-gray-800 hover:bg-gray-700/50'
         }`;
       
       case 'pokemon':
@@ -74,10 +83,13 @@ const UniversalCard = ({
   // Get border style for subtle grey
   const getBorderStyle = () => {
     if (isSelected) {
-      return {}; // Let Tailwind handle selected state borders
+      return {
+        border: '1px solid #818cf8' // indigo-400 for selected state
+      };
     }
+    // Use inline style to ensure our border styling takes precedence
     return {
-      border: '1px solid rgba(75, 85, 99, 0.4)'
+      border: '1px solid rgba(107, 114, 128, 0.45)' // gray-500 with 45% opacity
     };
   };
 
@@ -143,7 +155,7 @@ const UniversalCard = ({
       
       return {
         show: true,
-        text: 'Sealed',
+        text: item.condition || 'Sealed',
         color: isProfit ? 'text-green-400' : 'text-red-400',
         icon: isProfit ? (
           <svg className="w-2.5 h-2.5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
@@ -163,6 +175,8 @@ const UniversalCard = ({
   const statusDisplay = getStatusDisplay();
   const longPressTimeout = useRef(null);
   const longPressTriggered = useRef(false);
+  
+  // Menu state
 
   const handleTouchStart = (e) => {
     longPressTriggered.current = false;
@@ -225,6 +239,21 @@ const UniversalCard = ({
     }
   };
 
+  const handleMenuClick = (e) => {
+    e.stopPropagation();
+    if (showSelection && onSelectionChange) {
+      onSelectionChange();
+    } else {
+      // Select this card and trigger actions menu directly
+      onSelectionChange();
+      // The parent component will handle opening the actions menu
+      if (onMenuClick) {
+        onMenuClick();
+      }
+    }
+  };
+
+
   return (
     <div
       className={`${getCardStyles()} ${className}`}
@@ -236,22 +265,9 @@ const UniversalCard = ({
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
+      onContextMenu={(e) => e.preventDefault()}
       {...props}
     >
-      {/* Selection Indicator */}
-      {showSelection && (
-        <div className="absolute top-2 left-2 z-10">
-          {isSelected ? (
-            <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
-              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-            </div>
-          ) : (
-            <div className="w-4 h-4 rounded-full border-2 border-gray-300 bg-white"></div>
-          )}
-        </div>
-      )}
 
       {/* Cart Quantity Indicator */}
       {showCartIndicator && isInCart && cartQuantity > 0 && (
@@ -283,51 +299,87 @@ const UniversalCard = ({
       </div>
       
       {/* Card Details */}
-      <div className="p-3 space-y-1">
-        {/* Item Name */}
-        <div>
+      <div className="p-2 pl-4">
+        {/* Item Name and Set - grouped together */}
+        <div className="mb-3">
           <h3 className={`${textSizes.title} font-semibold text-white leading-tight line-clamp-2`}>
             {item.name || 'Unknown Item'}
-            {item.cardNumber && (
-              <span className="text-blue-400"> #{item.cardNumber}</span>
-            )}
           </h3>
           <div className={`${textSizes.subtitle} truncate`} style={{ color: '#9ca3af' }}>
             {item.set || item.set_name || item.expansion_name || 'Unknown Set'}
           </div>
         </div>
         
-        {/* Status */}
-        {statusDisplay.show && (
-          <div className="flex items-center gap-1">
-            <span className={`${textSizes.subtitle} text-blue-400 font-medium`}>
-              {statusDisplay.text}
-            </span>
-            {statusDisplay.icon}
-          </div>
-        )}
-        
-        {/* Financial Details - Collection variant specific */}
-        {variant === 'collection' && (
-          <div className="space-y-0.5">
-            <div className={`${textSizes.price} text-white`}>
-              {formatPrice(item.value)} Value • Qty {item.quantity || 1}
+        {/* Status, Value, and Paid - grouped together */}
+        <div className="space-y-1">
+          {/* Status */}
+          {statusDisplay.show && (
+            <div className="flex items-center gap-1">
+              <span className={`${textSizes.subtitle} text-blue-400 font-medium`}>
+                {statusDisplay.text}
+              </span>
+              {item.cardNumber && (
+                <span className={`${textSizes.subtitle} text-gray-400`}>
+                  #{item.cardNumber}
+                </span>
+              )}
             </div>
-            <div className={`${textSizes.price} text-white`}>
-              {formatPrice(item.totalPaid)} Paid 
-              {(() => {
-                const profit = item.value - item.totalPaid;
-                const profitPercent = item.totalPaid ? ((profit / item.totalPaid) * 100) : 0;
-                const isProfit = profit >= 0;
-                return (
-                  <span className={`ml-1 ${isProfit ? 'text-green-400' : 'text-red-400'}`}>
-                    ({isProfit ? '+' : ''}{profitPercent.toFixed(1)}%)
-                  </span>
-                );
-              })()}
+          )}
+          
+          {/* Financial Details - Collection variant specific */}
+          {variant === 'collection' && (
+            <div className="flex items-end justify-between">
+              <div className="space-y-0.5 flex-1">
+                <div className={`${textSizes.price} text-white`}>
+                  {formatPrice(item.value)} Value • Qty {item.quantity || 1}
+                </div>
+                <div className={`${textSizes.price} text-white`}>
+                  {formatPrice(item.totalPaid)} Cost 
+                  {(() => {
+                    const profit = item.value - item.totalPaid;
+                    const profitPercent = item.totalPaid ? ((profit / item.totalPaid) * 100) : 0;
+                    const isProfit = profit >= 0;
+                    return (
+                      <span className={`ml-1 ${isProfit ? 'text-green-400' : 'text-red-400'}`}>
+                        ({isProfit ? '+' : ''}{profitPercent.toFixed(1)}%)
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
+              
+              {/* Selection Checkbox / Menu Button - moved to bottom right */}
+              <div className="ml-1 mr-2 mb-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleMenuClick(e);
+                  }}
+                  className="w-4 h-4 rounded-full flex items-center justify-center"
+                  aria-label={showSelection ? (isSelected ? "Deselect item" : "Select item") : "Item menu"}
+                >
+                  {showSelection ? (
+                    isSelected ? (
+                      <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    ) : (
+                      <div className="w-4 h-4 rounded-full border-2 border-gray-300 bg-white"></div>
+                    )
+                  ) : (
+                    <div className="w-4 h-4 rounded-full border-2 border-gray-300 bg-white flex items-center justify-center">
+                      <svg className="w-2 h-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                      </svg>
+                    </div>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Pokemon/Search variant specific details */}
         {(variant === 'pokemon' || variant === 'search') && item.price && (
@@ -339,6 +391,7 @@ const UniversalCard = ({
         {/* Additional children content */}
         {children}
       </div>
+
     </div>
   );
 };

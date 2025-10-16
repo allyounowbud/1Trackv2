@@ -39,6 +39,7 @@ const UniversalComponentsTest = () => {
   const [searchSelectedItems, setSearchSelectedItems] = useState(new Set());
   const [isCollectionActionsMenuOpen, setIsCollectionActionsMenuOpen] = useState(false);
   const [isSearchActionsMenuOpen, setIsSearchActionsMenuOpen] = useState(false);
+  const [shouldPreOpenActions, setShouldPreOpenActions] = useState(false);
 
   // Prevent body scroll when any actions menu is open
   React.useEffect(() => {
@@ -61,12 +62,20 @@ const UniversalComponentsTest = () => {
       document.body.style.width = '';
     };
   }, [isCollectionActionsMenuOpen, isSearchActionsMenuOpen]);
+
+  // Ensure blur overlay is cleared when bulk menu closes
+  React.useEffect(() => {
+    if (!isCollectionSelectionMode && collectionSelectedItems.size === 0) {
+      setIsCollectionActionsMenuOpen(false);
+    }
+  }, [isCollectionSelectionMode, collectionSelectedItems.size]);
   
   // Modal states
   const [showAddToCollectionModal, setShowAddToCollectionModal] = useState(false);
   const [showMultiItemOrderModal, setShowMultiItemOrderModal] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [showLoadingModal, setShowLoadingModal] = useState(false);
+  const [selectedItemForCollection, setSelectedItemForCollection] = useState(null);
   const [confirmationConfig, setConfirmationConfig] = useState({
     title: '',
     message: '',
@@ -80,6 +89,8 @@ const UniversalComponentsTest = () => {
       id: 1,
       name: 'Charizard ex',
       set: 'Obsidian Flames',
+      cardNumber: '025',
+      condition: 'Near Mint',
       image: 'https://images.pokemontcg.io/sv4pt5/025_hires.png',
       imageUrl: 'https://images.pokemontcg.io/sv4pt5/025_hires.png',
       value: 89.99,
@@ -96,6 +107,8 @@ const UniversalComponentsTest = () => {
       id: 2,
       name: 'Mew ex',
       set: '151',
+      cardNumber: '151',
+      condition: 'Lightly Played',
       image: 'https://images.pokemontcg.io/sv4/151_hires.png',
       imageUrl: 'https://images.pokemontcg.io/sv4/151_hires.png',
       value: 45.00,
@@ -112,6 +125,8 @@ const UniversalComponentsTest = () => {
       id: 3,
       name: 'Pikachu ex',
       set: '151',
+      cardNumber: '173',
+      condition: 'Sealed',
       image: 'https://images.pokemontcg.io/sv4/173_hires.png',
       imageUrl: 'https://images.pokemontcg.io/sv4/173_hires.png',
       value: 125.00,
@@ -319,6 +334,33 @@ const UniversalComponentsTest = () => {
       quantity: 5,
       quantity_sold: 0,
       price_per_item_cents: 500
+    },
+    {
+      id: 3,
+      order_number: 'ORD-003',
+      purchase_date: '2024-02-03',
+      retailer_name: 'GameStop',
+      quantity: 2,
+      quantity_sold: 2,
+      price_per_item_cents: 2500
+    },
+    {
+      id: 4,
+      order_number: 'ORD-004',
+      purchase_date: '2024-02-10',
+      retailer_name: 'Target',
+      quantity: 4,
+      quantity_sold: 1,
+      price_per_item_cents: 1800
+    },
+    {
+      id: 5,
+      order_number: 'ORD-005',
+      purchase_date: '2024-02-18',
+      retailer_name: 'Walmart',
+      quantity: 1,
+      quantity_sold: 0,
+      price_per_item_cents: 7500
     }
   ];
 
@@ -497,7 +539,10 @@ const UniversalComponentsTest = () => {
   const currentItems = getCurrentItems();
 
   return (
-    <div className={`min-h-screen bg-gray-50 ${(isCollectionActionsMenuOpen || isSearchActionsMenuOpen) ? 'pointer-events-none' : ''}`}>
+    <div 
+      className={`min-h-screen bg-gray-50 ${(isCollectionActionsMenuOpen || isSearchActionsMenuOpen) ? 'pointer-events-none' : ''}`}
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {/* Page Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-6">
         <div className="max-w-7xl mx-auto">
@@ -582,69 +627,119 @@ const UniversalComponentsTest = () => {
       </div>
 
       {/* Page-like Sections for Testing */}
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-8">
+      <div className="py-6 space-y-8" style={{ paddingLeft: '10px', paddingRight: '10px' }}>
         
         {/* Collection Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Collection Page Simulation</h2>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Items in your collection</span>
-              <button
-                onClick={() => {
-                  setIsCollectionSelectionMode(!isCollectionSelectionMode);
-                  if (isCollectionSelectionMode) {
-                    setCollectionSelectedItems(new Set());
-                  }
-                }}
-                className={`px-3 py-1 rounded-md text-sm transition-colors ${
-                  isCollectionSelectionMode
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                {isCollectionSelectionMode ? 'Exit Selection' : 'Enter Selection'}
-              </button>
+        <div className="bg-white rounded-lg border border-gray-200">
+          <div className="p-6 pb-0">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Collection Page Simulation</h2>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Items in your collection</span>
+                <button
+                  onClick={() => {
+                    setIsCollectionSelectionMode(!isCollectionSelectionMode);
+                    if (isCollectionSelectionMode) {
+                      setCollectionSelectedItems(new Set());
+                    }
+                  }}
+                  className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                    isCollectionSelectionMode
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {isCollectionSelectionMode ? 'Exit Selection' : 'Enter Selection'}
+                </button>
+              </div>
             </div>
           </div>
           
-          {/* Collection Items Grid */}
-          <UniversalGrid
-            variant="collection"
-            showSelectionHint={!isCollectionSelectionMode}
-            hasBulkMenu={isCollectionSelectionMode && collectionSelectedItems.size > 0}
-          >
-            {mockCollectionItems.slice(0, 12).map((item) => (
-              <UniversalCard
-                key={item.id}
-                item={item}
-                variant="collection"
-                isSelected={collectionSelectedItems.has(item.id)}
-                showSelection={isCollectionSelectionMode}
-                onClick={() => {
-                  if (isCollectionSelectionMode) {
+          {/* Selection Hint */}
+          {!isCollectionSelectionMode && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/>
+                </svg>
+                <span className="text-sm text-blue-700">
+                  Press and hold any item to start selecting multiple items
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Collection Items Grid - Exact Collection page structure */}
+          <div className={`${isCollectionSelectionMode && collectionSelectedItems.size > 0 ? 'pb-24' : 'pb-4'}`}>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4" style={{ gap: '10px' }}>
+               {mockCollectionItems.slice(0, 12).map((item) => (
+                 <UniversalCard
+                   key={item.id}
+                   item={item}
+                   variant="collection"
+                   isSelected={collectionSelectedItems.has(item.id)}
+                   showSelection={isCollectionSelectionMode}
+                  onClick={() => {
+                    if (isCollectionSelectionMode) {
+                      const newSelected = new Set(collectionSelectedItems);
+                      if (newSelected.has(item.id)) {
+                        newSelected.delete(item.id);
+                        // Exit selection mode if no items are selected
+                        if (newSelected.size === 0) {
+                          setIsCollectionSelectionMode(false);
+                          setIsCollectionActionsMenuOpen(false);
+                        }
+                      } else {
+                        newSelected.add(item.id);
+                        // Don't open actions menu on card click - only on menu button click
+                      }
+                      setCollectionSelectedItems(newSelected);
+                    }
+                  }}
+                  onLongPress={() => {
+                    if (!isCollectionSelectionMode) {
+                      setIsCollectionSelectionMode(true);
+                      setCollectionSelectedItems(new Set([item.id]));
+                      // Don't open actions menu on long press - just show preview
+                    }
+                  }}
+                  onSelectionChange={() => {
                     const newSelected = new Set(collectionSelectedItems);
                     if (newSelected.has(item.id)) {
                       newSelected.delete(item.id);
                       // Exit selection mode if no items are selected
                       if (newSelected.size === 0) {
                         setIsCollectionSelectionMode(false);
+                        setIsCollectionActionsMenuOpen(false);
                       }
                     } else {
                       newSelected.add(item.id);
+                      // Enter selection mode but don't open actions menu yet
+                      setIsCollectionSelectionMode(true);
                     }
                     setCollectionSelectedItems(newSelected);
-                  }
-                }}
-                onLongPress={() => {
-                  if (!isCollectionSelectionMode) {
-                    setIsCollectionSelectionMode(true);
-                    setCollectionSelectedItems(new Set([item.id]));
-                  }
-                }}
-              />
-            ))}
-          </UniversalGrid>
+                  }}
+                  onMenuClick={() => {
+                    // Menu button clicked - pre-open actions menu and set item for order book
+                    setShouldPreOpenActions(true);
+                    setSelectedItemForOrderBook(item);
+                  }}
+                  onViewOrderBook={(item) => {
+                    setSelectedItemForOrderBook(item);
+                    // This will be handled by the UniversalBulkMenu when View Order Book is clicked
+                  }}
+                  onOverridePrice={(item) => {
+                    console.log('Override Price for item:', item.name);
+                    // Add your price override logic here
+                  }}
+                  onDelete={(item) => {
+                    console.log('Delete item:', item.name);
+                    // Add your delete logic here
+                  }}
+                />
+               ))}
+             </div>
+           </div>
           
         </div>
 
@@ -1102,32 +1197,25 @@ const UniversalComponentsTest = () => {
         showExport={false}
       />
 
-      {/* Order Book */}
-      <UniversalOrderBook
-        isVisible={showOrderBook}
-        orders={mockOrders}
-        item={selectedItemForOrderBook}
-        variant={activeVariant}
-        onClose={handleOrderBookClose}
-        onEdit={handleOrderEdit}
-        onDelete={handleOrderDelete}
-        onMarkAsSold={handleMarkAsSold}
-        showEditActions={true}
-        showDeleteActions={true}
-        showMarkAsSoldActions={true}
-      />
 
       {/* Modal Components */}
       <AddToCollectionModal
+        product={selectedItemForCollection ? {
+          name: selectedItemForCollection.name,
+          set: selectedItemForCollection.set,
+          imageUrl: selectedItemForCollection.image || selectedItemForCollection.imageUrl,
+          api_id: selectedItemForCollection.id,
+          itemType: selectedItemForCollection.condition || 'Single'
+        } : null}
         isOpen={showAddToCollectionModal}
-        onClose={() => setShowAddToCollectionModal(false)}
-        selectedItems={selectedItems.size > 0 
-          ? Array.from(selectedItems).map(id => currentItems.find(item => item.id === id)).filter(Boolean)
-          : [currentItems[0]] // Fallback to first item if none selected
-        }
+        onClose={() => {
+          setShowAddToCollectionModal(false);
+          setSelectedItemForCollection(null);
+        }}
         onSuccess={() => {
           console.log('Add to collection success');
           setShowAddToCollectionModal(false);
+          setSelectedItemForCollection(null);
         }}
       />
 
@@ -1175,12 +1263,17 @@ const UniversalComponentsTest = () => {
         totalItems={mockCollectionItems.length}
         variant="collection"
         onAddToCart={() => console.log('Collection: Add to cart')}
-        onViewOrderBook={() => console.log('Collection: View order book')}
+        onViewOrderBook={() => {
+          // This will be called when View Order Book button is clicked in actions menu
+          // The UniversalBulkMenu will handle opening the order book internally
+        }}
         onOverridePrice={() => console.log('Collection: Override price')}
         onDelete={() => console.log('Collection: Delete items')}
         onCancel={() => {
           setCollectionSelectedItems(new Set());
           setIsCollectionSelectionMode(false);
+          setIsCollectionActionsMenuOpen(false);
+          setShouldPreOpenActions(false);
         }}
         onItemUnselect={(itemId) => {
           setCollectionSelectedItems(prev => {
@@ -1189,6 +1282,8 @@ const UniversalComponentsTest = () => {
             // Exit selection mode if no items are selected
             if (newSelected.size === 0) {
               setIsCollectionSelectionMode(false);
+              setIsCollectionActionsMenuOpen(false);
+              setShouldPreOpenActions(false);
             }
             return newSelected;
           });
@@ -1199,8 +1294,23 @@ const UniversalComponentsTest = () => {
         onDeselectAll={() => {
           setCollectionSelectedItems(new Set());
           setIsCollectionSelectionMode(false);
+          setIsCollectionActionsMenuOpen(false);
+          setShouldPreOpenActions(false);
         }}
-        onActionsMenuToggle={(isOpen) => setIsCollectionActionsMenuOpen(isOpen)}
+        onActionsMenuToggle={(isOpen) => {
+          setIsCollectionActionsMenuOpen(isOpen);
+          // Reset preOpenActions when actions menu closes
+          if (!isOpen) {
+            setShouldPreOpenActions(false);
+          }
+        }}
+        preOpenActions={shouldPreOpenActions}
+        preOpenOrderBook={false}
+        orders={mockOrders}
+        item={selectedItemForOrderBook}
+        onEdit={handleOrderEdit}
+        onMarkAsSold={handleMarkAsSold}
+        onOrderDelete={handleOrderDelete}
       />
 
       <UniversalBulkMenu

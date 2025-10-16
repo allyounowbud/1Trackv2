@@ -14,6 +14,7 @@ import React from 'react';
  * @param {string} props.gap - Grid gap size: 'sm', 'md', 'lg'
  * @param {boolean} props.showSelectionHint - Whether to show selection hint
  * @param {boolean} props.hasBulkMenu - Whether bulk menu is active (adds bottom padding)
+ * @param {boolean} props.noContainerPadding - Whether to disable container padding
  * @param {string} props.className - Additional CSS classes
  */
 const UniversalGrid = ({
@@ -24,6 +25,7 @@ const UniversalGrid = ({
   gap = 'md',
   showSelectionHint = false,
   hasBulkMenu = false,
+  noContainerPadding = false,
   className = '',
   ...props
 }) => {
@@ -33,9 +35,9 @@ const UniversalGrid = ({
     
     // Gap styles
     const gapStyles = {
-      sm: 'gap-3',
-      md: 'gap-4 md:gap-6',
-      lg: 'gap-6 md:gap-8'
+      sm: 'gap-2.5', // 10px gap on all screen sizes
+      md: 'gap-2.5', // 10px gap on all screen sizes
+      lg: 'gap-2.5' // 10px gap on all screen sizes
     };
 
     // Layout styles
@@ -71,16 +73,21 @@ const UniversalGrid = ({
 
   // Get container padding based on bulk menu state
   const getContainerStyles = () => {
-    const baseStyles = "px-3 md:px-6 lg:px-8";
+    if (noContainerPadding) {
+      return ''; // No padding at all when noContainerPadding is true
+    }
+    const baseStyles = "px-2.5"; // 10px padding on all screen sizes
     const bottomPadding = hasBulkMenu ? 'pb-24' : 'pb-4';
     return `${baseStyles} ${bottomPadding}`;
   };
 
   return (
-    <div className={getContainerStyles()}>
+    <div 
+      className={`${getContainerStyles()} ${className}`}
+    >
       {/* Selection Hint */}
       {showSelectionHint && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className={`mb-4 bg-blue-50 border border-blue-200 rounded-lg ${noContainerPadding ? 'p-3 mx-4 md:mx-6 lg:mx-8' : 'p-3'}`}>
           <div className="flex items-center gap-2">
             <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/>
