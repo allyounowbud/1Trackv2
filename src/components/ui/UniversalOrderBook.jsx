@@ -55,6 +55,9 @@ const UniversalOrderBook = ({
 
   if (!isVisible) return null;
 
+  // Debug log to see if component is rendering
+  console.log('UniversalOrderBook rendering:', { isVisible, bottom: '122px' });
+
   // Get styling based on variant
   const getStyles = () => {
     switch (variant) {
@@ -177,12 +180,20 @@ const UniversalOrderBook = ({
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[60]" data-order-book>
+    <div 
+      className="fixed left-0 right-0 z-[60]" 
+      data-order-book 
+      style={{ 
+        bottom: '122px'
+      }}
+    >
       <div 
         className={`overflow-hidden transition-all duration-300 ease-in-out z-[59] ${isDragging ? '' : 'transition-all duration-300 ease-out'}`}
         style={{ 
           backgroundColor: '#1a1f2e',
-          transform: `translateY(${translateY}px)`
+          transform: `translateY(${translateY}px)`,
+          maxHeight: 'calc(100vh - 202px)', // Account for preview menu (122px) and header space (80px)
+          animation: isVisible ? 'slideUp 0.3s ease-out' : 'slideDown 0.3s ease-out'
         }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}

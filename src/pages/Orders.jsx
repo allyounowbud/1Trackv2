@@ -19,6 +19,33 @@ const Orders = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Ensure page scrolls to top when component mounts
+  useEffect(() => {
+    // Scroll to top when component mounts
+    const scrollToTop = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      
+      // Also target the main content containers
+      const mainContent = document.querySelector('.main-content');
+      const desktopMainContent = document.querySelector('.desktop-main-content');
+      
+      if (mainContent) {
+        mainContent.scrollTop = 0;
+      }
+      
+      if (desktopMainContent) {
+        desktopMainContent.scrollTop = 0;
+      }
+    };
+
+    scrollToTop();
+    
+    // Run again after a short delay to ensure it takes effect
+    setTimeout(scrollToTop, 100);
+  }, []);
+
   // Fetch orders with item details
   const { data: orders = [], isLoading, error } = useQuery({
     queryKey: ['orders'],
@@ -200,7 +227,7 @@ const Orders = () => {
   }
 
   return (
-    <div>
+    <div className="min-h-full">
       {/* Header */}
       <div className="px-4 md:px-6 lg:px-8 py-3">
         <div className="p-4 md:p-10 lg:p-12">

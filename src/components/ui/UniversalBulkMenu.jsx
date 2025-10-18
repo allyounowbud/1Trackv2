@@ -54,6 +54,7 @@ const UniversalBulkMenu = ({
   onEdit = null, // Order edit handler
   onMarkAsSold = null, // Order mark as sold handler
   onOrderDelete = null, // Order delete handler
+  onBulkDelete = null, // Bulk delete handler
   showEditActions = true,
   showDeleteActions = true,
   showMarkAsSoldActions = true,
@@ -68,6 +69,18 @@ const UniversalBulkMenu = ({
   const [startY, setStartY] = useState(0);
   const [currentY, setCurrentY] = useState(0);
   const [translateY, setTranslateY] = useState(0);
+  const [editingOrderId, setEditingOrderId] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+  const [originalValues, setOriginalValues] = useState({});
+  const [markingAsSoldOrderId, setMarkingAsSoldOrderId] = useState(null);
+  const [markAsSoldFormData, setMarkAsSoldFormData] = useState({});
+  const [markAsSoldOriginalValues, setMarkAsSoldOriginalValues] = useState({});
+  const [orderFilter, setOrderFilter] = useState('available'); // 'available', 'partially-sold', 'sold'
+  const [retailers, setRetailers] = useState([]);
+  const [marketplaces, setMarketplaces] = useState([]);
+  const [bulkMarkAsSold, setBulkMarkAsSold] = useState({ quantity: 0, showForm: false });
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState([]);
   const actionsMenuRef = useRef(null);
   
   // Notify parent when actions menu state changes
@@ -150,6 +163,321 @@ const UniversalBulkMenu = ({
       // Snap back to original position
       setTranslateY(0);
     }
+  };
+
+  // Load retailers and marketplaces on component mount
+  React.useEffect(() => {
+    // Mock retailers data - in real app, this would come from API
+    setRetailers([
+      { id: 1, name: 'Amazon' },
+      { id: 2, name: 'eBay' },
+      { id: 3, name: 'GameStop' },
+      { id: 4, name: 'Target' },
+      { id: 5, name: 'Walmart' },
+      { id: 6, name: 'Best Buy' },
+      { id: 7, name: 'Local Store' }
+    ]);
+
+    // Mock marketplaces data with fees
+    setMarketplaces([
+      { id: 1, name: 'eBay', fee_percentage: 12.9 },
+      { id: 2, name: 'Facebook Marketplace', fee_percentage: 0 },
+      { id: 3, name: 'Mercari', fee_percentage: 10 },
+      { id: 4, name: 'Poshmark', fee_percentage: 20 },
+      { id: 5, name: 'Local Sale', fee_percentage: 0 },
+      { id: 6, name: 'Tcgplayer', fee_percentage: 8.5 },
+      { id: 7, name: 'TCGPlayer Direct', fee_percentage: 8.5 }
+    ]);
+  }, []);
+
+  // Edit handlers
+  const handleEditStart = (orderId, orderData) => {
+    setEditingOrderId(orderId);
+    const quantity = orderData.quantity || 0;
+    const pricePerItemCents = orderData.price_per_item_cents || 0;
+    const totalCost = (pricePerItemCents * quantity) / 100;
+    
+    const formData = {
+      retailer_name: orderData.retailer_name || '',
+      purchase_date: orderData.purchase_date || '',
+      quantity: quantity,
+      price_per_item_cents: (pricePerItemCents / 100).toFixed(2), // Store as dollar amount for display
+      total_cost: totalCost.toFixed(2) // Store as dollar amount for display
+    };
+    
+    setEditFormData(formData);
+    setOriginalValues(formData);
+  };
+
+  const handleEditSave = (orderId) => {
+    if (onEdit) {
+      onEdit(orderId, editFormData);
+    }
+    setEditingOrderId(null);
+    setEditFormData({});
+  };
+
+  const handleEditCancel = () => {
+    setEditingOrderId(null);
+    setEditFormData({});
+    setOriginalValues({});
+  };
+
+  // Mark as Sold handlers
+  const handleMarkAsSoldStart = (orderId, orderData) => {
+    setMarkingAsSoldOrderId(orderId);
+    const soldQuantity = orderData.quantity_sold || 0;
+    const totalQuantity = orderData.quantity || 0;
+    const remainingQuantity = totalQuantity - soldQuantity;
+    
+    const formData = {
+      quantity_sold: 1, // Default to 1 item
+      sale_price_cents: orderData.sale_price_cents || 0,
+      sale_date: new Date().toISOString().split('T')[0], // Today's date
+      sale_location: orderData.sale_location || '',
+      fee_percentage: 0,
+      shipping_cost_cents: orderData.shipping_cost_cents || 0,
+      remaining_quantity: remainingQuantity,
+      max_quantity: remainingQuantity
+    };
+    
+    setMarkAsSoldFormData(formData);
+    setMarkAsSoldOriginalValues(formData);
+    
+    // Debug logging
+    console.log('Mark as Sold Debug:', {
+      orderId,
+      totalQuantity,
+      soldQuantity,
+      remainingQuantity,
+      formData
+    });
+  };
+
+  const handleMarkAsSoldSave = (orderId) => {
+    if (onMarkAsSold) {
+      onMarkAsSold(orderId, markAsSoldFormData);
+    }
+    setMarkingAsSoldOrderId(null);
+    setMarkAsSoldFormData({});
+    setMarkAsSoldOriginalValues({});
+  };
+
+  const handleMarkAsSoldCancel = () => {
+    setMarkingAsSoldOrderId(null);
+    setMarkAsSoldFormData({});
+    setMarkAsSoldOriginalValues({});
+  };
+
+  const handleMarkAsSoldFieldChange = (field, value) => {
+    setMarkAsSoldFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // If quantity sold changes, update remaining quantity
+      if (field === 'quantity_sold') {
+        const totalQuantity = markAsSoldFormData.remaining_quantity + (markAsSoldFormData.quantity_sold || 0);
+        newData.remaining_quantity = totalQuantity - (parseInt(value) || 0);
+      }
+      
+      return newData;
+    });
+  };
+
+  const handleMarketplaceChange = (marketplaceName) => {
+    const marketplace = marketplaces.find(m => m.name === marketplaceName);
+    setMarkAsSoldFormData(prev => ({
+      ...prev,
+      sale_location: marketplaceName,
+      fee_percentage: marketplace ? marketplace.fee_percentage : 0
+    }));
+  };
+
+  // Bulk mark as sold handlers
+  const handleBulkMarkAsSoldStart = () => {
+    const totalAvailable = getFilteredOrders().reduce((sum, order) => {
+      const soldCount = order.quantity_sold || 0;
+      const totalQuantity = order.quantity || 0;
+      const remainingCount = totalQuantity - soldCount;
+      return sum + remainingCount;
+    }, 0);
+    
+    setBulkMarkAsSold({
+      quantity: 0,
+      showForm: true,
+      maxQuantity: totalAvailable
+    });
+  };
+
+  const handleBulkMarkAsSoldSave = () => {
+    if (bulkMarkAsSold.quantity > 0 && onBulkMarkAsSold) {
+      const ordersToMark = getFilteredOrders()
+        .sort((a, b) => new Date(a.purchase_date) - new Date(b.purchase_date)) // Oldest first
+        .reduce((acc, order) => {
+          const soldCount = order.quantity_sold || 0;
+          const totalQuantity = order.quantity || 0;
+          const remainingCount = totalQuantity - soldCount;
+          
+          if (remainingCount > 0 && acc.remainingToMark > 0) {
+            const toMark = Math.min(remainingCount, acc.remainingToMark);
+            acc.orders.push({
+              orderId: order.id,
+              quantityToMark: toMark
+            });
+            acc.remainingToMark -= toMark;
+          }
+          
+          return acc;
+        }, { orders: [], remainingToMark: bulkMarkAsSold.quantity });
+      
+      onBulkMarkAsSold(ordersToMark.orders);
+    }
+    
+    setBulkMarkAsSold({ quantity: 0, showForm: false });
+  };
+
+  const handleBulkMarkAsSoldCancel = () => {
+    setBulkMarkAsSold({ quantity: 0, showForm: false });
+  };
+
+  // Bulk delete handlers
+  const handleBulkDeleteStart = () => {
+    setSelectMode(true);
+    setSelectedOrders([]);
+  };
+
+  const handleBulkDeleteCancel = () => {
+    setSelectMode(false);
+    setSelectedOrders([]);
+  };
+
+  const handleBulkDeleteConfirm = () => {
+    if (selectedOrders.length > 0 && onBulkDelete) {
+      onBulkDelete(selectedOrders);
+    }
+    setSelectMode(false);
+    setSelectedOrders([]);
+  };
+
+  const handleOrderSelect = (orderId) => {
+    setSelectedOrders(prev => 
+      prev.includes(orderId) 
+        ? prev.filter(id => id !== orderId)
+        : [...prev, orderId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    const filteredOrders = getFilteredOrders();
+    if (selectedOrders.length === filteredOrders.length) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(filteredOrders.map(order => order.id));
+    }
+  };
+
+  const handleMarkAsSoldFieldBlur = (field, originalValue) => {
+    setMarkAsSoldFormData(prev => {
+      if (prev[field] === '' || prev[field] === null || prev[field] === undefined) {
+        const revertedData = { ...prev, [field]: originalValue };
+        
+        // Recalculate remaining quantity if needed
+        if (field === 'quantity_sold') {
+          const totalQuantity = markAsSoldFormData.remaining_quantity + (markAsSoldFormData.quantity_sold || 0);
+          revertedData.remaining_quantity = totalQuantity - (originalValue || 0);
+        }
+        
+        return revertedData;
+      }
+      
+      return prev;
+    });
+  };
+
+  const handleEditFieldChange = (field, value) => {
+    setEditFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      return newData;
+    });
+  };
+
+  const handleEditFieldBlur = (field, originalValue) => {
+    setEditFormData(prev => {
+      // If field is empty or invalid, revert to original value
+      if (prev[field] === '' || prev[field] === null || prev[field] === undefined) {
+        const revertedData = { ...prev, [field]: originalValue };
+        
+        // Recalculate dependent fields if needed
+        if (field === 'price_per_item_cents') {
+          const totalCost = (originalValue * revertedData.quantity) / 100;
+          revertedData.total_cost = totalCost;
+        }
+        
+        if (field === 'quantity') {
+          const totalCost = (revertedData.price_per_item_cents * originalValue) / 100;
+          revertedData.total_cost = totalCost;
+        }
+        
+        return revertedData;
+      }
+      
+      return prev;
+    });
+  };
+
+  // Filter orders based on selected filter and selected items
+  const getFilteredOrders = () => {
+    if (!orders || orders.length === 0) return [];
+    
+    // First filter by selected items (if any are selected)
+    let filteredByItems = orders;
+    if (selectedItems && selectedItems.length > 0) {
+      const selectedItemIds = selectedItems.map(item => item.id);
+      filteredByItems = orders.filter(order => {
+        // Check if this order is for any of the selected items
+        return selectedItemIds.includes(order.item_id);
+      });
+    }
+    
+    // Then filter by status
+    return filteredByItems.filter(order => {
+      const soldCount = order.quantity_sold || 0;
+      const totalQuantity = order.quantity || 0;
+      const remainingCount = totalQuantity - soldCount;
+      
+      // Debug logging
+      console.log('Order filter debug:', {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        itemId: order.item_id,
+        selectedItemIds: selectedItems?.map(item => item.id) || [],
+        totalQuantity,
+        soldCount,
+        remainingCount,
+        filter: orderFilter,
+        isAvailable: remainingCount > 0 && soldCount === 0,
+        isPartiallySold: remainingCount > 0 && soldCount > 0,
+        isSold: remainingCount === 0,
+        shouldShow: (() => {
+          switch (orderFilter) {
+            case 'available': return remainingCount > 0 && soldCount === 0;
+            case 'partially-sold': return remainingCount > 0 && soldCount > 0;
+            case 'sold': return remainingCount === 0;
+            default: return true;
+          }
+        })()
+      });
+      
+      switch (orderFilter) {
+        case 'available':
+          return remainingCount > 0 && soldCount === 0;
+        case 'partially-sold':
+          return remainingCount > 0 && soldCount > 0;
+        case 'sold':
+          return remainingCount === 0;
+        default:
+          return true;
+      }
+    });
   };
 
   // Handle clicks outside the actions menu to close it
@@ -350,13 +678,14 @@ const UniversalBulkMenu = ({
       {variant === 'collection' && (
         <div 
           className={`fixed left-0 right-0 transition-all duration-300 ease-in-out z-[59] ${
-            showOrderBookDropdown ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'
+            showOrderBookDropdown ? 'opacity-100' : 'max-h-0 opacity-0'
           } ${
             isDragging ? '' : 'transition-all duration-300 ease-out'
           }`}
           style={{
-            bottom: isVisible ? '122px' : '0px', // Position above preview menu (preview menu height is ~122px)
-            transform: showOrderBookDropdown ? `translateY(${translateY}px)` : 'translateY(0px)',
+            bottom: '120px', // Position 120px from bottom to show all content
+            transform: showOrderBookDropdown ? `translateY(${translateY}px)` : 'translateY(100%)', // Slide up when open, hide below when closed
+            maxHeight: 'calc(100vh - 120px)' // Don't extend beyond screen height minus 120px
           }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -369,38 +698,134 @@ const UniversalBulkMenu = ({
             </div>
             
                   {/* Order Book Header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
+                  <div className="mb-4">
                       <h3 className="text-lg font-semibold text-white">
                         Viewing On Hand Orders
                       </h3>
                       <p className="text-sm text-gray-400 mt-1">
                         Edit, mark as sold or delete orders all together
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Debug: Item: {item ? item.name : 'null'}, Orders: {orders ? orders.length : 'undefined'}
-                      </p>
                     </div>
-              <button
-                onClick={() => setShowOrderBookDropdown(false)}
-                className="bg-white hover:bg-gray-100 rounded flex items-center justify-center transition-colors"
-                style={{ width: '24px', height: '24px' }}
-              >
-                <svg className="w-3 h-3 text-black" fill="currentColor" viewBox="0 0 20 20">
+
+                  {/* Filter Buttons and Bulk Mark as Sold */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setOrderFilter('available')}
+                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                          orderFilter === 'available'
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'bg-transparent text-gray-600 hover:text-gray-800'
+                        }`}
+                      >
+                        Available
+                      </button>
+                      <button
+                        onClick={() => setOrderFilter('partially-sold')}
+                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                          orderFilter === 'partially-sold'
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'bg-transparent text-gray-600 hover:text-gray-800'
+                        }`}
+                      >
+                        Partially Sold
+                      </button>
+                      <button
+                        onClick={() => setOrderFilter('sold')}
+                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                          orderFilter === 'sold'
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'bg-transparent text-gray-600 hover:text-gray-800'
+                        }`}
+                      >
+                        Sold
+                      </button>
+                    </div>
+                    
+                    {/* Bulk Action Buttons - Only show when there are orders */}
+                    {getFilteredOrders().length > 0 && (
+                      <div className="flex items-center gap-2">
+                        {/* Bulk Mark as Sold Button - Only show for available and partially-sold orders */}
+                        {orderFilter !== 'sold' && (
+                          <button
+                            onClick={handleBulkMarkAsSoldStart}
+                            className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
+                            title="Start Bulk Mark as Sold"
+                          >
+                            <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
+                              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"/>
+                            </svg>
+                          </button>
+                        )}
+                        
+                        {/* Bulk Delete Button */}
+                        <button
+                          onClick={handleBulkDeleteStart}
+                          className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
+                          title="Bulk Delete Orders"
+                        >
+                          <svg className="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Select Mode Controls */}
+                  {selectMode && (
+                    <div className="mb-4 p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedOrders.length === getFilteredOrders().length && getFilteredOrders().length > 0}
+                              onChange={handleSelectAll}
+                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                          </div>
+                          <span className="text-gray-300" style={{ fontSize: '10px' }}>
+                            {selectedOrders.length} of {getFilteredOrders().length} selected
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleBulkDeleteCancel}
+                            className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
+                            title="Cancel"
+                          >
+                            <svg className="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
                 </svg>
               </button>
+                          <button
+                            onClick={handleBulkDeleteConfirm}
+                            disabled={selectedOrders.length === 0}
+                            className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 disabled:bg-opacity-40 disabled:cursor-not-allowed rounded-full flex items-center justify-center transition-colors"
+                            title={`Delete ${selectedOrders.length} Orders`}
+                          >
+                            <svg className="w-3 h-3 text-red-400 disabled:text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
+                </svg>
+              </button>
             </div>
+                      </div>
+                    </div>
+                  )}
 
             {/* Orders List */}
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-              {!orders || orders.length === 0 ? (
+              {(() => {
+                const filteredOrders = getFilteredOrders();
+                return !filteredOrders || filteredOrders.length === 0 ? (
                 <div className="text-center py-8">
-                  <div className="text-gray-400 text-lg mb-2">No orders found</div>
-                  <div className="text-gray-500 text-sm">Orders count: {orders ? orders.length : 'undefined'}</div>
+                    <div className="text-gray-400 text-lg mb-2">No {orderFilter.replace('-', ' ')} orders found</div>
+                    <div className="text-gray-500 text-sm">Showing {filteredOrders?.length || 0} of {orders?.length || 0} orders</div>
                 </div>
               ) : (
-                orders.map((order) => {
+                  filteredOrders.map((order) => {
                   const remainingCount = order.quantity - (order.quantity_sold || 0);
                   const soldCount = order.quantity_sold || 0;
                   
@@ -408,140 +833,446 @@ const UniversalBulkMenu = ({
                     <div key={order.id} className="bg-white rounded-lg p-4 shadow-lg">
                       {/* Item Header */}
                       <div className="flex items-center gap-4 mb-4">
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                        {/* Checkbox for select mode */}
+                        {selectMode && (
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedOrders.includes(order.id)}
+                              onChange={() => handleOrderSelect(order.id)}
+                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                          </div>
+                        )}
+                        
+                        <div className="w-12 h-12 flex items-center justify-center">
                           {item?.image ? (
                             <img
                               src={item.image}
                               alt={item.name}
-                              className="w-full h-full object-contain rounded-lg"
+                              className="w-full h-full object-contain"
                             />
                           ) : (
                             <div className="text-gray-400 text-xs">📦</div>
                           )}
                         </div>
                         <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900 text-sm">
+                          <h4 className="font-semibold text-white text-sm">
                             {item?.name || 'Unknown Item'}
                           </h4>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-300">
                             {item?.set || item?.set_name || 'Unknown Set'}
                           </div>
                         </div>
                         
-                        {/* Action Buttons and Status */}
-                        <div className="flex flex-col items-center gap-2">
+                        {/* Action Buttons - Hide in select mode */}
+                        {!selectMode && (
+                          <div className="flex items-center gap-2">
                           {/* Action Buttons - Small circular icons */}
                           <div className="flex items-center gap-1">
+                            {markingAsSoldOrderId === order.id ? (
+                              /* Mark as Sold Mode - Only Cancel and Save buttons */
+                              <>
+                                <button
+                                  onClick={() => handleMarkAsSoldCancel()}
+                                  className="w-5 h-5 bg-gray-600 hover:bg-gray-700 text-white rounded-full flex items-center justify-center transition-colors"
+                                  title="Cancel Mark as Sold"
+                                >
+                                  <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleMarkAsSoldSave(order.id)}
+                                  className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
+                                  title="Mark as Sold"
+                                >
+                                  <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                                  </svg>
+                                </button>
+                              </>
+                            ) : editingOrderId === order.id ? (
+                              /* Edit Mode - Only Cancel and Save buttons */
+                              <>
+                                <button
+                                  onClick={() => handleEditCancel()}
+                                  className="w-5 h-5 bg-gray-600 hover:bg-gray-700 text-white rounded-full flex items-center justify-center transition-colors"
+                                  title="Cancel Edit"
+                                >
+                                  <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleEditSave(order.id)}
+                                  className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
+                                  title="Save Changes"
+                                >
+                                  <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                                  </svg>
+                                </button>
+                              </>
+                            ) : (
+                              /* View Mode - Normal action buttons */
+                              <>
                             {showEditActions && (
                               <button
-                                onClick={() => onEdit && onEdit(order.id)}
-                                className="w-5 h-5 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center transition-colors"
+                                    onClick={() => handleEditStart(order.id, order)}
+                                    className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
                                 title="Edit Order"
                               >
-                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <svg className="w-3 h-3 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
                                 </svg>
                               </button>
                             )}
                             {showMarkAsSoldActions && remainingCount > 0 && (
                               <button
-                                onClick={() => onMarkAsSold && onMarkAsSold(order.id)}
-                                className="w-5 h-5 bg-green-600 hover:bg-green-700 text-white rounded-full flex items-center justify-center transition-colors"
+                                    onClick={() => handleMarkAsSoldStart(order.id, order)}
+                                    className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
                                 title="Mark as Sold"
                               >
-                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                                    <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                      <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
+                                      <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"/>
                                 </svg>
                               </button>
                             )}
                             {showDeleteActions && (
                               <button
                                 onClick={() => onOrderDelete && onOrderDelete(order.id)}
-                                className="w-5 h-5 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center transition-colors"
+                                    className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
                                 title="Delete Order"
                               >
-                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd"/>
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 012 0v4a1 1 0 11-2 0V7zM12 7a1 1 0 012 0v4a1 1 0 11-2 0V7z" clipRule="evenodd"/>
+                                    <svg className="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
                                 </svg>
                               </button>
+                                )}
+                              </>
                             )}
                           </div>
-                          
-                          {/* Status Pill */}
-                          <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            remainingCount === 0 ? 'bg-green-100 text-green-800' :
-                            soldCount > 0 ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>
-                            {remainingCount === 0 ? 'Sold' : soldCount > 0 ? 'Partially Sold' : 'Available'}
                           </div>
-                        </div>
+                        )}
                       </div>
 
                       {/* Order Details */}
                       <div className="space-y-3">
+                        {markingAsSoldOrderId === order.id ? (
+                          /* Mark as Sold Mode */
+                          <>
+                            {/* Sales Information */}
+                            {/* Line 1: Sale Date and Quantity */}
+                            <div className="grid grid-cols-2 gap-4" style={{ fontSize: '12px' }}>
+                              <div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Sale Date</div>
+                                <input
+                                  type="date"
+                                  value={markAsSoldFormData.sale_date || ''}
+                                  onChange={(e) => handleMarkAsSoldFieldChange('sale_date', e.target.value)}
+                                  onBlur={() => {
+                                    if (markAsSoldFormData.sale_date === '' || markAsSoldFormData.sale_date === null || markAsSoldFormData.sale_date === undefined) {
+                                      handleMarkAsSoldFieldChange('sale_date', markAsSoldOriginalValues.sale_date);
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
+                                  style={{ fontSize: '12px' }}
+                                />
+                              </div>
+                              <div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>
+                                  Quantity to Sell ({markAsSoldFormData.quantity_sold || 1} of {markAsSoldFormData.max_quantity || 1})
+                                </div>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    value={markAsSoldFormData.quantity_sold || 1}
+                                    onChange={(e) => handleMarkAsSoldFieldChange('quantity_sold', e.target.value)}
+                                    onBlur={() => {
+                                      const value = parseInt(markAsSoldFormData.quantity_sold);
+                                      if (!value || value < 1) {
+                                        handleMarkAsSoldFieldChange('quantity_sold', 1);
+                                      } else if (value > (markAsSoldFormData.max_quantity || 1)) {
+                                        handleMarkAsSoldFieldChange('quantity_sold', markAsSoldFormData.max_quantity || 1);
+                                      }
+                                    }}
+                                    className="w-full px-2 py-1 pr-8 bg-gray-800 text-white rounded text-xs border border-gray-300 text-center"
+                                    style={{ fontSize: '12px' }}
+                                    min="1"
+                                    max={markAsSoldFormData.max_quantity || 1}
+                                  />
+                                  <div className="absolute right-1 top-0 h-full flex flex-col justify-center">
+                                    <button
+                                      onClick={() => {
+                                        const current = parseInt(markAsSoldFormData.quantity_sold) || 1;
+                                        const max = markAsSoldFormData.max_quantity || 1;
+                                        if (current < max) {
+                                          handleMarkAsSoldFieldChange('quantity_sold', current + 1);
+                                        }
+                                      }}
+                                      className="w-3 h-3 flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                                      disabled={(parseInt(markAsSoldFormData.quantity_sold) || 1) >= (markAsSoldFormData.max_quantity || 1)}
+                                    >
+                                      <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd"/>
+                                      </svg>
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const current = parseInt(markAsSoldFormData.quantity_sold) || 1;
+                                        if (current > 1) {
+                                          handleMarkAsSoldFieldChange('quantity_sold', current - 1);
+                                        }
+                                      }}
+                                      className="w-3 h-3 flex items-center justify-center text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                                      disabled={(parseInt(markAsSoldFormData.quantity_sold) || 1) <= 1}
+                                    >
+                                      <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/>
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Line 2: Sale Location and Sale Price */}
+                            <div className="grid grid-cols-2 gap-4" style={{ fontSize: '12px' }}>
+                              <div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Sale Location</div>
+                                <select
+                                  value={markAsSoldFormData.sale_location || ''}
+                                  onChange={(e) => handleMarketplaceChange(e.target.value)}
+                                  className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
+                                  style={{ fontSize: '12px' }}
+                                >
+                                  <option value="" className="bg-gray-800 text-white">Select marketplace</option>
+                                  {marketplaces.map(marketplace => (
+                                    <option key={marketplace.id} value={marketplace.name} className="bg-gray-800 text-white">
+                                      {marketplace.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Sale Price</div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={markAsSoldFormData.sale_price_cents || ''}
+                                  onChange={(e) => handleMarkAsSoldFieldChange('sale_price_cents', e.target.value)}
+                                  onBlur={() => {
+                                    if (markAsSoldFormData.sale_price_cents === '' || markAsSoldFormData.sale_price_cents === null || markAsSoldFormData.sale_price_cents === undefined) {
+                                      handleMarkAsSoldFieldChange('sale_price_cents', markAsSoldOriginalValues.sale_price_cents);
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
+                                  style={{ fontSize: '12px' }}
+                                  min="0"
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Line 3: Fee % and Shipping Cost */}
+                            <div className="grid grid-cols-2 gap-4" style={{ fontSize: '12px' }}>
+                              <div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Fee (%)</div>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  value={markAsSoldFormData.fee_percentage || ''}
+                                  onChange={(e) => handleMarkAsSoldFieldChange('fee_percentage', e.target.value)}
+                                  onBlur={() => {
+                                    if (markAsSoldFormData.fee_percentage === '' || markAsSoldFormData.fee_percentage === null || markAsSoldFormData.fee_percentage === undefined) {
+                                      handleMarkAsSoldFieldChange('fee_percentage', markAsSoldOriginalValues.fee_percentage);
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
+                                  style={{ fontSize: '12px' }}
+                                  min="0"
+                                  max="100"
+                                />
+                              </div>
+                              <div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Shipping Cost</div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={markAsSoldFormData.shipping_cost_cents || ''}
+                                  onChange={(e) => handleMarkAsSoldFieldChange('shipping_cost_cents', e.target.value)}
+                                  onBlur={() => {
+                                    if (markAsSoldFormData.shipping_cost_cents === '' || markAsSoldFormData.shipping_cost_cents === null || markAsSoldFormData.shipping_cost_cents === undefined) {
+                                      handleMarkAsSoldFieldChange('shipping_cost_cents', markAsSoldOriginalValues.shipping_cost_cents);
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
+                                  style={{ fontSize: '12px' }}
+                                  min="0"
+                                />
+                              </div>
+                            </div>
+                          </>
+                        ) : editingOrderId === order.id ? (
+                          /* Edit Mode */
+                          <>
                         {/* First Row: Order #, Date, Location */}
-                        <div className="grid grid-cols-3 gap-4 text-sm">
+                            <div className="grid grid-cols-3 gap-4" style={{ fontSize: '12px' }}>
                           <div>
-                            <div className="text-xs text-gray-500 mb-1">Order #</div>
-                            <div className="font-medium text-gray-900">{order.order_number || 'N/A'}</div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Order #</div>
+                                <input
+                                  type="text"
+                                  value={order.order_number ? order.order_number.replace('ORD-', '') : 'N/A'}
+                                  disabled
+                                  className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300 cursor-not-allowed"
+                                  style={{ fontSize: '12px' }}
+                                />
                           </div>
                           <div>
-                            <div className="text-xs text-gray-500 mb-1">Date</div>
-                            <div className="font-medium text-gray-900">
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Date</div>
+                                <input
+                                  type="date"
+                                  value={editFormData.purchase_date ? new Date(editFormData.purchase_date).toISOString().split('T')[0] : ''}
+                                  onChange={(e) => handleEditFieldChange('purchase_date', e.target.value)}
+                                  onBlur={() => handleEditFieldBlur('purchase_date', originalValues.purchase_date)}
+                                  className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
+                                  style={{ fontSize: '12px' }}
+                                />
+                              </div>
+                              <div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Location</div>
+                                <select
+                                  value={editFormData.retailer_name || ''}
+                                  onChange={(e) => handleEditFieldChange('retailer_name', e.target.value)}
+                                  onBlur={() => handleEditFieldBlur('retailer_name', originalValues.retailer_name)}
+                                  className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
+                                  style={{ fontSize: '12px' }}
+                                >
+                                  <option value="" className="bg-gray-800 text-white">Select retailer</option>
+                                  {retailers.map(retailer => (
+                                    <option key={retailer.id} value={retailer.name} className="bg-gray-800 text-white">
+                                      {retailer.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            
+                            {/* Second Row: Quantity, Price (per item), Total Cost */}
+                            <div className="grid grid-cols-3 gap-4" style={{ fontSize: '12px' }}>
+                              <div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Quantity</div>
+                                <input
+                                  type="number"
+                                  value={editFormData.quantity || ''}
+                                  onChange={(e) => handleEditFieldChange('quantity', e.target.value)}
+                                  onBlur={() => {
+                                    if (editFormData.quantity === '' || editFormData.quantity === null || editFormData.quantity === undefined) {
+                                      handleEditFieldChange('quantity', originalValues.quantity);
+                                    }
+                                  }}
+                                  disabled={soldCount > 0} // Disable if partially sold
+                                  className={`w-full px-2 py-1 rounded text-xs border ${
+                                    soldCount > 0 
+                                      ? 'bg-gray-800 text-gray-400 border-gray-300 cursor-not-allowed' 
+                                      : 'bg-gray-800 text-white border-gray-300'
+                                  }`}
+                                  style={{ fontSize: '12px' }}
+                                  min="1"
+                                />
+                              </div>
+                              <div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Price (per item)</div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={editFormData.price_per_item_cents || ''}
+                                  onChange={(e) => handleEditFieldChange('price_per_item_cents', e.target.value)}
+                                  onBlur={() => {
+                                    if (editFormData.price_per_item_cents === '' || editFormData.price_per_item_cents === null || editFormData.price_per_item_cents === undefined) {
+                                      handleEditFieldChange('price_per_item_cents', originalValues.price_per_item_cents);
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
+                                  style={{ fontSize: '12px' }}
+                                />
+                              </div>
+                              <div>
+                                <div className="text-white mb-1" style={{ fontSize: '12px' }}>Total Cost</div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={editFormData.total_cost || ''}
+                                  onChange={(e) => handleEditFieldChange('total_cost', e.target.value)}
+                                  onBlur={() => {
+                                    if (editFormData.total_cost === '' || editFormData.total_cost === null || editFormData.total_cost === undefined) {
+                                      handleEditFieldChange('total_cost', originalValues.total_cost);
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
+                                  style={{ fontSize: '12px' }}
+                                  min="0"
+                                />
+                              </div>
+                            </div>
+
+                          </>
+                        ) : (
+                          /* View Mode */
+                          <>
+                            {/* First Row: Order #, Date, Location */}
+                            <div className="grid grid-cols-3 gap-4" style={{ fontSize: '12px' }}>
+                              <div>
+                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Order #</div>
+                                <div className="font-medium text-white" style={{ fontSize: '12px' }}>{order.order_number ? order.order_number.replace('ORD-', '') : 'N/A'}</div>
+                              </div>
+                              <div>
+                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Date</div>
+                                <div className="font-medium text-white" style={{ fontSize: '12px' }}>
                               {new Date(order.purchase_date).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
+                                    year: '2-digit',
+                                    month: '2-digit',
+                                    day: '2-digit'
                               })}
                             </div>
                           </div>
                           <div>
-                            <div className="text-xs text-gray-500 mb-1">Location</div>
-                            <div className="font-medium text-gray-900">{order.retailer_name || 'N/A'}</div>
+                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Location</div>
+                                <div className="font-medium text-white" style={{ fontSize: '12px' }}>{order.retailer_name || 'N/A'}</div>
                           </div>
                         </div>
                         
                         {/* Second Row: Quantity, Price (per item), Total Cost */}
-                        <div className="grid grid-cols-3 gap-4 text-sm">
+                            <div className="grid grid-cols-3 gap-4" style={{ fontSize: '12px' }}>
                           <div>
-                            <div className="text-xs text-gray-500 mb-1">Quantity</div>
-                            <div className="font-medium text-gray-900">{remainingCount}</div>
+                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Quantity</div>
+                                <div className="font-medium text-white" style={{ fontSize: '12px' }}>{remainingCount}</div>
                           </div>
                           <div>
-                            <div className="text-xs text-gray-500 mb-1">Price (per item)</div>
-                            <div className="font-medium text-gray-900">
+                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Price (per item)</div>
+                                <div className="font-medium text-white" style={{ fontSize: '12px' }}>
                               ${(order.price_per_item_cents / 100).toFixed(2)}
                             </div>
                           </div>
                           <div>
-                            <div className="text-xs text-gray-500 mb-1">Total Cost</div>
-                            <div className="font-medium text-gray-900">
+                                <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Total Cost</div>
+                                <div className="font-medium text-white" style={{ fontSize: '12px' }}>
                               ${((order.price_per_item_cents * remainingCount) / 100).toFixed(2)}
                             </div>
                           </div>
                         </div>
+                          </>
+                        )}
                       </div>
 
                     </div>
                   );
                 })
-              )}
+                );
+              })()}
             </div>
 
-            {/* Footer */}
-            <div className="px-6 py-3 flex justify-between items-center border-t mt-4" style={{ borderTopColor: 'rgba(75, 85, 99, 0.4)' }}>
-              <div className="text-sm text-gray-400">
-                {orders.length} Order{orders.length !== 1 ? 's' : ''} Total
-              </div>
-              <button
-                onClick={() => setShowOrderBookDropdown(false)}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -557,6 +1288,18 @@ const UniversalBulkMenu = ({
             
           {/* Action Buttons */}
             <div className="flex items-center gap-2">
+              {showOrderBookDropdown ? (
+                // When Order Book is active, only show Close button
+                <button
+                  onClick={() => setShowOrderBookDropdown(false)}
+                  className="px-4 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors"
+                  style={{ height: '24px', fontSize: '12px' }}
+                >
+                  Close
+                </button>
+              ) : (
+                // Normal preview menu buttons
+                <>
                 <button
                   onClick={() => {
                     if (selectedCount === totalItems) {
@@ -591,6 +1334,8 @@ const UniversalBulkMenu = ({
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
               </svg>
             </button>
+                </>
+              )}
           </div>
         </div>
           

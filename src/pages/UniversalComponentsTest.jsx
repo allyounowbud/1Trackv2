@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  UniversalCard,
-  UniversalBulkMenu,
-  UniversalOrderBook,
-  UniversalSearchBar,
-  UniversalGrid,
+import { 
+  UniversalCard, 
+  UniversalBulkMenu, 
+  UniversalOrderBook, 
+  UniversalSearchBar, 
+  UniversalGrid, 
   UniversalBottomNavigation,
   UniversalTopSearchBar
 } from '../components/ui';
+import UniversalOrderBookMenu from '../components/ui/UniversalOrderBookMenu';
 import AddToCollectionModal from '../components/AddToCollectionModal';
 import MultiItemOrderModal from '../components/MultiItemOrderModal';
 import ConfirmationModal from '../components/ConfirmationModal';
@@ -324,7 +325,8 @@ const UniversalComponentsTest = () => {
       retailer_name: 'Amazon',
       quantity: 3,
       quantity_sold: 1,
-      price_per_item_cents: 4000
+      price_per_item_cents: 4000,
+      item_id: 1 // Charizard ex
     },
     {
       id: 2,
@@ -333,7 +335,8 @@ const UniversalComponentsTest = () => {
       retailer_name: 'eBay',
       quantity: 5,
       quantity_sold: 0,
-      price_per_item_cents: 500
+      price_per_item_cents: 500,
+      item_id: 1 // Charizard ex
     },
     {
       id: 3,
@@ -342,7 +345,8 @@ const UniversalComponentsTest = () => {
       retailer_name: 'GameStop',
       quantity: 2,
       quantity_sold: 2,
-      price_per_item_cents: 2500
+      price_per_item_cents: 2500,
+      item_id: 2 // Pikachu
     },
     {
       id: 4,
@@ -351,7 +355,8 @@ const UniversalComponentsTest = () => {
       retailer_name: 'Target',
       quantity: 4,
       quantity_sold: 1,
-      price_per_item_cents: 1800
+      price_per_item_cents: 1800,
+      item_id: 3 // Blastoise
     },
     {
       id: 5,
@@ -360,7 +365,8 @@ const UniversalComponentsTest = () => {
       retailer_name: 'Walmart',
       quantity: 1,
       quantity_sold: 0,
-      price_per_item_cents: 7500
+      price_per_item_cents: 7500,
+      item_id: 1 // Charizard ex
     }
   ];
 
@@ -437,6 +443,13 @@ const UniversalComponentsTest = () => {
         return mockCollectionItems;
     }
   };
+
+  // Set default item for Order Book
+  React.useEffect(() => {
+    if (!selectedItemForOrderBook && mockCollectionItems.length > 0) {
+      setSelectedItemForOrderBook(mockCollectionItems[0]);
+    }
+  }, [selectedItemForOrderBook]);
 
   // Event handlers
   const handleItemClick = (item) => {
@@ -549,6 +562,8 @@ const UniversalComponentsTest = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Universal Components Test Page
           </h1>
+          
+          
           <p className="text-gray-600 mb-6">
             Test and preview all universal components with different variants and states.
           </p>
@@ -1068,7 +1083,12 @@ const UniversalComponentsTest = () => {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Book</h3>
           <div className="space-y-4">
             <button
-              onClick={() => setSelectedItemForOrderBook(currentItems[0])}
+              onClick={() => {
+                console.log('Show Order Book button clicked!', { currentItems: currentItems.length });
+                setSelectedItemForOrderBook(currentItems[0]);
+                setShowOrderBook(true);
+                console.log('Order Book state should be true now');
+              }}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
             >
               Show Order Book
@@ -1352,6 +1372,21 @@ const UniversalComponentsTest = () => {
       <LoadingModal
         isOpen={showLoadingModal}
         message="Testing loading state..."
+      />
+
+      {/* Standalone Order Book Test */}
+      <UniversalOrderBookMenu
+        isVisible={showOrderBook}
+        orders={mockOrders}
+        item={selectedItemForOrderBook}
+        onClose={handleOrderBookClose}
+        onEdit={handleOrderEdit}
+        onDelete={handleOrderDelete}
+        onMarkAsSold={handleMarkAsSold}
+        variant={activeVariant}
+        showEditActions={true}
+        showDeleteActions={true}
+        showMarkAsSoldActions={true}
       />
     </div>
   );
