@@ -170,7 +170,7 @@ export const SearchDropdown = ({
         {isOpen && createPortal(
           <div 
             data-dropdown-portal
-            className="fixed z-[999999] max-h-48 sm:max-h-64 overflow-y-auto overscroll-contain rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl min-w-[180px] sm:min-w-[200px]"
+            className="fixed z-[999999] max-h-48 sm:max-h-64 overflow-y-auto overscroll-contain rounded-lg border border-blue-400 bg-white dark:bg-slate-900 shadow-2xl min-w-[180px] sm:min-w-[200px]"
             style={{ 
               position: 'fixed',
               top: `${dropdownPosition.top}px`,

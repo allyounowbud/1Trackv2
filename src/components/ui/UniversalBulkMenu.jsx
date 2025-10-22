@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import PartialSaleManager from '../PartialSaleManager';
 
 /**
  * Universal Bulk Menu Component
@@ -12,14 +15,14 @@ import React, { useState, useEffect, useRef } from 'react';
  * @param {Array} props.selectedItems - Array of selected item objects
  * @param {string} props.variant - Menu variant: 'collection', 'pokemon', 'search'
  * @param {Function} props.onAddToCart - Add selected items to cart
- * @param {Function} props.onViewOrderBook - View order book for selected items
+ * @param {Function} props.onViewTransactionHistory - View transaction history for selected items
  * @param {Function} props.onOverridePrice - Override market prices
  * @param {Function} props.onDelete - Delete selected items
  * @param {Function} props.onExport - Export selected items
  * @param {Function} props.onCancel - Cancel selection
  * @param {Object} props.customActions - Custom action buttons
  * @param {boolean} props.showAddToCart - Show add to cart button
- * @param {boolean} props.showOrderBook - Show order book button
+ * @param {boolean} props.showTransactionHistory - Show transaction history button
  * @param {boolean} props.showPriceOverride - Show price override button
  * @param {boolean} props.showDelete - Show delete button
  * @param {boolean} props.showExport - Show export button
@@ -32,7 +35,7 @@ const UniversalBulkMenu = ({
   totalItems = 0,
   variant = 'collection', // 'collection' or 'search'
   onAddToCart,
-  onViewOrderBook,
+  onViewTransactionHistory,
   onOverridePrice,
   onDelete,
   onExport,
@@ -43,44 +46,46 @@ const UniversalBulkMenu = ({
   onActionsMenuToggle,
   customActions = [],
   showAddToCart = true,
-  showOrderBook = true,
+  showTransactionHistory = true,
   showPriceOverride = true,
   showDelete = true,
   showExport = false,
   preOpenActions = false, // New prop to pre-open actions dropdown
-  preOpenOrderBook = false, // New prop to pre-open order book dropdown
-  orders = [], // Orders data for order book
-  item = null, // Item data for order book
-  onEdit = null, // Order edit handler
-  onMarkAsSold = null, // Order mark as sold handler
-  onOrderDelete = null, // Order delete handler
+  preOpenTransactionHistory = false, // New prop to pre-open transaction history dropdown
+  transactions = [], // Transactions data for transaction history
+  item = null, // Item data for transaction history
+  onEdit = null, // Transaction edit handler
+  onMarkAsSold = null, // Transaction mark as sold handler
+  onTransactionDelete = null, // Transaction delete handler
   onBulkDelete = null, // Bulk delete handler
   showEditActions = true,
   showDeleteActions = true,
   showMarkAsSoldActions = true,
-  onOrderBookOpen = null, // Callback when order book should open
+  onTransactionHistoryOpen = null, // Callback when transaction history should open
+  onTransactionUpdate = null, // Transaction update handler for PartialSaleManager
+  onDeleteSoldPortion = null, // Delete sold portion handler for PartialSaleManager
   ...props
 }) => {
   const [showActionsDropdown, setShowActionsDropdown] = useState(false);
-  const [showOrderBookDropdown, setShowOrderBookDropdown] = useState(false);
+  const [showTransactionHistoryDropdown, setShowTransactionHistoryDropdown] = useState(false);
   const [isActionsMenuFullyOpen, setIsActionsMenuFullyOpen] = useState(false);
-  const [isOrderBookMenuFullyOpen, setIsOrderBookMenuFullyOpen] = useState(false);
+  const [isTransactionHistoryMenuFullyOpen, setIsTransactionHistoryMenuFullyOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [startY, setStartY] = useState(0);
   const [currentY, setCurrentY] = useState(0);
   const [translateY, setTranslateY] = useState(0);
-  const [editingOrderId, setEditingOrderId] = useState(null);
+  const [editingTransactionId, setEditingTransactionId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [originalValues, setOriginalValues] = useState({});
-  const [markingAsSoldOrderId, setMarkingAsSoldOrderId] = useState(null);
+  const [markingAsSoldTransactionId, setMarkingAsSoldTransactionId] = useState(null);
   const [markAsSoldFormData, setMarkAsSoldFormData] = useState({});
   const [markAsSoldOriginalValues, setMarkAsSoldOriginalValues] = useState({});
-  const [orderFilter, setOrderFilter] = useState('available'); // 'available', 'partially-sold', 'sold'
+  const [transactionFilter, setTransactionFilter] = useState('available'); // 'available', 'sold'
   const [retailers, setRetailers] = useState([]);
   const [marketplaces, setMarketplaces] = useState([]);
   const [bulkMarkAsSold, setBulkMarkAsSold] = useState({ quantity: 0, showForm: false });
   const [selectMode, setSelectMode] = useState(false);
-  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [selectedTransactions, setSelectedTransactions] = useState([]);
   const actionsMenuRef = useRef(null);
   
   // Notify parent when actions menu state changes
@@ -103,34 +108,34 @@ const UniversalBulkMenu = ({
     }
   }, [showActionsDropdown]);
 
-  // Handle blur timing for order book menu
+  // Handle blur timing for transaction history menu
   React.useEffect(() => {
-    if (showOrderBookDropdown) {
+    if (showTransactionHistoryDropdown) {
       // Menu is opening - blur starts immediately
-      setIsOrderBookMenuFullyOpen(true);
+      setIsTransactionHistoryMenuFullyOpen(true);
     } else {
       // Menu is closing - blur off immediately
-      setIsOrderBookMenuFullyOpen(false);
+      setIsTransactionHistoryMenuFullyOpen(false);
       // Reset translateY when menu closes
       setTranslateY(0);
     }
-  }, [showOrderBookDropdown]);
+  }, [showTransactionHistoryDropdown]);
 
   // Auto-open actions dropdown when preOpenActions is true
   React.useEffect(() => {
     if (isVisible && preOpenActions) {
       setShowActionsDropdown(true);
-      setShowOrderBookDropdown(false); // Close order book if actions opens
+      setShowTransactionHistoryDropdown(false); // Close transaction history if actions opens
     }
   }, [isVisible, preOpenActions]);
 
-  // Auto-open order book dropdown when preOpenOrderBook is true
+  // Auto-open transaction history dropdown when preOpenTransactionHistory is true
   React.useEffect(() => {
-    if (isVisible && preOpenOrderBook) {
-      setShowOrderBookDropdown(true);
-      setShowActionsDropdown(false); // Close actions if order book opens
+    if (isVisible && preOpenTransactionHistory) {
+      setShowTransactionHistoryDropdown(true);
+      setShowActionsDropdown(false); // Close actions if transaction history opens
     }
-  }, [isVisible, preOpenOrderBook]);
+  }, [isVisible, preOpenTransactionHistory]);
 
   // Touch event handlers for swipe functionality
   const handleTouchStart = (e) => {
@@ -191,15 +196,15 @@ const UniversalBulkMenu = ({
   }, []);
 
   // Edit handlers
-  const handleEditStart = (orderId, orderData) => {
-    setEditingOrderId(orderId);
-    const quantity = orderData.quantity || 0;
-    const pricePerItemCents = orderData.price_per_item_cents || 0;
+  const handleEditStart = (transactionId, transactionData) => {
+    setEditingTransactionId(transactionId);
+    const quantity = transactionData.quantity || 0;
+    const pricePerItemCents = transactionData.price_per_item_cents || 0;
     const totalCost = (pricePerItemCents * quantity) / 100;
     
     const formData = {
-      retailer_name: orderData.retailer_name || '',
-      purchase_date: orderData.purchase_date || '',
+      retailer_name: transactionData.retailer_name || '',
+      purchase_date: transactionData.purchase_date || '',
       quantity: quantity,
       price_per_item_cents: (pricePerItemCents / 100).toFixed(2), // Store as dollar amount for display
       total_cost: totalCost.toFixed(2) // Store as dollar amount for display
@@ -209,34 +214,45 @@ const UniversalBulkMenu = ({
     setOriginalValues(formData);
   };
 
-  const handleEditSave = (orderId) => {
+  const handleEditSave = async (transactionId) => {
     if (onEdit) {
-      onEdit(orderId, editFormData);
+      try {
+        await onEdit(transactionId, editFormData);
+        // The cache invalidation in the parent component will refresh the data
+        // Close the edit mode after successful save
+        setEditingTransactionId(null);
+        setEditFormData({});
+      } catch (error) {
+        console.error('Error saving transaction:', error);
+        // Don't close the edit mode if there was an error
+        return;
+      }
+    } else {
+      setEditingTransactionId(null);
+      setEditFormData({});
     }
-    setEditingOrderId(null);
-    setEditFormData({});
   };
 
   const handleEditCancel = () => {
-    setEditingOrderId(null);
+    setEditingTransactionId(null);
     setEditFormData({});
     setOriginalValues({});
   };
 
   // Mark as Sold handlers
-  const handleMarkAsSoldStart = (orderId, orderData) => {
-    setMarkingAsSoldOrderId(orderId);
-    const soldQuantity = orderData.quantity_sold || 0;
-    const totalQuantity = orderData.quantity || 0;
+  const handleMarkAsSoldStart = (transactionId, transactionData) => {
+    setMarkingAsSoldTransactionId(transactionId);
+    const soldQuantity = transactionData.quantity_sold || 0;
+    const totalQuantity = transactionData.quantity || 0;
     const remainingQuantity = totalQuantity - soldQuantity;
     
     const formData = {
       quantity_sold: 1, // Default to 1 item
-      sale_price_cents: orderData.sale_price_cents || 0,
+      sale_price_cents: transactionData.sale_price_cents || 0,
       sale_date: new Date().toISOString().split('T')[0], // Today's date
-      sale_location: orderData.sale_location || '',
+      sale_location: transactionData.sale_location || '',
       fee_percentage: 0,
-      shipping_cost_cents: orderData.shipping_cost_cents || 0,
+      shipping_cost_cents: transactionData.shipping_cost_cents || 0,
       remaining_quantity: remainingQuantity,
       max_quantity: remainingQuantity
     };
@@ -246,7 +262,7 @@ const UniversalBulkMenu = ({
     
     // Debug logging
     console.log('Mark as Sold Debug:', {
-      orderId,
+      transactionId,
       totalQuantity,
       soldQuantity,
       remainingQuantity,
@@ -254,17 +270,17 @@ const UniversalBulkMenu = ({
     });
   };
 
-  const handleMarkAsSoldSave = (orderId) => {
+  const handleMarkAsSoldSave = (transactionId) => {
     if (onMarkAsSold) {
-      onMarkAsSold(orderId, markAsSoldFormData);
+      onMarkAsSold(transactionId, markAsSoldFormData);
     }
-    setMarkingAsSoldOrderId(null);
+    setMarkingAsSoldTransactionId(null);
     setMarkAsSoldFormData({});
     setMarkAsSoldOriginalValues({});
   };
 
   const handleMarkAsSoldCancel = () => {
-    setMarkingAsSoldOrderId(null);
+    setMarkingAsSoldTransactionId(null);
     setMarkAsSoldFormData({});
     setMarkAsSoldOriginalValues({});
   };
@@ -294,9 +310,9 @@ const UniversalBulkMenu = ({
 
   // Bulk mark as sold handlers
   const handleBulkMarkAsSoldStart = () => {
-    const totalAvailable = getFilteredOrders().reduce((sum, order) => {
-      const soldCount = order.quantity_sold || 0;
-      const totalQuantity = order.quantity || 0;
+    const totalAvailable = getFilteredTransactions().reduce((sum, transaction) => {
+      const soldCount = transaction.quantity_sold || 0;
+      const totalQuantity = transaction.quantity || 0;
       const remainingCount = totalQuantity - soldCount;
       return sum + remainingCount;
     }, 0);
@@ -310,26 +326,26 @@ const UniversalBulkMenu = ({
 
   const handleBulkMarkAsSoldSave = () => {
     if (bulkMarkAsSold.quantity > 0 && onBulkMarkAsSold) {
-      const ordersToMark = getFilteredOrders()
+      const transactionsToMark = getFilteredTransactions()
         .sort((a, b) => new Date(a.purchase_date) - new Date(b.purchase_date)) // Oldest first
-        .reduce((acc, order) => {
-          const soldCount = order.quantity_sold || 0;
-          const totalQuantity = order.quantity || 0;
+        .reduce((acc, transaction) => {
+          const soldCount = transaction.quantity_sold || 0;
+          const totalQuantity = transaction.quantity || 0;
           const remainingCount = totalQuantity - soldCount;
           
           if (remainingCount > 0 && acc.remainingToMark > 0) {
             const toMark = Math.min(remainingCount, acc.remainingToMark);
-            acc.orders.push({
-              orderId: order.id,
+            acc.transactions.push({
+              transactionId: transaction.id,
               quantityToMark: toMark
             });
             acc.remainingToMark -= toMark;
           }
           
           return acc;
-        }, { orders: [], remainingToMark: bulkMarkAsSold.quantity });
+        }, { transactions: [], remainingToMark: bulkMarkAsSold.quantity });
       
-      onBulkMarkAsSold(ordersToMark.orders);
+      onBulkMarkAsSold(transactionsToMark.transactions);
     }
     
     setBulkMarkAsSold({ quantity: 0, showForm: false });
@@ -342,36 +358,36 @@ const UniversalBulkMenu = ({
   // Bulk delete handlers
   const handleBulkDeleteStart = () => {
     setSelectMode(true);
-    setSelectedOrders([]);
+    setSelectedTransactions([]);
   };
 
   const handleBulkDeleteCancel = () => {
     setSelectMode(false);
-    setSelectedOrders([]);
+    setSelectedTransactions([]);
   };
 
   const handleBulkDeleteConfirm = () => {
-    if (selectedOrders.length > 0 && onBulkDelete) {
-      onBulkDelete(selectedOrders);
+    if (selectedTransactions.length > 0 && onBulkDelete) {
+      onBulkDelete(selectedTransactions);
     }
     setSelectMode(false);
-    setSelectedOrders([]);
+    setSelectedTransactions([]);
   };
 
-  const handleOrderSelect = (orderId) => {
-    setSelectedOrders(prev => 
-      prev.includes(orderId) 
-        ? prev.filter(id => id !== orderId)
-        : [...prev, orderId]
+  const handleTransactionSelect = (transactionId) => {
+    setSelectedTransactions(prev => 
+      prev.includes(transactionId) 
+        ? prev.filter(id => id !== transactionId)
+        : [...prev, transactionId]
     );
   };
 
   const handleSelectAll = () => {
-    const filteredOrders = getFilteredOrders();
-    if (selectedOrders.length === filteredOrders.length) {
-      setSelectedOrders([]);
+    const filteredTransactions = getFilteredTransactions();
+    if (selectedTransactions.length === filteredTransactions.length) {
+      setSelectedTransactions([]);
     } else {
-      setSelectedOrders(filteredOrders.map(order => order.id));
+      setSelectedTransactions(filteredTransactions.map(transaction => transaction.id));
     }
   };
 
@@ -424,60 +440,80 @@ const UniversalBulkMenu = ({
     });
   };
 
-  // Filter orders based on selected filter and selected items
-  const getFilteredOrders = () => {
-    if (!orders || orders.length === 0) return [];
+  // Partial Sale Manager handlers
+  const handleTransactionUpdate = async (transactionId, updatedData) => {
+    if (onTransactionUpdate) {
+      await onTransactionUpdate(transactionId, updatedData);
+    }
+  };
+
+  const handleDeleteSoldPortion = async (transactionId, saleId) => {
+    if (onDeleteSoldPortion) {
+      await onDeleteSoldPortion(transactionId, saleId);
+    }
+  };
+
+  // Filter transactions based on selected filter and selected items
+  const getFilteredTransactions = () => {
+    if (!transactions || transactions.length === 0) return [];
+    
+    console.log('getFilteredTransactions - Input transactions:', transactions);
+    console.log('getFilteredTransactions - Selected items:', selectedItems);
+    console.log('getFilteredTransactions - Selected item IDs:', selectedItems?.map(item => item.id) || []);
     
     // First filter by selected items (if any are selected)
-    let filteredByItems = orders;
+    let filteredByItems = transactions;
     if (selectedItems && selectedItems.length > 0) {
       const selectedItemIds = selectedItems.map(item => item.id);
-      filteredByItems = orders.filter(order => {
-        // Check if this order is for any of the selected items
-        return selectedItemIds.includes(order.item_id);
+      filteredByItems = transactions.filter(transaction => {
+        // Check if this transaction is for any of the selected items
+        return selectedItemIds.includes(transaction.item_id);
       });
+      console.log('getFilteredTransactions - After item filtering:', filteredByItems);
     }
     
     // Then filter by status
-    return filteredByItems.filter(order => {
-      const soldCount = order.quantity_sold || 0;
-      const totalQuantity = order.quantity || 0;
+    const finalFiltered = filteredByItems.filter(transaction => {
+      const soldCount = transaction.quantity_sold || 0;
+      const totalQuantity = transaction.quantity || 0;
       const remainingCount = totalQuantity - soldCount;
       
       // Debug logging
-      console.log('Order filter debug:', {
-        orderId: order.id,
-        orderNumber: order.order_number,
-        itemId: order.item_id,
+      const shouldShow = (() => {
+        switch (transactionFilter) {
+          case 'available': return remainingCount > 0 && soldCount === 0;
+          case 'sold': return remainingCount === 0 && soldCount > 0;
+          default: return remainingCount > 0 && soldCount === 0; // Default to available/on hand
+        }
+      })();
+      
+      console.log('Transaction filter debug:', {
+        transactionId: transaction.id,
+        transactionNumber: transaction.order_number,
+        itemId: transaction.item_id,
         selectedItemIds: selectedItems?.map(item => item.id) || [],
         totalQuantity,
         soldCount,
         remainingCount,
-        filter: orderFilter,
+        filter: transactionFilter,
         isAvailable: remainingCount > 0 && soldCount === 0,
-        isPartiallySold: remainingCount > 0 && soldCount > 0,
-        isSold: remainingCount === 0,
-        shouldShow: (() => {
-          switch (orderFilter) {
-            case 'available': return remainingCount > 0 && soldCount === 0;
-            case 'partially-sold': return remainingCount > 0 && soldCount > 0;
-            case 'sold': return remainingCount === 0;
-            default: return true;
-          }
-        })()
+        isSold: remainingCount === 0 && soldCount > 0,
+        shouldShow,
+        willPassFilter: shouldShow
       });
       
-      switch (orderFilter) {
+      switch (transactionFilter) {
         case 'available':
           return remainingCount > 0 && soldCount === 0;
-        case 'partially-sold':
-          return remainingCount > 0 && soldCount > 0;
         case 'sold':
-          return remainingCount === 0;
+          return remainingCount === 0 && soldCount > 0; // Fully sold: no remaining AND some sold
         default:
-          return true;
+          return remainingCount > 0 && soldCount === 0; // Default to available/on hand
       }
     });
+    
+    console.log('getFilteredTransactions - Final result:', finalFiltered);
+    return finalFiltered;
   };
 
   // Handle clicks outside the actions menu to close it
@@ -525,7 +561,7 @@ const UniversalBulkMenu = ({
         };
       case 'search':
         return {
-          primary: 'bg-green-600 hover:bg-green-700 text-white',
+          primary: 'text-white',
           secondary: 'bg-gray-600 hover:bg-gray-700 text-white',
           danger: 'bg-red-600 hover:bg-red-700 text-white'
         };
@@ -544,7 +580,7 @@ const UniversalBulkMenu = ({
       // Search page only shows "Add to Collection"
       return {
         showAddToCart: true,
-        showOrderBook: false,
+        showTransactionHistory: false,
         showPriceOverride: false,
         showDelete: false,
         showExport: false
@@ -553,7 +589,7 @@ const UniversalBulkMenu = ({
       // Collection page shows all actions
       return {
         showAddToCart: showAddToCart,
-        showOrderBook: showOrderBook,
+        showTransactionHistory: showTransactionHistory,
         showPriceOverride: showPriceOverride,
         showDelete: showDelete,
         showExport: showExport
@@ -568,7 +604,7 @@ const UniversalBulkMenu = ({
   return (
     <>
       {/* Blur Overlay */}
-      {(isActionsMenuFullyOpen || isOrderBookMenuFullyOpen) && (
+      {(isActionsMenuFullyOpen || isTransactionHistoryMenuFullyOpen) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[55] pointer-events-none" />
       )}
       
@@ -595,13 +631,13 @@ const UniversalBulkMenu = ({
                   <div className="w-10 h-1 bg-gray-400 rounded-full"></div>
                 </div>
                 <div className="space-y-3">
-              {availableActions.showOrderBook && onViewOrderBook && (
+              {availableActions.showTransactionHistory && onViewTransactionHistory && (
                 <button
                   onClick={() => {
-                    onViewOrderBook();
+                    onViewTransactionHistory();
                     setShowActionsDropdown(false);
-                    // Open order book menu
-                    setShowOrderBookDropdown(true);
+                    // Open transaction history menu
+                    setShowTransactionHistoryDropdown(true);
                   }}
                   className="w-full flex items-center gap-3 p-4 text-white rounded-xl transition-colors duration-200 hover:bg-gray-700"
                   style={{ backgroundColor: '#1a1f2e', border: '1px solid rgba(75, 85, 99, 0.4)' }}
@@ -612,8 +648,8 @@ const UniversalBulkMenu = ({
                     </svg>
                   </div>
                   <div className="flex-1 text-left">
-                    <div className="font-normal text-[13px]" style={{ color: 'white' }}>View Order Book</div>
-                    <div className="text-[11px]" style={{ color: '#9ca3af' }}>View and manage all orders for selected items</div>
+                    <div className="font-normal text-[13px]" style={{ color: 'white' }}>View Transaction History</div>
+                    <div className="text-[11px]" style={{ color: '#9ca3af' }}>View and manage all transactions for selected items</div>
                   </div>
                   <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd"/>
@@ -674,17 +710,17 @@ const UniversalBulkMenu = ({
         </div>
       )}
 
-      {/* Order Book Section - can be swiped */}
+      {/* Transaction History Section - can be swiped */}
       {variant === 'collection' && (
         <div 
           className={`fixed left-0 right-0 transition-all duration-300 ease-in-out z-[59] ${
-            showOrderBookDropdown ? 'opacity-100' : 'max-h-0 opacity-0'
+            showTransactionHistoryDropdown ? 'opacity-100' : 'max-h-0 opacity-0'
           } ${
             isDragging ? '' : 'transition-all duration-300 ease-out'
           }`}
           style={{
             bottom: '120px', // Position 120px from bottom to show all content
-            transform: showOrderBookDropdown ? `translateY(${translateY}px)` : 'translateY(100%)', // Slide up when open, hide below when closed
+            transform: showTransactionHistoryDropdown ? `translateY(${translateY}px)` : 'translateY(100%)', // Slide up when open, hide below when closed
             maxHeight: 'calc(100vh - 120px)' // Don't extend beyond screen height minus 120px
           }}
           onTouchStart={handleTouchStart}
@@ -697,13 +733,13 @@ const UniversalBulkMenu = ({
               <div className="w-10 h-1 bg-gray-400 rounded-full"></div>
             </div>
             
-                  {/* Order Book Header */}
+                  {/* Transaction History Header */}
                   <div className="mb-4">
                       <h3 className="text-lg font-semibold text-white">
-                        Viewing On Hand Orders
+                        Transaction History
                       </h3>
                       <p className="text-sm text-gray-400 mt-1">
-                        Edit, mark as sold or delete orders all together
+                        View purchase and sales history for selected items
                       </p>
                     </div>
 
@@ -711,29 +747,19 @@ const UniversalBulkMenu = ({
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex gap-1">
                       <button
-                        onClick={() => setOrderFilter('available')}
+                        onClick={() => setTransactionFilter('available')}
                         className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                          orderFilter === 'available'
+                          transactionFilter === 'available'
                             ? 'bg-indigo-600 text-white shadow-sm'
                             : 'bg-transparent text-gray-600 hover:text-gray-800'
                         }`}
                       >
-                        Available
+                        On Hand
                       </button>
                       <button
-                        onClick={() => setOrderFilter('partially-sold')}
+                        onClick={() => setTransactionFilter('sold')}
                         className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                          orderFilter === 'partially-sold'
-                            ? 'bg-indigo-600 text-white shadow-sm'
-                            : 'bg-transparent text-gray-600 hover:text-gray-800'
-                        }`}
-                      >
-                        Partially Sold
-                      </button>
-                      <button
-                        onClick={() => setOrderFilter('sold')}
-                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                          orderFilter === 'sold'
+                          transactionFilter === 'sold'
                             ? 'bg-indigo-600 text-white shadow-sm'
                             : 'bg-transparent text-gray-600 hover:text-gray-800'
                         }`}
@@ -742,17 +768,17 @@ const UniversalBulkMenu = ({
                       </button>
                     </div>
                     
-                    {/* Bulk Action Buttons - Only show when there are orders */}
-                    {getFilteredOrders().length > 0 && (
+                    {/* Bulk Action Buttons - Only show when there are orders AND more than 1 item selected */}
+                    {getFilteredTransactions().length > 0 && selectedCount > 1 && (
                       <div className="flex items-center gap-2">
                         {/* Bulk Mark as Sold Button - Only show for available and partially-sold orders */}
-                        {orderFilter !== 'sold' && (
+                        {transactionFilter !== 'sold' && (
                           <button
                             onClick={handleBulkMarkAsSoldStart}
                             className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
                             title="Start Bulk Mark as Sold"
                           >
-                            <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                            <svg className="w-3 h-3 style={{ color: '#4ADE80' }}" fill="currentColor" viewBox="0 0 20 20">
                               <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
                               <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"/>
                             </svg>
@@ -781,13 +807,13 @@ const UniversalBulkMenu = ({
                           <div className="flex items-center">
                             <input
                               type="checkbox"
-                              checked={selectedOrders.length === getFilteredOrders().length && getFilteredOrders().length > 0}
+                              checked={selectedTransactions.length === getFilteredTransactions().length && getFilteredTransactions().length > 0}
                               onChange={handleSelectAll}
                               className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                             />
                           </div>
                           <span className="text-gray-300" style={{ fontSize: '10px' }}>
-                            {selectedOrders.length} of {getFilteredOrders().length} selected
+                            {selectedTransactions.length} of {getFilteredTransactions().length} selected
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -818,19 +844,31 @@ const UniversalBulkMenu = ({
             {/* Orders List */}
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
               {(() => {
-                const filteredOrders = getFilteredOrders();
-                return !filteredOrders || filteredOrders.length === 0 ? (
+                const filteredTransactions = getFilteredTransactions();
+                return !filteredTransactions || filteredTransactions.length === 0 ? (
                 <div className="text-center py-8">
-                    <div className="text-gray-400 text-lg mb-2">No {orderFilter.replace('-', ' ')} orders found</div>
-                    <div className="text-gray-500 text-sm">Showing {filteredOrders?.length || 0} of {orders?.length || 0} orders</div>
+                    <div className="text-gray-400 text-lg mb-2">No {transactionFilter === 'all' ? '' : transactionFilter + ' '}transactions found</div>
+                    <div className="text-gray-500 text-sm">Showing {filteredTransactions?.length || 0} of {transactions?.length || 0} transactions</div>
                 </div>
               ) : (
-                  filteredOrders.map((order) => {
-                  const remainingCount = order.quantity - (order.quantity_sold || 0);
-                  const soldCount = order.quantity_sold || 0;
+                  filteredTransactions.map((transaction) => {
+                  const remainingCount = transaction.quantity - (transaction.quantity_sold || 0);
+                  const soldCount = transaction.quantity_sold || 0;
+                  
+                  const isEditing = editingTransactionId === transaction.id;
+                  const isMarkingAsSold = markingAsSoldTransactionId === transaction.id;
+                  const isOtherBeingEdited = editingTransactionId && editingTransactionId !== transaction.id;
+                  const isOtherBeingMarkedAsSold = markingAsSoldTransactionId && markingAsSoldTransactionId !== transaction.id;
                   
                   return (
-                    <div key={order.id} className="bg-white rounded-lg p-4 shadow-lg">
+                    <div 
+                      key={transaction.id} 
+                      className={`bg-white rounded-lg p-4 shadow-lg transition-all duration-300 ${
+                        isOtherBeingEdited || isOtherBeingMarkedAsSold 
+                          ? 'blur-sm opacity-50 pointer-events-none' 
+                          : ''
+                      }`}
+                    >
                       {/* Item Header */}
                       <div className="flex items-center gap-4 mb-4">
                         {/* Checkbox for select mode */}
@@ -838,18 +876,18 @@ const UniversalBulkMenu = ({
                           <div className="flex items-center">
                             <input
                               type="checkbox"
-                              checked={selectedOrders.includes(order.id)}
-                              onChange={() => handleOrderSelect(order.id)}
+                              checked={selectedTransactions.includes(transaction.id)}
+                              onChange={() => handleTransactionSelect(transaction.id)}
                               className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                             />
                           </div>
                         )}
                         
                         <div className="w-12 h-12 flex items-center justify-center">
-                          {item?.image ? (
+                          {transaction.image_url ? (
                             <img
-                              src={item.image}
-                              alt={item.name}
+                              src={transaction.image_url}
+                              alt={transaction.item_name}
                               className="w-full h-full object-contain"
                             />
                           ) : (
@@ -858,10 +896,10 @@ const UniversalBulkMenu = ({
                         </div>
                         <div className="flex-1">
                           <h4 className="font-semibold text-white text-sm">
-                            {item?.name || 'Unknown Item'}
+                            {transaction.item_name || 'Unknown Item'}
                           </h4>
                           <div className="text-xs text-gray-300">
-                            {item?.set || item?.set_name || 'Unknown Set'}
+                            {transaction.set_name || 'Unknown Set'}
                           </div>
                         </div>
                         
@@ -870,56 +908,12 @@ const UniversalBulkMenu = ({
                           <div className="flex items-center gap-2">
                           {/* Action Buttons - Small circular icons */}
                           <div className="flex items-center gap-1">
-                            {markingAsSoldOrderId === order.id ? (
-                              /* Mark as Sold Mode - Only Cancel and Save buttons */
-                              <>
-                                <button
-                                  onClick={() => handleMarkAsSoldCancel()}
-                                  className="w-5 h-5 bg-gray-600 hover:bg-gray-700 text-white rounded-full flex items-center justify-center transition-colors"
-                                  title="Cancel Mark as Sold"
-                                >
-                                  <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => handleMarkAsSoldSave(order.id)}
-                                  className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
-                                  title="Mark as Sold"
-                                >
-                                  <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-                                  </svg>
-                                </button>
-                              </>
-                            ) : editingOrderId === order.id ? (
-                              /* Edit Mode - Only Cancel and Save buttons */
-                              <>
-                                <button
-                                  onClick={() => handleEditCancel()}
-                                  className="w-5 h-5 bg-gray-600 hover:bg-gray-700 text-white rounded-full flex items-center justify-center transition-colors"
-                                  title="Cancel Edit"
-                                >
-                                  <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => handleEditSave(order.id)}
-                                  className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
-                                  title="Save Changes"
-                                >
-                                  <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-                                  </svg>
-                                </button>
-                              </>
-                            ) : (
+                            {!markingAsSoldTransactionId && !editingTransactionId && (
                               /* View Mode - Normal action buttons */
                               <>
                             {showEditActions && (
                               <button
-                                    onClick={() => handleEditStart(order.id, order)}
+                                    onClick={() => handleEditStart(transaction.id, transaction)}
                                     className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
                                 title="Edit Order"
                               >
@@ -930,11 +924,11 @@ const UniversalBulkMenu = ({
                             )}
                             {showMarkAsSoldActions && remainingCount > 0 && (
                               <button
-                                    onClick={() => handleMarkAsSoldStart(order.id, order)}
+                                    onClick={() => handleMarkAsSoldStart(transaction.id, transaction)}
                                     className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
                                 title="Mark as Sold"
                               >
-                                    <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <svg className="w-3 h-3 style={{ color: '#4ADE80' }}" fill="currentColor" viewBox="0 0 20 20">
                                       <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
                                       <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1V8a1 1 0 00-1-1h-3z"/>
                                 </svg>
@@ -942,7 +936,7 @@ const UniversalBulkMenu = ({
                             )}
                             {showDeleteActions && (
                               <button
-                                onClick={() => onOrderDelete && onOrderDelete(order.id)}
+                                onClick={() => onTransactionDelete && onTransactionDelete(transaction.id)}
                                     className="w-6 h-6 bg-gray-300 bg-opacity-80 hover:bg-opacity-100 rounded-full flex items-center justify-center transition-colors"
                                 title="Delete Order"
                               >
@@ -960,7 +954,7 @@ const UniversalBulkMenu = ({
 
                       {/* Order Details */}
                       <div className="space-y-3">
-                        {markingAsSoldOrderId === order.id ? (
+                        {markingAsSoldTransactionId === transaction.id ? (
                           /* Mark as Sold Mode */
                           <>
                             {/* Sales Information */}
@@ -1114,7 +1108,7 @@ const UniversalBulkMenu = ({
                               </div>
                             </div>
                           </>
-                        ) : editingOrderId === order.id ? (
+                        ) : editingTransactionId === transaction.id ? (
                           /* Edit Mode */
                           <>
                         {/* First Row: Order #, Date, Location */}
@@ -1123,21 +1117,28 @@ const UniversalBulkMenu = ({
                                 <div className="text-white mb-1" style={{ fontSize: '12px' }}>Order #</div>
                                 <input
                                   type="text"
-                                  value={order.order_number ? order.order_number.replace('ORD-', '') : 'N/A'}
+                                  value={transaction.order_number ? String(transaction.order_number).replace('ORD-', '') : 'N/A'}
                                   disabled
                                   className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300 cursor-not-allowed"
-                                  style={{ fontSize: '12px' }}
+                                  style={{ fontSize: '12px', height: '28px' }}
                                 />
                           </div>
                           <div>
                                 <div className="text-white mb-1" style={{ fontSize: '12px' }}>Date</div>
-                                <input
-                                  type="date"
-                                  value={editFormData.purchase_date ? new Date(editFormData.purchase_date).toISOString().split('T')[0] : ''}
-                                  onChange={(e) => handleEditFieldChange('purchase_date', e.target.value)}
+                                <DatePicker
+                                  selected={editFormData.purchase_date ? new Date(editFormData.purchase_date) : null}
+                                  onChange={(date) => {
+                                    const isoDate = date ? date.toISOString().split('T')[0] : '';
+                                    handleEditFieldChange('purchase_date', isoDate);
+                                  }}
                                   onBlur={() => handleEditFieldBlur('purchase_date', originalValues.purchase_date)}
+                                  dateFormat="MM/dd/yy"
+                                  placeholderText="MM/DD/YY"
                                   className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
-                                  style={{ fontSize: '12px' }}
+                                  style={{ fontSize: '12px', height: '28px' }}
+                                  showPopperArrow={false}
+                                  popperClassName="react-datepicker-dark"
+                                  calendarClassName="react-datepicker-dark"
                                 />
                               </div>
                               <div>
@@ -1147,7 +1148,7 @@ const UniversalBulkMenu = ({
                                   onChange={(e) => handleEditFieldChange('retailer_name', e.target.value)}
                                   onBlur={() => handleEditFieldBlur('retailer_name', originalValues.retailer_name)}
                                   className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
-                                  style={{ fontSize: '12px' }}
+                                  style={{ fontSize: '12px', height: '28px' }}
                                 >
                                   <option value="" className="bg-gray-800 text-white">Select retailer</option>
                                   {retailers.map(retailer => (
@@ -1166,7 +1167,14 @@ const UniversalBulkMenu = ({
                                 <input
                                   type="number"
                                   value={editFormData.quantity || ''}
-                                  onChange={(e) => handleEditFieldChange('quantity', e.target.value)}
+                                  onChange={(e) => {
+                                    const quantity = parseInt(e.target.value) || 1;
+                                    const pricePerItem = parseFloat(editFormData.price_per_item_cents) || 0;
+                                    const totalCost = pricePerItem * quantity;
+                                    
+                                    handleEditFieldChange('quantity', e.target.value);
+                                    handleEditFieldChange('total_cost', totalCost.toFixed(2));
+                                  }}
                                   onBlur={() => {
                                     if (editFormData.quantity === '' || editFormData.quantity === null || editFormData.quantity === undefined) {
                                       handleEditFieldChange('quantity', originalValues.quantity);
@@ -1178,7 +1186,7 @@ const UniversalBulkMenu = ({
                                       ? 'bg-gray-800 text-gray-400 border-gray-300 cursor-not-allowed' 
                                       : 'bg-gray-800 text-white border-gray-300'
                                   }`}
-                                  style={{ fontSize: '12px' }}
+                                  style={{ fontSize: '12px', height: '28px' }}
                                   min="1"
                                 />
                               </div>
@@ -1188,14 +1196,21 @@ const UniversalBulkMenu = ({
                                   type="number"
                                   step="0.01"
                                   value={editFormData.price_per_item_cents || ''}
-                                  onChange={(e) => handleEditFieldChange('price_per_item_cents', e.target.value)}
+                                  onChange={(e) => {
+                                    const pricePerItem = parseFloat(e.target.value) || 0;
+                                    const quantity = parseInt(editFormData.quantity) || 1;
+                                    const totalCost = pricePerItem * quantity;
+                                    
+                                    handleEditFieldChange('price_per_item_cents', e.target.value);
+                                    handleEditFieldChange('total_cost', totalCost.toFixed(2));
+                                  }}
                                   onBlur={() => {
                                     if (editFormData.price_per_item_cents === '' || editFormData.price_per_item_cents === null || editFormData.price_per_item_cents === undefined) {
                                       handleEditFieldChange('price_per_item_cents', originalValues.price_per_item_cents);
                                     }
                                   }}
                                   className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
-                                  style={{ fontSize: '12px' }}
+                                  style={{ fontSize: '12px', height: '28px' }}
                                 />
                               </div>
                               <div>
@@ -1204,14 +1219,21 @@ const UniversalBulkMenu = ({
                                   type="number"
                                   step="0.01"
                                   value={editFormData.total_cost || ''}
-                                  onChange={(e) => handleEditFieldChange('total_cost', e.target.value)}
+                                  onChange={(e) => {
+                                    const totalCost = parseFloat(e.target.value) || 0;
+                                    const quantity = parseInt(editFormData.quantity) || 1;
+                                    const pricePerItem = quantity > 0 ? totalCost / quantity : 0;
+                                    
+                                    handleEditFieldChange('total_cost', e.target.value);
+                                    handleEditFieldChange('price_per_item_cents', pricePerItem.toFixed(2));
+                                  }}
                                   onBlur={() => {
                                     if (editFormData.total_cost === '' || editFormData.total_cost === null || editFormData.total_cost === undefined) {
                                       handleEditFieldChange('total_cost', originalValues.total_cost);
                                     }
                                   }}
                                   className="w-full px-2 py-1 bg-gray-800 text-white rounded text-xs border border-gray-300"
-                                  style={{ fontSize: '12px' }}
+                                  style={{ fontSize: '12px', height: '28px' }}
                                   min="0"
                                 />
                               </div>
@@ -1225,12 +1247,12 @@ const UniversalBulkMenu = ({
                             <div className="grid grid-cols-3 gap-4" style={{ fontSize: '12px' }}>
                               <div>
                                 <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Order #</div>
-                                <div className="font-medium text-white" style={{ fontSize: '12px' }}>{order.order_number ? order.order_number.replace('ORD-', '') : 'N/A'}</div>
+                                <div className="font-medium text-white" style={{ fontSize: '12px' }}>{transaction.order_number ? String(transaction.order_number).replace('ORD-', '') : 'N/A'}</div>
                               </div>
                               <div>
                                 <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Date</div>
                                 <div className="font-medium text-white" style={{ fontSize: '12px' }}>
-                              {new Date(order.purchase_date).toLocaleDateString('en-US', {
+                              {new Date(transaction.purchase_date).toLocaleDateString('en-US', {
                                     year: '2-digit',
                                     month: '2-digit',
                                     day: '2-digit'
@@ -1239,7 +1261,7 @@ const UniversalBulkMenu = ({
                           </div>
                           <div>
                                 <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Location</div>
-                                <div className="font-medium text-white" style={{ fontSize: '12px' }}>{order.retailer_name || 'N/A'}</div>
+                                <div className="font-medium text-white" style={{ fontSize: '12px' }}>{transaction.retailer_name || 'N/A'}</div>
                           </div>
                         </div>
                         
@@ -1252,19 +1274,28 @@ const UniversalBulkMenu = ({
                           <div>
                                 <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Price (per item)</div>
                                 <div className="font-medium text-white" style={{ fontSize: '12px' }}>
-                              ${(order.price_per_item_cents / 100).toFixed(2)}
+                              ${(transaction.price_per_item_cents / 100).toFixed(2)}
                             </div>
                           </div>
                           <div>
                                 <div className="text-gray-400 mb-1" style={{ fontSize: '12px' }}>Total Cost</div>
                                 <div className="font-medium text-white" style={{ fontSize: '12px' }}>
-                              ${((order.price_per_item_cents * remainingCount) / 100).toFixed(2)}
+                              ${((transaction.price_per_item_cents * remainingCount) / 100).toFixed(2)}
                             </div>
                           </div>
                         </div>
                           </>
                         )}
                       </div>
+
+                      {/* Partial Sale Manager */}
+                      <PartialSaleManager
+                        transaction={transaction}
+                        onUpdateTransaction={handleTransactionUpdate}
+                        onDeleteSoldPortion={handleDeleteSoldPortion}
+                        showDeleteActions={showDeleteActions}
+                        showEditActions={showEditActions}
+                      />
 
                     </div>
                   );
@@ -1279,7 +1310,7 @@ const UniversalBulkMenu = ({
 
       {/* Preview Section - Always visible and fixed at bottom */}
       {variant === 'collection' && (
-        <div className={`${menuStyles} ${(showActionsDropdown || showOrderBookDropdown) ? '' : 'rounded-t-3xl'} relative z-[61]`}>
+        <div className={`${menuStyles} ${(showActionsDropdown || showTransactionHistoryDropdown) ? '' : 'rounded-t-3xl'} relative z-[61]`}>
           {/* Header with selection count and action buttons */}
           <div className="px-6 py-3 flex items-center justify-between">
             <div className="font-normal" style={{ fontSize: '12px', color: '#9ca3af' }}>
@@ -1288,15 +1319,78 @@ const UniversalBulkMenu = ({
             
           {/* Action Buttons */}
             <div className="flex items-center gap-2">
-              {showOrderBookDropdown ? (
-                // When Order Book is active, only show Close button
-                <button
-                  onClick={() => setShowOrderBookDropdown(false)}
-                  className="px-4 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors"
-                  style={{ height: '24px', fontSize: '12px' }}
-                >
-                  Close
-                </button>
+              {showTransactionHistoryDropdown ? (
+                // When Transaction History is active, check if in edit mode
+                (editingTransactionId || markingAsSoldTransactionId) ? (
+                  // In edit mode - show Save and Cancel buttons
+                  <>
+                    <button
+                      onClick={() => {
+                        if (editingTransactionId) {
+                          handleEditCancel();
+                        } else if (markingAsSoldTransactionId) {
+                          handleMarkAsSoldCancel();
+                        }
+                      }}
+                      className="px-4 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded font-medium transition-colors"
+                      style={{ height: '24px', fontSize: '12px' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (editingTransactionId) {
+                          handleEditSave(editingTransactionId);
+                        } else if (markingAsSoldTransactionId) {
+                          handleMarkAsSoldSave(markingAsSoldTransactionId);
+                        }
+                      }}
+                      className="px-4 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors"
+                      style={{ height: '24px', fontSize: '12px' }}
+                    >
+                      Save
+                    </button>
+                  </>
+                ) : (
+                  // Not in edit mode - show Close button
+                  <button
+                    onClick={() => setShowTransactionHistoryDropdown(false)}
+                    className="px-4 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors"
+                    style={{ height: '24px', fontSize: '12px' }}
+                  >
+                    Close
+                  </button>
+                )
+              ) : (editingTransactionId && editFormData && Object.keys(editFormData).length > 0) || (markingAsSoldTransactionId && markAsSoldFormData && Object.keys(markAsSoldFormData).length > 0) ? (
+                // When editing or marking as sold outside of transaction history, show Save and Cancel buttons
+                <>
+                  <button
+                    onClick={() => {
+                      if (editingTransactionId) {
+                        handleEditCancel();
+                      } else if (markingAsSoldTransactionId) {
+                        handleMarkAsSoldCancel();
+                      }
+                    }}
+                    className="px-4 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded font-medium transition-colors"
+                    style={{ height: '24px', fontSize: '12px' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (editingTransactionId) {
+                        handleEditSave(editingTransactionId);
+                      } else if (markingAsSoldTransactionId) {
+                        handleMarkAsSoldSave(markingAsSoldTransactionId);
+                      }
+                    }}
+                    className="px-4 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors"
+                    style={{ height: '24px', fontSize: '12px' }}
+                  >
+                    Save
+                  </button>
+                </>
               ) : (
                 // Normal preview menu buttons
                 <>

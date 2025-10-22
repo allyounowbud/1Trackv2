@@ -15,10 +15,11 @@ import SafeImage from '../SafeImage';
  * @param {string} props.variant - Card variant: 'collection', 'pokemon', 'search'
  * @param {boolean} props.showSelection - Whether to show selection indicators
  * @param {boolean} props.showCartIndicator - Whether to show cart quantity
+ * @param {boolean} props.showMenuButton - Whether to show the menu button
  * @param {Function} props.onClick - Click handler
  * @param {Function} props.onLongPress - Long press handler
  * @param {Function} props.onSelectionChange - Selection change handler
- * @param {Function} props.onViewOrderBook - View order book handler
+ * @param {Function} props.onViewTransactionHistory - View transaction history handler
  * @param {Function} props.onOverridePrice - Override price handler
  * @param {Function} props.onDelete - Delete item handler
  * @param {Object} props.className - Additional CSS classes
@@ -32,11 +33,12 @@ const UniversalCard = ({
   variant = 'collection',
   showSelection = false,
   showCartIndicator = false,
+  showMenuButton = false,
   onClick,
   onLongPress,
   onSelectionChange,
   onMenuClick,
-  onViewOrderBook,
+  onViewTransactionHistory,
   onOverridePrice,
   onDelete,
   className = '',
@@ -156,9 +158,10 @@ const UniversalCard = ({
       return {
         show: true,
         text: item.condition || 'Sealed',
-        color: isProfit ? 'text-green-400' : 'text-red-400',
+        color: isProfit ? '' : 'text-red-400',
+        style: isProfit ? { color: '#4ADE80' } : {},
         icon: isProfit ? (
-          <svg className="w-2.5 h-2.5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20" style={{ color: '#4ADE80' }}>
             <path fillRule="evenodd" d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L6.707 7.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
           </svg>
         ) : (
@@ -244,9 +247,7 @@ const UniversalCard = ({
     if (showSelection && onSelectionChange) {
       onSelectionChange();
     } else {
-      // Select this card and trigger actions menu directly
-      onSelectionChange();
-      // The parent component will handle opening the actions menu
+      // Open the individual item action menu
       if (onMenuClick) {
         onMenuClick();
       }
@@ -331,16 +332,17 @@ const UniversalCard = ({
             <div className="flex items-end justify-between">
               <div className="space-y-0.5 flex-1">
                 <div className={`${textSizes.price} text-white`}>
-                  {formatPrice(item.value)} Value • Qty {item.quantity || 1}
+                  {formatPrice((item.value || 0) * (item.quantity || 1))} Value • Qty {item.quantity || 1}
                 </div>
                 <div className={`${textSizes.price} text-white`}>
                   {formatPrice(item.totalPaid)} Cost 
                   {(() => {
-                    const profit = item.value - item.totalPaid;
+                    const totalValue = (item.value || 0) * (item.quantity || 1);
+                    const profit = totalValue - item.totalPaid;
                     const profitPercent = item.totalPaid ? ((profit / item.totalPaid) * 100) : 0;
                     const isProfit = profit >= 0;
                     return (
-                      <span className={`ml-1 ${isProfit ? 'text-green-400' : 'text-red-400'}`}>
+                      <span className={`ml-1 ${isProfit ? '' : 'text-red-400'}`} style={isProfit ? { color: '#4ADE80' } : {}}>
                         ({isProfit ? '+' : ''}{profitPercent.toFixed(1)}%)
                       </span>
                     );
@@ -349,34 +351,36 @@ const UniversalCard = ({
               </div>
               
               {/* Selection Checkbox / Menu Button - moved to bottom right */}
-              <div className="ml-1 mr-2 mb-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleMenuClick(e);
-                  }}
-                  className="w-4 h-4 rounded-full flex items-center justify-center"
-                  aria-label={showSelection ? (isSelected ? "Deselect item" : "Select item") : "Item menu"}
-                >
-                  {showSelection ? (
-                    isSelected ? (
-                      <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
-                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              {(showSelection || showMenuButton) && (
+                <div className="ml-1 mr-2 mb-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleMenuClick(e);
+                    }}
+                    className="w-4 h-4 rounded-full flex items-center justify-center"
+                    aria-label={showSelection ? (isSelected ? "Deselect item" : "Select item") : "Item menu"}
+                  >
+                    {showSelection ? (
+                      isSelected ? (
+                        <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border-2 border-gray-300 bg-white"></div>
+                      )
+                    ) : (
+                      <div className="w-4 h-4 rounded-full border-2 border-gray-300 bg-white flex items-center justify-center hover:bg-gray-100 transition-colors">
+                        <svg className="w-2 h-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                         </svg>
                       </div>
-                    ) : (
-                      <div className="w-4 h-4 rounded-full border-2 border-gray-300 bg-white"></div>
-                    )
-                  ) : (
-                    <div className="w-4 h-4 rounded-full border-2 border-gray-300 bg-white flex items-center justify-center">
-                      <svg className="w-2 h-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                      </svg>
-                    </div>
-                  )}
-                </button>
-              </div>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -10,6 +10,7 @@ import { queryKeys, queryClient } from '../lib/queryClient';
 import SafeImage from '../components/SafeImage';
 import AddToCollectionModal from '../components/AddToCollectionModal';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { UniversalGrid, UniversalCard, UniversalBulkMenu } from '../components/ui';
 import { 
   filterOnHandOrders, 
   filterSoldOrders, 
@@ -71,6 +72,9 @@ const Collection = () => {
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [ordersToDelete, setOrdersToDelete] = useState([]);
+  
+  // Universal menu state
+  const [shouldPreOpenActions, setShouldPreOpenActions] = useState(false);
   const [selectedOrderIds, setSelectedOrderIds] = useState(new Set());
   const [showEditPriceModal, setShowEditPriceModal] = useState(false);
   const [editPriceData, setEditPriceData] = useState(null);
@@ -317,6 +321,16 @@ const Collection = () => {
   const getBulkMenuTransform = () => {
     if (!bulkMenuDragData.isDragging) return 'translateY(0)';
     return `translateY(${Math.max(0, bulkMenuDragData.deltaY)}px)`;
+  };
+
+
+  // Individual item menu handler
+  const handleItemMenuClick = (item) => {
+    // Select the item and enter selection mode
+    setSelectedItems(new Set([item.id]));
+    setIsSelectionMode(true);
+    // Set flag to pre-open actions menu
+    setShouldPreOpenActions(true);
   };
 
   // Selection functions
@@ -1092,7 +1106,7 @@ const Collection = () => {
 
   if (ordersLoading || summaryLoading) {
     return (
-      <div className="min-h-screen bg-gray-900">
+      <div className="min-h-screen bg-gray-800">
         {/* Header Skeleton */}
         <div className="bg-gray-800 border-b border-gray-700 p-4">
           <div className="max-w-7xl mx-auto">
@@ -1141,7 +1155,7 @@ const Collection = () => {
   }
 
   return (
-    <div>
+    <div className="min-h-screen bg-gray-800">
 
       {/* Collection Value Section */}
       <div className="px-4 md:px-6 lg:px-8 py-6">
@@ -1154,10 +1168,10 @@ const Collection = () => {
              selectedFilter === 'Custom' ? 'Your custom collection is worth' :
              'Your collection is worth'}
           </div>
-          <div className="text-5xl md:text-4xl lg:text-5xl font-bold text-blue-400 mb-1 md:mb-2 tracking-tight">
+          <div className="text-5xl md:text-4xl lg:text-5xl font-bold text-indigo-400 mb-1 md:mb-2 tracking-tight">
             {formatPrice(collectionData.filteredValue)}
           </div>
-          <div className="text-sm text-gray-600">You Paid • {formatPrice(collectionData.filteredPaid)} <span className={collectionData.filteredProfitPercentage >= 0 ? 'text-green-600' : 'text-red-400'}>({collectionData.filteredProfitPercentage >= 0 ? '+' : ''}{collectionData.filteredProfitPercentage.toFixed(1)}%)</span></div>
+          <div className="text-sm text-gray-600">You Paid • {formatPrice(collectionData.filteredPaid)} <span className={collectionData.filteredProfitPercentage >= 0 ? '' : 'text-red-400'} style={collectionData.filteredProfitPercentage >= 0 ? { color: '#4ADE80' } : {}}>({collectionData.filteredProfitPercentage >= 0 ? '+' : ''}{collectionData.filteredProfitPercentage.toFixed(1)}%)</span></div>
         </div>
       </div>
 
@@ -1178,10 +1192,11 @@ const Collection = () => {
                 }
               }, 100);
             }}
-            className="text-center bg-transparent border border-gray-200 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
+            className="text-center bg-transparent rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
+            style={{ border: '1px solid rgba(107, 114, 128, 0.45)' }}
           >
             <div className="text-xs text-gray-600 mb-1 md:mb-2">Ungraded</div>
-            <div className="text-sm font-bold text-blue-400">
+            <div className="text-sm font-bold text-indigo-400">
               {collectionData.ungradedCount}
             </div>
           </button>
@@ -1199,10 +1214,11 @@ const Collection = () => {
                 }
               }, 100);
             }}
-            className="text-center bg-transparent border border-gray-200 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
+            className="text-center bg-transparent rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
+            style={{ border: '1px solid rgba(107, 114, 128, 0.45)' }}
           >
             <div className="text-xs text-gray-600 mb-1 md:mb-2">Graded</div>
-            <div className="text-sm font-bold text-blue-400">
+            <div className="text-sm font-bold text-indigo-400">
               {collectionData.gradedCount}
             </div>
           </button>
@@ -1220,10 +1236,11 @@ const Collection = () => {
                 }
               }, 100);
             }}
-            className="text-center bg-transparent border border-gray-200 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
+            className="text-center bg-transparent rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
+            style={{ border: '1px solid rgba(107, 114, 128, 0.45)' }}
           >
             <div className="text-xs text-gray-600 mb-1 md:mb-2">Sealed</div>
-            <div className="text-sm font-bold text-blue-400">
+            <div className="text-sm font-bold text-indigo-400">
               {collectionData.sealedCount}
             </div>
           </button>
@@ -1241,10 +1258,11 @@ const Collection = () => {
                 }
               }, 100);
             }}
-            className="text-center bg-transparent border border-gray-200 rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
+            className="text-center bg-transparent rounded-xl p-3 md:p-6 transition-all duration-300 hover:scale-105"
+            style={{ border: '1px solid rgba(107, 114, 128, 0.45)' }}
           >
             <div className="text-xs text-gray-600 mb-1 md:mb-2">Custom</div>
-            <div className="text-sm font-bold text-blue-400">
+            <div className="text-sm font-bold text-indigo-400">
               {collectionData.customCount}
             </div>
           </button>
@@ -1253,21 +1271,21 @@ const Collection = () => {
 
       {/* Collection History */}
       <div className="px-3 md:px-6 lg:px-8 pb-4 md:pb-8" style={{ paddingTop: '9px' }}>
-        <div className="bg-transparent border border-gray-200 rounded-xl p-4 md:p-10 lg:p-12">
+        <div className="bg-transparent rounded-xl p-4 md:p-10 lg:p-12" style={{ border: '1px solid rgba(107, 114, 128, 0.45)' }}>
           <div className="flex items-center justify-between mb-4 md:mb-8">
             <div>
               <div className="text-base md:text-2xl lg:text-3xl font-semibold text-gray-600">My Portfolio</div>
               {/* Summary Text */}
               <div className="text-sm text-gray-600 mt-1">
-                {currentDateRange.label} <span className="text-blue-400">{formatPrice(collectionData.filteredValue)}</span> 
-                <span className="text-blue-400 ml-1">
+                {currentDateRange.label} <span className="text-indigo-400">{formatPrice(collectionData.filteredValue)}</span> 
+                <span className="text-indigo-400 ml-1">
                   ({percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(2)}%)
                 </span>
               </div>
             </div>
             {/* Share Collection */}
-            <button className="flex items-center gap-1 md:gap-3 px-2 md:px-4 py-1 md:py-2 border border-gray-600/50 rounded-lg text-xs md:text-base text-white bg-gray-800/30 hover:bg-gray-700/30 transition-colors">
-              <svg className="w-3 h-3 md:w-5 md:h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+            <button className="flex items-center gap-1 md:gap-3 px-2 md:px-4 py-1 md:py-2 border border-gray-700 rounded-lg text-xs md:text-base text-white bg-gray-800/30 hover:bg-gray-700/30 transition-colors">
+              <svg className="w-3 h-3 md:w-5 md:h-5 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
               <span className="hidden md:inline">Share Collection</span>
@@ -1281,8 +1299,8 @@ const Collection = () => {
             <defs>
               {/* Gradient for area under line */}
               <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.3"/>
-                <stop offset="100%" stopColor="#60a5fa" stopOpacity="0"/>
+                <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3"/>
+                <stop offset="100%" stopColor="#6366f1" stopOpacity="0"/>
               </linearGradient>
             </defs>
 
@@ -1367,7 +1385,7 @@ const Collection = () => {
                   {/* Line */}
                   <path
                     d={linePath}
-                    stroke="#60a5fa"
+                    stroke="#6366f1"
                     strokeWidth="2"
                     strokeLinecap="round"
                     fill="none"
@@ -1377,7 +1395,7 @@ const Collection = () => {
                     cx={lastPoint.x}
                     cy={lastPoint.y}
                     r="3"
-                    fill="#60a5fa"
+                    fill="#6366f1"
                     stroke="#1f2937"
                     strokeWidth="1"
                   />
@@ -1402,9 +1420,10 @@ const Collection = () => {
                        onClick={() => setTimeRange(range)}
                        className={`px-4 md:px-6 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors ${
                          timeRange === range
-                           ? 'bg-blue-500/20 text-blue-400 border border-blue-400/30'
-                           : 'bg-gray-800/30 text-gray-400 hover:bg-gray-700/40 hover:text-gray-300 border border-gray-700/30'
+                           ? 'bg-indigo-500/20 text-indigo-400'
+                           : 'bg-gray-800/30 text-gray-400 hover:bg-gray-700/40 hover:text-gray-300'
                        }`}
+                       style={{ border: '1px solid rgba(107, 114, 128, 0.45)' }}
                      >
                        {range}
                      </button>
@@ -1430,7 +1449,7 @@ const Collection = () => {
                 <div className="relative" ref={filterDropdownRef}>
                   <button 
                     onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                    className="text-sm font-medium text-blue-400 hover:text-blue-400 transition-colors"
+                    className="text-sm font-medium text-indigo-400 hover:text-indigo-400 transition-colors"
                   >
                     {selectedFilter}
                   </button>
@@ -1448,7 +1467,7 @@ const Collection = () => {
                             }}
                             className={`w-full text-left px-3 py-2 text-xs transition-colors ${
                               selectedFilter === filter
-                                ? 'bg-blue-400/20 text-blue-400'
+                                ? 'bg-indigo-400/20 text-indigo-400'
                                 : 'text-white hover:bg-gray-800'
                             }`}
                           >
@@ -1468,7 +1487,7 @@ const Collection = () => {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-sm font-medium text-white">Total Value • <span className="text-blue-400">
+              <div className="text-sm font-medium text-white">Total Value • <span className="text-indigo-400">
                 {formatPrice(
                   selectedFilter === 'All' 
                     ? collectionData.totalValue 
@@ -1493,166 +1512,236 @@ const Collection = () => {
               placeholder="Search your items..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 md:pl-12 pr-3 md:pr-4 py-2 md:py-3 bg-white border border-gray-200 rounded-lg text-sm md:text-base text-gray-600 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+              className="w-full pl-10 md:pl-12 pr-3 md:pr-4 py-2 md:py-3 bg-white rounded-lg text-sm md:text-base text-gray-600 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+              style={{ border: '1px solid rgba(107, 114, 128, 0.45)' }}
             />
           </div>
         </div>
 
         {/* Items Grid */}
-        <div className={`px-3 md:px-6 lg:px-8 ${isBulkSelectionMode ? 'pb-24' : 'pb-4'}`}>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6 lg:gap-8">
+        <UniversalGrid
+          variant="collection"
+          hasBulkMenu={isBulkSelectionMode}
+          showSelectionHint={false}
+        >
           {(collectionData.items || [])
             .filter(item => matchesFilter(item, selectedFilter))
             .map((item) => {
             const isSelected = selectedItems.has(item.id);
             return (
-                   <div 
-                     key={item.id} 
-                     className={`relative bg-white border border-gray-200 rounded-xl overflow-hidden transition-all duration-200 ${
-                       isSelected && (isBulkSelectionMode || isSelectionMode)
-                         ? 'border-indigo-300 bg-indigo-50' 
-                         : 'hover:bg-gray-100 hover:border-gray-300'
-                     }`}
-                     onTouchStart={(e) => {
-                       const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
-                       if (totalItems > 1 || isBulkSelectionMode) {
-                         longPressTriggeredRef.current = false;
-                         longPressRef.current = setTimeout(() => {
-                           handleLongPress(item.id);
-                           longPressTriggeredRef.current = true;
-                           longPressRef.current = null;
-                         }, 500);
-                       }
-                     }}
-                     onTouchEnd={(e) => {
-                       if (longPressRef.current) {
-                         clearTimeout(longPressRef.current);
-                         longPressRef.current = null;
-                       }
-                     }}
-                     onMouseDown={(e) => {
-                       const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
-                       if (e.button === 0 && (totalItems > 1 || isBulkSelectionMode)) { // Left click and multiple items or already in bulk mode
-                         longPressTriggeredRef.current = false;
-                         longPressRef.current = setTimeout(() => {
-                           handleLongPress(item.id);
-                           longPressTriggeredRef.current = true;
-                           longPressRef.current = null;
-                         }, 500);
-                       }
-                     }}
-                     onMouseUp={(e) => {
-                       if (longPressRef.current) {
-                         clearTimeout(longPressRef.current);
-                         longPressRef.current = null;
-                       }
-                     }}
-                     onClick={(e) => {
-                       // Prevent click if long press was triggered
-                       if (longPressTriggeredRef.current) {
-                         e.preventDefault();
-                         e.stopPropagation();
-                         longPressTriggeredRef.current = false;
-                         return;
-                       }
-                       
-                       // Only handle click if we're already in selection mode AND there are multiple items
-                       const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
-                       if (isSelectionMode && (totalItems > 1 || isBulkSelectionMode)) {
-                         e.preventDefault();
-                         handleItemSelect(item.id);
-                       }
-                     }}
-                   >
-              {/* Card Image */}
-              <div className="aspect-[1/1] flex items-center justify-center p-4 relative">
-                {item.image ? (
-                  <SafeImage 
-                    src={item.image} 
-                    alt={item.name}
-                    className="w-full h-full object-contain"
-                  />
-                ) : null}
-                <div className={`w-full h-full flex items-center justify-center bg-gray-100 ${item.image ? 'hidden' : 'flex'}`}>
-                  <div className="text-center">
-                    <div className="text-2xl mb-1">📦</div>
-                    <div className="text-gray-400 text-xs">No Image</div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Card Details */}
-              <div className="p-3 space-y-1">
-                {/* Item Name - First Line */}
-                <div>
-                  <h3 className="text-gray-700 leading-tight line-clamp-2 font-bold text-[11px] md:text-xs">
-                    {item.name}
-                    {item.cardNumber && (
-                      <span className="text-blue-400"> #{item.cardNumber}</span>
-                    )}
-                  </h3>
-                </div>
-                
-                {/* Set Name - Ghost Text */}
-                <div className="text-[11px] md:text-xs text-gray-500 truncate">
-                  {item.set}
-                </div>
-                  
-                  {/* Status Text */}
-                  <div className="text-[11px] md:text-xs text-blue-400 font-medium">
-                    {item.item_type === 'Single' ? (item.card_condition || 'Raw') : (item.item_type || 'Unknown')}
-                  </div>
-                
-                {/* Spacing */}
-                <div className="h-1"></div>
-                
-                {/* Financial Details */}
-                <div className="space-y-1">
-                  <div className="text-[11px] md:text-xs text-gray-700">
-                    {item.originalValue > 0 ? formatPrice(item.originalValue * item.quantity) : 'No Market Data'} Value • Qty {item.quantity}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="text-[11px] md:text-xs text-gray-700">
-                      {formatPrice(item.paid)} Paid 
-                        {item.originalValue > 0 ? (
-                      <span className={`ml-1 ${item.profit > 0 ? 'text-green-600' : 'text-red-400'}`}>
-                        ({item.profit > 0 ? '+' : ''}{item.profitPercent.toFixed(1)}%)
-                      </span>
-                        ) : (
-                          <span className="ml-1 text-gray-500">(No market data)</span>
-                        )}
-                    </div>
-                    
-                    {/* Menu Button / Check Icon - Bottom Right */}
-                    {isSelected && isBulkSelectionMode ? (
-                      <div className="text-blue-400">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedItemId(item.id);
-                          setShowItemMenu(true);
-                          openCollectionMenu();
-                        }}
-                        className="text-gray-400 hover:text-gray-900"
-                      >
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+              <UniversalCard
+                key={item.id}
+                item={{
+                  ...item,
+                  totalPaid: item.paid, // Map 'paid' to 'totalPaid' for UniversalCard
+                  set: item.set,
+                  set_name: item.set,
+                  image: item.image,
+                  image_url: item.image
+                }}
+                variant="collection"
+                isSelected={isSelected}
+                showSelection={isBulkSelectionMode || isSelectionMode}
+                showMenuButton={true}
+                onClick={() => {
+                  // Only handle click if we're already in selection mode AND there are multiple items
+                  const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
+                  if (isSelectionMode && (totalItems > 1 || isBulkSelectionMode)) {
+                    handleItemSelect(item.id);
+                  }
+                }}
+                onLongPress={() => {
+                  const totalItems = (collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length;
+                  if (totalItems > 1 || isBulkSelectionMode) {
+                    handleLongPress(item.id);
+                  }
+                }}
+                onSelectionChange={() => handleItemSelect(item.id)}
+                onMenuClick={() => handleItemMenuClick(item)}
+                onViewTransactionHistory={() => handleUniversalOrderBookOpen(item)}
+              />
             );
           })}
-        </div>
-        </div>
+        </UniversalGrid>
+
+
+      {/* Universal Bulk Menu */}
+      <UniversalBulkMenu
+        key={`bulk-menu-${filteredOrders.map(o => `${o.id}-${o.updated_at}`).join('-')}`}
+        isVisible={isBulkSelectionMode || isSelectionMode}
+        selectedCount={selectedItems.size}
+        selectedItems={Array.from(selectedItems).map(id => 
+          (collectionData.items || []).find(item => item.id === id)
+        ).filter(Boolean)}
+        totalItems={(collectionData.items || []).filter(item => matchesFilter(item, selectedFilter)).length}
+        variant="collection"
+        onAddToCart={() => console.log('Add to cart:', Array.from(selectedItems))}
+        onViewTransactionHistory={() => {
+          // Get all selected items
+          const selectedItemsArray = Array.from(selectedItems).map(id => 
+            (collectionData.items || []).find(item => item.id === id)
+          ).filter(Boolean);
+          
+          // Get all orders for all selected items
+          const allOrders = [];
+          selectedItemsArray.forEach(item => {
+            const itemOrders = filteredOrders.filter(o => o.item_name === item.name);
+            allOrders.push(...itemOrders);
+          });
+          
+          console.log('View order book for multiple items:', selectedItemsArray);
+          console.log('All orders for selected items:', allOrders);
+          
+          // The UniversalBulkMenu will handle showing the order book internally
+          // No need to open a separate order book menu
+        }}
+        transactions={(() => {
+          // Get all orders for all selected items
+          const selectedItemsArray = Array.from(selectedItems).map(id => 
+            (collectionData.items || []).find(item => item.id === id)
+          ).filter(Boolean);
+          
+          const allOrders = [];
+          selectedItemsArray.forEach(item => {
+            const itemOrders = filteredOrders.filter(o => o.item_name === item.name);
+            // Map the orders to include the correct item_id for filtering
+            const mappedOrders = itemOrders.map(order => ({
+              ...order,
+              item_id: item.id // Use the collection item's ID as the item_id
+            }));
+            allOrders.push(...mappedOrders);
+          });
+          
+          console.log('Orders being passed to UniversalBulkMenu:', allOrders);
+          console.log('Selected items:', selectedItemsArray);
+          console.log('Selected item names:', selectedItemsArray.map(item => item.name));
+          console.log('All filtered orders:', filteredOrders);
+          console.log('Filtered orders by names:', selectedItemsArray.map(item => 
+            filteredOrders.filter(o => o.item_name === item.name)
+          ));
+          console.log('Selected item IDs:', selectedItemsArray.map(item => item.id));
+          console.log('Order item IDs after mapping:', allOrders.map(order => order.item_id));
+          
+          return allOrders;
+        })()}
+        item={(() => {
+          // Return the first selected item for the order book
+          const selectedItemsArray = Array.from(selectedItems).map(id => 
+            (collectionData.items || []).find(item => item.id === id)
+          ).filter(Boolean);
+          
+          return selectedItemsArray.length > 0 ? selectedItemsArray[0] : null;
+        })()}
+        onEdit={async (transactionId, editData) => {
+          try {
+            console.log('Edit order:', transactionId, editData);
+            
+            // Convert price_per_item_cents from dollars to cents for storage
+            const pricePerItemCents = Math.round(parseFloat(editData.price_per_item_cents || 0) * 100);
+            
+            // Calculate total cost in cents
+            const totalCostCents = Math.round(parseFloat(editData.total_cost || 0) * 100);
+            
+            const updateData = {
+              retailer_name: editData.retailer_name,
+              purchase_date: editData.purchase_date,
+              quantity: parseInt(editData.quantity),
+              price_per_item_cents: pricePerItemCents,
+              total_cost_cents: totalCostCents
+            };
+            
+            await updateOrder(supabase, transactionId, updateData);
+            
+            // Refresh the data - invalidate all related queries
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: queryKeys.orders }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.collectionSummary })
+            ]);
+            
+            console.log('Order updated successfully');
+          } catch (error) {
+            console.error('Error updating order:', error);
+          }
+        }}
+        onMarkAsSold={(order) => {
+          console.log('Mark as sold:', order);
+          // Handle mark as sold - you can integrate with existing mark as sold functionality
+        }}
+        onTransactionDelete={(transaction) => {
+          console.log('Delete order:', order);
+          // Handle order delete - you can integrate with existing delete functionality
+        }}
+        onBulkDelete={() => {
+          console.log('Bulk delete orders for selected items:', Array.from(selectedItems));
+        }}
+        showEditActions={true}
+        showDeleteActions={true}
+        showMarkAsSoldActions={true}
+        onOverridePrice={() => console.log('Override price:', Array.from(selectedItems))}
+        onDelete={() => console.log('Delete items:', Array.from(selectedItems))}
+        onCancel={() => {
+          exitBulkSelectionMode();
+          setIsSelectionMode(false);
+          setSelectedItems(new Set());
+          setShouldPreOpenActions(false);
+        }}
+        onItemUnselect={(itemId) => {
+          const newSelectedItems = new Set(selectedItems);
+          newSelectedItems.delete(itemId);
+          setSelectedItems(newSelectedItems);
+          // Exit selection mode if no items are selected
+          if (newSelectedItems.size === 0) {
+            setIsSelectionMode(false);
+          }
+        }}
+        onSelectAll={() => {
+          const allItemIds = (collectionData.items || [])
+            .filter(item => matchesFilter(item, selectedFilter))
+            .map(item => item.id);
+          setSelectedItems(new Set(allItemIds));
+        }}
+        onDeselectAll={() => setSelectedItems(new Set())}
+        onActionsMenuToggle={(isOpen) => {
+          // Reset preOpenActions when actions menu closes
+          if (!isOpen) {
+            setShouldPreOpenActions(false);
+          }
+        }}
+        showAddToCart={true}
+        showTransactionHistory={true}
+        showPriceOverride={true}
+        showDelete={true}
+        showExport={false}
+        preOpenActions={shouldPreOpenActions}
+        onTransactionUpdate={async (transactionId, updatedData) => {
+          try {
+            const { updateTransaction } = await import('../utils/transactionManager');
+            const updatedTransaction = await updateTransaction(transactionId, updatedData);
+            console.log('Transaction updated successfully:', updatedTransaction);
+            
+            // Refresh the data to show updated transaction
+            // You might want to trigger a data refresh here
+            // For now, we'll just log the success
+          } catch (error) {
+            console.error('Error updating transaction:', error);
+            // You might want to show an error message to the user here
+          }
+        }}
+        onDeleteSoldPortion={async (transactionId, saleId) => {
+          try {
+            const { deleteSaleRecord } = await import('../utils/saleHistoryManager');
+            const updatedTransaction = await deleteSaleRecord(transactionId, saleId);
+            console.log('Sold portion deleted successfully:', updatedTransaction);
+            
+            // Refresh the data to show updated transaction
+            // You might want to trigger a data refresh here
+            // For now, we'll just log the success
+          } catch (error) {
+            console.error('Error deleting sold portion:', error);
+            // You might want to show an error message to the user here
+          }
+        }}
+      />
 
       {/* Order Menu Modal */}
       {showOrderMenu && (
@@ -1666,7 +1755,8 @@ const Collection = () => {
                     setShowOrderMenu(false);
                     setShowMarkAsSoldModal(true);
                   }}
-                  className="w-full text-left px-3 py-2 text-green-600 hover:bg-gray-700 rounded-md transition-colors"
+                  className="w-full text-left px-3 py-2 hover:bg-gray-700 rounded-md transition-colors"
+                  style={{ color: '#4ADE80' }}
                 >
                   Mark as Sold
                 </button>
@@ -2922,8 +3012,8 @@ const Collection = () => {
                 }}
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
-                    <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <div className="w-10 h-10 bg-indigo-500/20 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
                       <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
                     </svg>
@@ -3028,7 +3118,7 @@ const Collection = () => {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={selectAllOrders}
-                      className="text-xs text-blue-400 hover:text-blue-400 font-medium"
+                      className="text-xs text-indigo-400 hover:text-indigo-400 font-medium"
                     >
                       Select All
                     </button>
@@ -3217,7 +3307,10 @@ const Collection = () => {
                   setShowSuccessNotification(false);
                   setSuccessData(null);
                 }}
-                className="ml-3 flex-shrink-0 text-white hover:text-green-200"
+                className="ml-3 flex-shrink-0 text-white"
+                style={{ color: 'white' }}
+                onMouseEnter={(e) => e.target.style.color = '#4ADE80'}
+                onMouseLeave={(e) => e.target.style.color = 'white'}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -3317,7 +3410,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
               type="date"
               value={formData.sellDate}
               onChange={(e) => setFormData({...formData, sellDate: e.target.value})}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
               required
             />
           </div>
@@ -3329,7 +3422,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
               step="0.01"
               value={formData.sellPrice}
               onChange={(e) => setFormData({...formData, sellPrice: e.target.value})}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
               required
             />
           </div>
@@ -3344,7 +3437,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
               max={remainingQuantity}
               value={formData.quantity}
               onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value)})}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
               required
             />
           </div>
@@ -3355,7 +3448,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
               type="text"
               value={formData.location}
               onChange={(e) => setFormData({...formData, location: e.target.value})}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
           </div>
           
@@ -3366,7 +3459,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
               step="0.01"
               value={formData.fees}
               onChange={(e) => setFormData({...formData, fees: e.target.value})}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
           </div>
           
@@ -3375,7 +3468,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({...formData, notes: e.target.value})}
-              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
               rows="3"
             />
           </div>
@@ -3390,7 +3483,10 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              className="flex-1 px-4 py-2 text-white rounded-lg transition-colors"
+              style={{ backgroundColor: '#4ADE80' }}
+              onMouseEnter={(e) => e.target.style.backgroundColor = '#22C55E'}
+              onMouseLeave={(e) => e.target.style.backgroundColor = '#4ADE80'}
             >
               Mark as Sold
             </button>
@@ -3454,7 +3550,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
                       step="0.01"
                       min="0"
                       defaultValue={editPriceData.currentPrice}
-                      className="w-full pl-8 pr-4 py-4 bg-gray-800/50 border border-gray-600 rounded-2xl text-white text-lg focus:border-blue-500 focus:outline-none transition-colors"
+                      className="w-full pl-8 pr-4 py-4 bg-gray-800/50 border border-gray-600 rounded-2xl text-white text-lg focus:border-indigo-500 focus:outline-none transition-colors"
                       placeholder="0.00"
                       id="priceInput"
                     />
@@ -3491,7 +3587,7 @@ const MarkAsSoldModal = ({ order, onClose, onSubmit }) => {
                   });
                   setShowSuccessNotification(true);
                 }}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-2xl text-white font-semibold transition-all duration-150 touch-manipulation"
+                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-2xl text-white font-semibold transition-all duration-150 touch-manipulation"
               >
                 Save Changes
               </button>
@@ -3777,7 +3873,7 @@ const AddItemForm = ({ prefilledData, onMarketValueChange, onSuccess, onCancel }
               type="date"
               value={formData.buyDate}
               onChange={(e) => setFormData({...formData, buyDate: e.target.value})}
-              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors"
+              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-colors"
               required
             />
           </div>
@@ -3800,7 +3896,7 @@ const AddItemForm = ({ prefilledData, onMarketValueChange, onSuccess, onCancel }
                   setTimeout(() => setIsRetailerFocused(false), 150);
                 }}
                 placeholder="Type to search retailers..."
-                className="w-full px-3 py-3 pr-8 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors"
+                className="w-full px-3 py-3 pr-8 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-colors"
                 autoComplete="off"
               />
               {formData.buyLocation && (
@@ -3873,7 +3969,7 @@ const AddItemForm = ({ prefilledData, onMarketValueChange, onSuccess, onCancel }
                                     console.error('Failed to create retailer:', error);
                                   }
                                 }}
-                                className="w-full px-3 py-2 text-left text-blue-400 hover:bg-gray-700 text-sm border-t border-gray-600"
+                                className="w-full px-3 py-2 text-left text-indigo-400 hover:bg-gray-700 text-sm border-t border-gray-600"
                               >
                                 + Add "{formData.buyLocation}" as new retailer
                               </button>
@@ -3897,7 +3993,7 @@ const AddItemForm = ({ prefilledData, onMarketValueChange, onSuccess, onCancel }
                 const newTotalPrice = formData.pricePerItem ? (parseFloat(formData.pricePerItem) * newQuantity).toFixed(2) : formData.buyPrice;
                 setFormData({...formData, quantity: newQuantity, buyPrice: newTotalPrice});
               }}
-              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors"
+              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-colors"
               required
             />
           </div>
@@ -4059,7 +4155,7 @@ const AddItemForm = ({ prefilledData, onMarketValueChange, onSuccess, onCancel }
                 const totalPrice = pricePerItem * formData.quantity;
                 setFormData({...formData, pricePerItem: e.target.value, buyPrice: totalPrice.toFixed(2)});
               }}
-              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors"
+              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-colors"
               placeholder="0.00"
               required
               disabled={isLoadingGradedPrice}
@@ -4077,7 +4173,7 @@ const AddItemForm = ({ prefilledData, onMarketValueChange, onSuccess, onCancel }
                 const pricePerItem = formData.quantity > 0 ? (totalPrice / formData.quantity).toFixed(2) : 0;
                 setFormData({...formData, buyPrice: e.target.value, pricePerItem: pricePerItem});
               }}
-              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors"
+              className="w-full px-3 py-3 bg-transparent border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-colors"
               placeholder="0.00"
               required
             />
@@ -4102,7 +4198,7 @@ const AddItemForm = ({ prefilledData, onMarketValueChange, onSuccess, onCancel }
           </button>
           <button
             type="submit"
-            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-3 font-medium disabled:opacity-50"
+            className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-3 font-medium disabled:opacity-50"
             disabled={isSubmitting}
           >
             {isSubmitting ? (

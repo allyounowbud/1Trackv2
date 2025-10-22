@@ -235,7 +235,7 @@ export default function ProductSearchDropdown({
           onFocus={() => setIsOpen(true)}
           placeholder={placeholder}
           disabled={disabled}
-          className={`w-full h-10 appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:border-indigo-500 outline-none placeholder-gray-400 ${
+          className={`w-full h-10 appearance-none bg-white dark:bg-gray-800 border border-blue-400 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:border-blue-500 outline-none placeholder-gray-400 ${
             disabled ? 'opacity-50 cursor-not-allowed' : ''
           }`}
         />
@@ -259,7 +259,7 @@ export default function ProductSearchDropdown({
       {isOpen && (searchResults.length > 0 || error || isSearching) && createPortal(
         <div 
           data-dropdown-portal
-          className="fixed z-[999999] bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+          className="fixed z-[999999] bg-white dark:bg-slate-800 border border-blue-400 rounded-lg shadow-lg max-h-60 overflow-y-auto"
           style={{ 
             position: 'fixed',
             top: `${dropdownPosition.top}px`,
@@ -341,7 +341,7 @@ export default function ProductSearchDropdown({
                     <div className="text-sm font-medium truncate">
                       {product.product_name}
                       {isSealedProduct(product.product_name) && (
-                        <span className="ml-1 text-xs bg-green-100 dark:bg-green-600/20 text-green-700 dark:text-green-300 px-1 rounded">
+                        <span className="ml-1 text-xs px-1 rounded" style={{ backgroundColor: '#4ADE80', color: 'white' }}>
                           Sealed
                         </span>
                       )}
@@ -355,7 +355,7 @@ export default function ProductSearchDropdown({
                   
                   {/* Price */}
                   <div className="ml-2 text-right flex-shrink-0">
-                    <div className="text-xs font-medium text-green-600 dark:text-green-400">
+                    <div className="text-xs font-medium" style={{ color: '#4ADE80' }}>
                       {formatPrice(product.loose_price)}
                     </div>
                   </div>

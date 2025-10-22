@@ -773,9 +773,10 @@ const UniversalComponentsTest = () => {
                 }}
                 className={`px-3 py-1 rounded-md text-sm transition-colors ${
                   isSearchSelectionMode
-                    ? 'bg-green-600 text-white'
+                    ? 'text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
+                style={isSearchSelectionMode ? { backgroundColor: '#4ADE80' } : {}}
               >
                 {isSearchSelectionMode ? 'Exit Selection' : 'Enter Selection'}
               </button>
@@ -852,8 +853,9 @@ const UniversalComponentsTest = () => {
                 <div
                   key={item.id}
                   className={`relative bg-white border rounded-xl overflow-hidden transition-all duration-200 cursor-pointer ${
-                    isSelected ? 'border-green-300 bg-green-50' : 'border-gray-200 hover:bg-gray-100 hover:border-gray-300'
+                    isSelected ? 'border-gray-200' : 'border-gray-200 hover:bg-gray-100 hover:border-gray-300'
                   }`}
+                  style={isSelected ? { backgroundColor: '#4ADE80' } : {}}
                   onClick={handleClick}
                   onTouchStart={handleTouchStart}
                   onTouchEnd={handleTouchEnd}
@@ -879,7 +881,7 @@ const UniversalComponentsTest = () => {
                       </div>
                     )}
                     {isSelected && (
-                      <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                      <div className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: '#4ADE80' }}>
                         <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
@@ -1029,7 +1031,10 @@ const UniversalComponentsTest = () => {
                     setIsBulkSelectionMode(true);
                   }
                 }}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                className="px-4 py-2 text-white rounded-md transition-colors"
+                style={{ backgroundColor: '#4ADE80' }}
+                onMouseEnter={(e) => e.target.style.backgroundColor = '#22C55E'}
+                onMouseLeave={(e) => e.target.style.backgroundColor = '#4ADE80'}
               >
                 Select 1 Item
               </button>
@@ -1089,7 +1094,10 @@ const UniversalComponentsTest = () => {
                 setShowOrderBook(true);
                 console.log('Order Book state should be true now');
               }}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              className="px-4 py-2 text-white rounded-md transition-colors"
+              style={{ backgroundColor: '#4ADE80' }}
+              onMouseEnter={(e) => e.target.style.backgroundColor = '#22C55E'}
+              onMouseLeave={(e) => e.target.style.backgroundColor = '#4ADE80'}
             >
               Show Order Book
             </button>
@@ -1162,9 +1170,9 @@ const UniversalComponentsTest = () => {
               </p>
             </div>
             
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <h4 className="font-medium text-green-900 mb-2">Top Search Bar:</h4>
-              <p className="text-sm text-green-700">
+            <div className="border border-gray-200 rounded-lg p-4" style={{ backgroundColor: '#4ADE80', color: 'white' }}>
+              <h4 className="font-medium mb-2">Top Search Bar:</h4>
+              <p className="text-sm">
                 The top search bar is now a universal component that appears consistently 
                 across all pages with game selection and search functionality.
               </p>

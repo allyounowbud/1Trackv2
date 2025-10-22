@@ -135,7 +135,7 @@ export const TableSearchDropdown = ({
         {isOpen && createPortal(
           <div 
             data-dropdown-portal
-            className="fixed z-[999999] max-h-64 overflow-y-auto overscroll-contain rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl"
+            className="fixed z-[999999] max-h-64 overflow-y-auto overscroll-contain rounded-xl border border-blue-400 bg-white dark:bg-slate-900 shadow-xl"
             style={{ 
               position: 'fixed',
               top: `${dropdownPosition.top}px`,

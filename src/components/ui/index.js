@@ -4,6 +4,7 @@
 export { default as UniversalCard } from './UniversalCard';
 export { default as UniversalBulkMenu } from './UniversalBulkMenu';
 export { default as UniversalOrderBook } from './UniversalOrderBook';
+export { default as UniversalOrderBookMenu } from './UniversalOrderBookMenu';
 export { default as UniversalSearchBar } from './UniversalSearchBar';
 export { default as UniversalGrid } from './UniversalGrid';
 export { default as UniversalBottomNavigation } from './UniversalBottomNavigation';

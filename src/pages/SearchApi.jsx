@@ -2007,7 +2007,7 @@ const SearchApi = () => {
   // Get trend color class
   const getTrendColor = (trend) => {
     if (!trend || trend === 0) return 'text-white';
-    return trend > 0 ? 'text-green-400' : 'text-red-400';
+    return trend > 0 ? '' : 'text-red-400';
   };
 
   // Handle edit custom item
@@ -2862,7 +2862,7 @@ const SearchApi = () => {
                         <>
                           {formatPrice(card.raw_price)}
                           {card.raw_pricing?.trends?.days_7?.percent_change && (
-                            <span className={`ml-1 ${getTrendColor(card.raw_pricing.trends.days_7.percent_change)}`}>
+                            <span className={`ml-1 ${getTrendColor(card.raw_pricing.trends.days_7.percent_change)}`} style={card.raw_pricing.trends.days_7.percent_change > 0 ? { color: '#4ADE80' } : {}}>
                               {formatTrendForCard(card.raw_pricing.trends.days_7.percent_change)}
                             </span>
                           )}
@@ -2872,7 +2872,7 @@ const SearchApi = () => {
                         <>
                           {formatPrice(card.graded_price)}
                           {card.graded_pricing?.trends?.days_7?.percent_change && (
-                            <span className={`ml-1 ${getTrendColor(card.graded_pricing.trends.days_7.percent_change)}`}>
+                            <span className={`ml-1 ${getTrendColor(card.graded_pricing.trends.days_7.percent_change)}`} style={card.graded_pricing.trends.days_7.percent_change > 0 ? { color: '#4ADE80' } : {}}>
                               {formatTrendForCard(card.graded_pricing.trends.days_7.percent_change)}
                             </span>
                           )}
@@ -3785,7 +3785,7 @@ const SearchApi = () => {
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 max-w-sm w-full mx-4">
             {/* Success Animation */}
             <div className="flex justify-center mb-6">
-              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: '#4ADE80' }}>
                 <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>

@@ -81,12 +81,12 @@ const UniversalOrderBook = ({
         };
       case 'search':
         return {
-          container: 'bg-green-900',
-          header: 'bg-green-800',
+          container: '',
+          header: '',
           card: 'bg-white',
           text: 'text-white',
           textSecondary: 'text-green-300',
-          button: 'bg-green-600 hover:bg-green-700 text-white'
+          button: 'text-white'
         };
       default:
         return {
@@ -344,7 +344,10 @@ const UniversalOrderBook = ({
                       <div className="flex gap-2 pt-2">
                         <button
                           onClick={handleSave}
-                          className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition-colors"
+                          className="px-3 py-1 text-white rounded text-sm transition-colors"
+                          style={{ backgroundColor: '#4ADE80' }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#22C55E'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = '#4ADE80'}
                         >
                           Save
                         </button>
@@ -398,7 +401,10 @@ const UniversalOrderBook = ({
                       {showMarkAsSoldActions && remainingCount > 0 && (
                         <button
                           onClick={() => onMarkAsSold && onMarkAsSold(order.id)}
-                          className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition-colors"
+                          className="px-3 py-1 text-white rounded text-sm transition-colors"
+                          style={{ backgroundColor: '#4ADE80' }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#22C55E'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = '#4ADE80'}
                         >
                           Mark as Sold
                         </button>

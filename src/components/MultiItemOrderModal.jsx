@@ -3,6 +3,9 @@ import { supabase } from '../lib/supabaseClient';
 import { getItemTypeClassification } from '../utils/itemTypeUtils';
 import { useModal } from '../contexts/ModalContext';
 import { createBulkOrders } from '../utils/orderNumbering';
+import { createBatchProcessor } from '../utils/batchProcessor';
+import VirtualizedItemList from './VirtualizedItemList';
+import ProgressIndicator from './ProgressIndicator';
 
 const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
   const { openModal, closeModal } = useModal();
@@ -24,6 +27,8 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
   const [isRetailerFocused, setIsRetailerFocused] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [dragData, setDragData] = useState({ startY: 0, currentY: 0, isDragging: false, deltaY: 0 });
+  const [batchProgress, setBatchProgress] = useState({ processed: 0, total: 0, percentage: 0, status: '' });
+  const [useVirtualScrolling, setUseVirtualScrolling] = useState(false);
   const modalRef = useRef(null);
 
   // Initialize item details when selectedItems change
@@ -38,6 +43,9 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
         };
       });
       setItemDetails(initialDetails);
+      
+      // Enable virtual scrolling for large item sets
+      setUseVirtualScrolling(selectedItems.length > 50);
     }
   }, [selectedItems]);
 
@@ -225,10 +233,30 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError('');
+    setShowProcessing(true);
 
     try {
-      // Create or find items and create orders
-      const orderPromises = selectedItems.map(async (item) => {
+      // Create batch processor for optimized processing
+      const batchProcessor = createBatchProcessor({
+        batchSize: 10,
+        maxConcurrency: 3,
+        retryAttempts: 2,
+        retryDelay: 1000,
+        onProgress: (progress) => {
+          setBatchProgress({
+            processed: progress.processed,
+            total: progress.total,
+            percentage: progress.percentage,
+            status: `Processing batch ${progress.batch} of ${progress.totalBatches}...`
+          });
+        },
+        onError: (error) => {
+          console.error('Batch processing error:', error);
+        }
+      });
+
+      // Process items in optimized batches
+      const results = await batchProcessor.processBatches(selectedItems, async (item) => {
         const itemDetail = itemDetails[item.id];
         
         // Find or create item
@@ -330,11 +358,16 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
         return baseOrderData;
       });
 
-      // Wait for all order data to be prepared
-      const ordersData = await Promise.all(orderPromises);
-      
+      // Check if any items failed to process
+      if (results.failed.length > 0) {
+        console.warn(`${results.failed.length} items failed to process:`, results.failed);
+      }
+
+      // Get successful order data
+      const orderData = results.successful.map(result => result.result);
+
       // Create all orders with the same order number
-      const ordersWithNumbers = await createBulkOrders(supabase, ordersData);
+      const ordersWithNumbers = await createBulkOrders(supabase, orderData);
       
       // Insert all orders
       const { data: orders, error: bulkOrderError } = await supabase
@@ -350,19 +383,15 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
         totalItems: selectedItems.length
       });
 
-      setShowProcessing(true);
-
-      // Simulate processing time
+      setShowProcessing(false);
+      setShowSuccess(true);
+      setBatchProgress({ processed: 0, total: 0, percentage: 0, status: '' });
+      
+      // Call success callback after a short delay
       setTimeout(() => {
-        setShowProcessing(false);
-        setShowSuccess(true);
-        
-        // Call success callback after a short delay
-        setTimeout(() => {
-          onSuccess();
-          handleClose();
-        }, 1500);
-      }, 2000);
+        onSuccess();
+        handleClose();
+      }, 1500);
 
     } catch (error) {
       console.error('❌ Error creating multi-item order:', error);
@@ -602,9 +631,23 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
         {/* Processing Animation */}
         {showProcessing && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-gray-800 rounded-lg p-6 text-center">
+            <div className="bg-gray-800 rounded-lg p-6 text-center max-w-md mx-4">
               <div className="w-8 h-8 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-white">Creating your order...</p>
+              <p className="text-white mb-4">Creating your order...</p>
+              
+              {/* Progress Indicator */}
+              {batchProgress.total > 0 && (
+                <div className="w-full">
+                  <ProgressIndicator
+                    progress={batchProgress.percentage}
+                    current={batchProgress.processed}
+                    total={batchProgress.total}
+                    status={batchProgress.status}
+                    size="default"
+                    className="mb-2"
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -613,7 +656,7 @@ const MultiItemOrderModal = ({ selectedItems, isOpen, onClose, onSuccess }) => {
         {showSuccess && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-gray-800 rounded-lg p-6 text-center max-w-sm mx-4">
-              <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: '#4ADE80' }}>
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>

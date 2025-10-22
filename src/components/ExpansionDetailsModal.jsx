@@ -397,8 +397,9 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
                     <div className="flex items-center gap-3">
                       <div className="w-32 bg-gray-200 rounded-full h-2">
                         <div 
-                          className="bg-green-600 h-2 rounded-full" 
+                          className="h-2 rounded-full"
                           style={{ 
+                            backgroundColor: '#4ADE80',
                             width: `${(localizedExpansion.printedCardCount / localizedExpansion.cardCount) * 100}%` 
                           }}
                         ></div>
@@ -439,7 +440,8 @@ const ExpansionDetailsModal = ({ expansion, isOpen, onClose }) => {
                   ${localizedExpansion.cardCount >= 200 ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
                     localizedExpansion.cardCount >= 150 ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
                     localizedExpansion.cardCount >= 100 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                    'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}">
+                    'text-white'}"
+                  style={localizedExpansion.cardCount < 100 ? { backgroundColor: '#4ADE80' } : {}}>
                   {localizedExpansion.cardCount >= 200 ? 'Large Expansion' :
                    localizedExpansion.cardCount >= 150 ? 'Medium-Large Expansion' :
                    localizedExpansion.cardCount >= 100 ? 'Medium Expansion' :
